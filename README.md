@@ -1,82 +1,78 @@
-# MalDet — AI Malware & Supply Chain Detection System
+````markdown
+# MalDet — Malware & Supply Chain Detection System
 
-MalDet is a web application that scans public GitHub repositories for malware, unsafe code, and vulnerable dependencies. It combines multiple security scanning tools and machine learning to help users identify security risks.
+A web-based static analysis tool that scans public GitHub repositories for malware,
+vulnerable dependencies, and supply chain attacks using multiple detection engines
+combined with machine learning (ML) risk classification.
 
 > Final Year Project (FYP) — Diploma in Information Security
 
 ---
 
-# Features
+## Features
 
-- Scan GitHub repositories for security issues
-- Detect malware using multiple security tools
-- Find vulnerable or malicious dependencies
-- Classify risk using Machine Learning (Random Forest)
-- View previous scan history and risk trends
+- Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV)
+- Supply chain attack detection (OSV + custom dependency checker)
+- ML risk classification (Random Forest)
+- Scan history and risk trend tracking
 - Web dashboard with charts
-- Chrome Extension support
+- Chrome extension support
 
 ---
 
-# Technology Used
+## Tech Stack
 
-| Part | Technology |
-|------|------------|
-| Backend | Python, Flask |
-| Database | MySQL |
-| Security Tools | Bandit, Semgrep, YARA, ClamAV |
-| Dependency Scanner | OSV Scanner + Custom Checker |
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12, Flask |
+| Database | MySQL 8.0 |
+| Static Analysis | Bandit, Semgrep, YARA, ClamAV |
+| Supply Chain | OSV Scanner, Custom dependency checker |
 | Machine Learning | scikit-learn (Random Forest) |
 | Frontend | HTML, CSS, JavaScript |
-| Browser Extension | Chrome Extension (Manifest V3) |
+| Extension | Chrome Extension (Manifest V3) |
 
 ---
 
-# Requirements
+## System Requirements
 
-Before installing, make sure you have:
-
-- Ubuntu 22.04 or newer
-- Python 3.10 or newer
-- MySQL 8.0 or newer
-- At least 4GB RAM (8GB recommended)
-- Around 20GB free disk space
+- OS: Ubuntu 22.04+
+- RAM: 4GB minimum (8GB recommended)
+- Disk: 20GB free space
+- Python: 3.10+
+- MySQL: 8.0+
 
 ---
 
-# Installation
+## Installation (Fresh Setup)
 
-## 1. Download the project
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Skidotus/maldet.git
 cd maldet
 ```
 
----
-
-## 2. Install required software
+### 2. Install system dependencies
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 
 sudo apt install -y \
-git \
-python3 \
-python3-pip \
-python3-venv \
-mysql-server \
-p7zip-full \
-yara \
-clamav \
-clamav-daemon \
-curl \
-build-essential
+  git \
+  python3 \
+  python3-pip \
+  python3-venv \
+  mysql-server \
+  p7zip-full \
+  yara \
+  clamav \
+  clamav-daemon \
+  curl \
+  build-essential
 ```
 
----
-
-## 3. Update ClamAV database
+### 3. Update ClamAV virus signatures
 
 ```bash
 sudo systemctl stop clamav-freshclam
@@ -84,106 +80,76 @@ sudo freshclam
 sudo systemctl start clamav-freshclam
 ```
 
----
-
-## 4. Create a virtual environment
+### 4. Create and activate virtual environment
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-Your terminal should now show:
+You should see `(venv)` at the start of your terminal line.
 
-```text
-(venv)
-```
-
----
-
-## 5. Install Python packages
+### 5. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
-
-## 6. Login to Semgrep
-
-Before scanning, log in to Semgrep.
+### 6. Login to Semgrep (required before first scan)
 
 ```bash
 semgrep login
 ```
 
-Create a free account at:
+Sign up free at https://semgrep.dev and authorise when the browser opens.
 
-https://semgrep.dev
-
----
-
-## 7. Create the database
-
-Run:
+### 7. Set up MySQL database
 
 ```bash
 sudo mysql_secure_installation
 ```
 
-Then log in:
+Then log into MySQL:
 
 ```bash
 sudo mysql -u root -p
 ```
 
-Create a new database user:
+Run:
 
 ```sql
-CREATE USER 'fypuser'@'localhost' IDENTIFIED BY 'your_password';
+CREATE USER 'fypuser'@'localhost' IDENTIFIED BY 'your_password_here';
 GRANT ALL PRIVILEGES ON fyp_scanner.* TO 'fypuser'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
 ```
 
-Import the database:
+Import the schema:
 
 ```bash
 mysql -u fypuser -p < schema.sql
 ```
 
----
-
-## 8. Configure the project
-
-Copy the example configuration file.
+### 8. Configure credentials
 
 ```bash
 cp config.example.py config.py
-```
-
-Edit it.
-
-```bash
 nano config.py
 ```
 
-Fill in your information.
+Fill in your values:
 
 ```python
-GITHUB_TOKEN = "your_github_token"
-
-DB_HOST = "localhost"
-DB_USER = "fypuser"
-DB_PASSWORD = "your_password"
-DB_NAME = "fyp_scanner"
+GITHUB_TOKEN = "your_github_personal_access_token"
+DB_HOST      = "localhost"
+DB_USER      = "fypuser"
+DB_PASSWORD  = "your_db_password"
+DB_NAME      = "fyp_scanner"
 ```
 
-> `config.py` is ignored by Git, so your passwords and tokens will not be uploaded.
+> `config.py` is gitignored and will never be pushed to GitHub.
 
----
-
-## 9. Check that everything works
+### 9. Verify everything is installed
 
 ```bash
 python3 --version
@@ -192,23 +158,17 @@ semgrep --version
 yara --version
 clamscan --version
 mysql --version
-
 mysql -u fypuser -p fyp_scanner -e "SHOW TABLES;"
 ```
 
-If each command shows a version or expected output, the installation is successful.
-
----
-
-## 10. Start the application
+### 10. Run the app
 
 ```bash
 source venv/bin/activate
-
 python3 app.py
 ```
 
-Open your browser and visit:
+Open your browser at:
 
 ```
 http://localhost:5000
@@ -216,32 +176,214 @@ http://localhost:5000
 
 ---
 
-# GitHub Personal Access Token
+## How to Get API Keys
 
-To allow MalDet to access public GitHub repositories:
+### GitHub Personal Access Token
 
 1. Go to https://github.com/settings/tokens
-2. Click **Generate new token (Classic)**.
-3. Give the token a name.
-4. Choose an expiration date.
-5. Select the **repo** permission.
-6. Copy the token into `config.py`.
+2. Click **Generate new token (classic)**
+3. Name: `maldet`
+4. Expiration: 90 days
+5. Select the `repo` scope
+6. Copy the token into `config.py`
 
 ---
 
-# Project Structure
+## Project Structure
 
 ```text
 maldet/
-│
-├── app.py
-├── config.py
-├── requirements.txt
-├── schema.sql
-├── scanners/
-├── ml/
+├── app.py                  # Flask web app (routes)
+├── scanner.py              # Core scan engine
+├── dep_checker.py          # Dependency/supply chain checker
+├── config.py               # Your credentials (gitignored)
+├── config.example.py       # Credentials template
+├── rules.yar               # YARA detection rules
+├── schema.sql              # Database schema
+├── requirements.txt        # Python dependencies
+├── model/
+│   └── risk_classifier.pkl # Trained ML model
 ├── templates/
+│   ├── index.html          # Dashboard
+│   ├── scan.html           # Scan input + live progress
+│   ├── detail.html         # Results
+│   └── history.html        # Scan history
 ├── static/
-├── extension/
+│   ├── css/
+│   ├── js/
+│   └── img/
+├── extension/              # Chrome extension
+├── .gitignore
 └── README.md
 ```
+
+---
+
+## System Workflow
+
+```text
+User submits GitHub URL
+↓
+Fetch repository information (GitHub API)
+↓
+Clone repository
+↓
+Extract archives (if any)
+↓
+Run security tools
+
+Bandit
+Semgrep
+YARA
+ClamAV
+Dependency Checker
+
+↓
+Collect all findings
+↓
+ML model classifies risk
+↓
+Calculate final score and risk level
+↓
+Save results to MySQL
+↓
+Clean up temporary files
+↓
+Display results on the dashboard
+```
+
+---
+
+## Collaborator Guide
+
+### Every time you start working
+
+```bash
+cd maldet
+source venv/bin/activate
+python3 app.py
+```
+
+### Adding a new detection tool
+
+1. Write your function in `scanner.py`
+2. Return findings in this format:
+
+```python
+{
+    "tool": "your_tool_name",
+    "severity": "high" | "medium" | "low",
+    "issue_text": "Description of the issue",
+    "filename": "path/to/file",
+    "line_number": 0,
+    "code_snippet": "relevant code here"
+}
+```
+
+3. Call your function inside `scan_repo()` and append it to `findings`.
+4. Update dependencies:
+
+```bash
+pip freeze > requirements.txt
+```
+
+### Changing the database
+
+- Update `schema.sql` whenever you modify the database.
+- Do not change the database structure without updating the schema file.
+
+Reload the schema:
+
+```bash
+mysql -u fypuser -p < schema.sql
+```
+
+### Branch rules
+
+- `main` → Stable code
+- `dev` → Development
+- `feature/xxx` → One feature per branch
+
+Example:
+
+```bash
+git checkout -b feature/dep-checker
+git add .
+git commit -m "Add dependency checker"
+git push origin feature/dep-checker
+```
+
+Then open a Pull Request on GitHub.
+
+### Pull Request rules
+
+- Test your code before creating a PR.
+- One feature per PR.
+- Update the README if installation steps change.
+- Never commit `config.py`, `venv/`, or `*.pkl`.
+
+---
+
+## Common Issues & Fixes
+
+### (venv) not showing
+
+```bash
+source venv/bin/activate
+```
+
+### Semgrep not detecting anything
+
+```bash
+semgrep login
+```
+
+### ClamAV signatures outdated
+
+```bash
+sudo systemctl stop clamav-freshclam
+sudo freshclam
+sudo systemctl start clamav-freshclam
+```
+
+### MySQL connection refused
+
+```bash
+sudo systemctl start mysql
+```
+
+### Git push asking for password
+
+Use your GitHub Personal Access Token instead of your GitHub account password.
+
+To save it:
+
+```bash
+git config --global credential.helper store
+```
+
+### Repository clone timeout
+
+- Check your internet connection.
+- Make sure your GitHub token is valid and has not expired.
+
+---
+
+## Author
+
+- Haikal (Skidotus)
+
+## Supervisor
+
+- Supervisor Name
+
+## Institution
+
+- Institution Name
+
+---
+
+## License
+
+Academic use only — Final Year Project (Diploma).
+````
