@@ -1,4 +1,3 @@
-````markdown
 # MalDet — Malware & Supply Chain Detection System
 
 A web-based static analysis tool that scans public GitHub repositories for malware,
