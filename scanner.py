@@ -6,6 +6,7 @@ import time
 import requests
 import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from dep_checker import check_dependencies
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
 CLONE_DIR = "/tmp/maldet_scan_temp"
@@ -142,17 +143,39 @@ NOISE_RULES = [
 
 def filter_noise(findings):
     filtered = []
+
+    IGNORE_PATHS = [
+        "test", "docs", "example", 
+        "migration", "locale", "doc"
+    ]
+
     for f in findings:
-        # Skip known low-value rules
+        # Skip known low-value Bandit rules
         if f["issue_text"] in NOISE_RULES:
             continue
-        # Skip low severity findings from test files
-        if f["severity"] == "low" and "test" in f["filename"].lower():
+
+        # Skip ALL findings from test/docs/locale files
+        if any(p in f["filename"].lower() for p in IGNORE_PATHS):
             continue
-        # Downgrade SHA1 from high to medium — it's bad practice not malware
-        if "SHA1" in f["issue_text"] or "sha1" in f["issue_text"]:
+
+        # Downgrade SHA1/MD5 from high to medium
+        if any(h in f["issue_text"] for h in ["SHA1", "sha1", "MD5", "md5"]):
             f["severity"] = "medium"
+
+        # Downgrade chmod from high to medium
+        if "Chmod" in f["issue_text"] or "chmod" in f["issue_text"]:
+            f["severity"] = "medium"
+
+        # Downgrade YARA downloader to medium
+        if f["tool"] == "yara" and "detect_downloader" in f["issue_text"]:
+            f["severity"] = "medium"
+
+        # Downgrade credential harvester in auth/config files to medium
+        if f["tool"] == "yara" and "detect_credential_harvester" in f["issue_text"]:
+            f["severity"] = "medium"
+
         filtered.append(f)
+
     return filtered
 
 #Semgrep functionality
@@ -264,9 +287,10 @@ def calculate_risk(findings):
     medium = sum(1 for f in findings if f["severity"] == "medium")
     low    = sum(1 for f in findings if f["severity"] == "low")
 
-    # Cap low findings so noise doesn't dominate
-    low_capped = min(low, 20)
-    score = (high * 10) + (medium * 3) + (low_capped * 1)
+    # Cap both medium and low so noise doesn't dominate
+    medium_capped = min(medium, 30)
+    low_capped    = min(low, 20)
+    score = (high * 10) + (medium_capped * 3) + (low_capped * 1)
 
     if score == 0:     level = "Safe"
     elif score <= 20:  level = "Low"
@@ -369,6 +393,7 @@ def scan_repo(repo, archive_password="infected"):
         findings += run_semgrep(path)
         findings += run_yara(path)
         findings += run_clamav(path)
+        findings += check_dependencies(path)
 
         # Filter noise before scoring
         findings = filter_noise(findings)
