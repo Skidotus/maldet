@@ -44,17 +44,29 @@ def get_repo_info(repo):
 
 #Clone repo
 
+CLONE_TIMEOUT = 300  # scans run in a background thread now, so a longer
+                      # timeout no longer means a longer blocked request
+
 def clone_repo(repo):
     path = os.path.join(CLONE_DIR, repo.replace("/", "_"))
     if os.path.exists(path):
         shutil.rmtree(path)
     os.makedirs(CLONE_DIR, exist_ok=True)
     print(f"Cloning {repo}...")
-    result = subprocess.run(
-        ["git", "clone", "--depth=1",
-        f"https://github.com/{repo}.git", path],
-        capture_output=True, timeout=120
-    )
+    try:
+        result = subprocess.run(
+            ["git", "clone", "--depth=1",
+            f"https://github.com/{repo}.git", path],
+            capture_output=True, timeout=CLONE_TIMEOUT
+        )
+    except subprocess.TimeoutExpired:
+        # git leaves the partial clone on disk when killed for a timeout —
+        # clean it up now rather than leaving debris under CLONE_DIR
+        shutil.rmtree(path, ignore_errors=True)
+        raise RuntimeError(
+            f"Clone timed out after {CLONE_TIMEOUT}s — "
+            "the repository may be too large for a shallow clone."
+        )
     if result.returncode != 0:
         raise RuntimeError(f"Clone failed: {result.stderr.decode()}")
     return path
@@ -141,13 +153,13 @@ NOISE_RULES = [
     "A Flask app appears to be run with debug=True, which exposes the Werkzeug debugger and allows the execution of arbitrary code.",
 ]
 
+IGNORE_PATHS = [
+    "test", "docs", "example",
+    "migration", "locale", "doc"
+]
+
 def filter_noise(findings):
     filtered = []
-
-    IGNORE_PATHS = [
-        "test", "docs", "example", 
-        "migration", "locale", "doc"
-    ]
 
     for f in findings:
         # Skip known low-value Bandit rules
@@ -376,33 +388,49 @@ def save_to_db(repo_info, findings, high, medium, low, score, level):
 
 #main Scan function
 
-def scan_repo(repo, archive_password="infected"):
+def scan_repo(repo, archive_password="infected", on_progress=None):
     print(f"\n{'='*50}\nScanning: {repo}\n{'='*50}")
 
+    def report(stage):
+        if on_progress:
+            on_progress(stage)
+
+    report("Fetching repository info")
     repo_url  = f"https://github.com/{repo}"
     repo_info = get_repo_info(repo)
-    path      = clone_repo(repo)
+
+    report("Cloning repository")
+    path = clone_repo(repo)
 
     try:
-        
+        report("Extracting archives")
         extract_archives(path, archive_password)
 
-        
-        findings  = []
+        findings = []
+
+        report("Running Bandit")
         findings += run_bandit(path)
+
+        report("Running Semgrep")
         findings += run_semgrep(path)
+
+        report("Running YARA")
         findings += run_yara(path)
+
+        report("Running ClamAV")
         findings += run_clamav(path)
+
+        report("Checking dependencies")
         findings += check_dependencies(path)
 
-        # Filter noise before scoring
+        report("Filtering results")
         findings = filter_noise(findings)
         print(f"  Findings after filter: {len(findings)}")
 
-        
+        report("Calculating risk score")
         high, medium, low, score, level = calculate_risk(findings)
 
-        
+        report("Saving results")
         repo_id = save_to_db(repo_info, findings,
                              high, medium, low, score, level)
 

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Scanning{% endblock %}
+
+{% block content %}
+
+  <div class="mb-4">
+    <h1 class="h3 mb-1">Scanning</h1>
+    <p class="text-muted mb-0">Safe to refresh or reopen this tab — the scan keeps running on the server.</p>
+  </div>
+
+  <div class="ledger-book" style="max-width: 640px;">
+    <div class="ledger-book__header">
+      <h2 class="h6 mb-0 font-monospace">{{ job.repo }}</h2>
+    </div>
+    <div class="p-4">
+
+      {% if job.status == 'error' %}
+        <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorText">{{ job.error }}</div>
+        <a href="{{ url_for('scan') }}" class="btn btn-ribbon">Back to New Scan</a>
+
+      {% elif job.status == 'done' %}
+        <p class="mb-0">Scan complete — redirecting to results…</p>
+
+      {% else %}
+        <div id="scanRunning">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="spinner-border spinner-border-sm text-accent" role="status" aria-hidden="true"></span>
+            <span id="scanStage" class="fw-semibold">{{ job.stage }}</span>
+          </div>
+          <p class="form-text mb-0">
+            Started {{ job.started_at.strftime('%d %b %Y, %H:%M:%S') }}. Scans run Bandit, Semgrep, YARA,
+            ClamAV, and dependency checks in sequence and can take several minutes.
+          </p>
+        </div>
+        <div id="scanError" style="display: none;">
+          <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorTextLive"></div>
+          <a href="{{ url_for('scan') }}" class="btn btn-ribbon">Back to New Scan</a>
+        </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  {% if job.status == 'done' %}
+    window.location.href = {{ url_for('detail', repo_id=job.repo_id) | tojson }};
+  {% elif job.status == 'running' %}
+    (function () {
+      var jobId       = {{ job_id | tojson }};
+      var runningEl   = document.getElementById('scanRunning');
+      var errorEl     = document.getElementById('scanError');
+      var errorText   = document.getElementById('scanErrorTextLive');
+      var stageEl     = document.getElementById('scanStage');
+
+      function poll() {
+        fetch('/api/scan-status/' + jobId)
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.status === 'done') {
+              window.location.href = '/detail/' + data.repo_id;
+            } else if (data.status === 'error') {
+              runningEl.style.display = 'none';
+              errorEl.style.display = '';
+              errorText.textContent = data.error;
+            } else {
+              stageEl.textContent = data.stage;
+              setTimeout(poll, 2000);
+            }
+          })
+          .catch(function () { setTimeout(poll, 3000); });
+      }
+
+      setTimeout(poll, 2000);
+    })();
+  {% endif %}
+</script>
+{% endblock %}
