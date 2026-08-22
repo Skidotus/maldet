@@ -48,4 +48,26 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+  var toolFilterChips = document.querySelectorAll('.tool-filter-chip');
+  toolFilterChips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var nowPressed = chip.getAttribute('aria-pressed') !== 'true';
+      chip.setAttribute('aria-pressed', String(nowPressed));
+      var tool = chip.getAttribute('data-tool');
+      var section = document.querySelector('.tool-section[data-tool="' + tool + '"]');
+      if (section) section.style.display = nowPressed ? '' : 'none';
+    });
+  });
+
+  var hideNoiseToggle = document.getElementById('hideNoiseToggle');
+  var findingsSections = document.getElementById('findingsSections');
+  if (hideNoiseToggle && findingsSections) {
+    hideNoiseToggle.addEventListener('click', function () {
+      var active = hideNoiseToggle.getAttribute('aria-pressed') === 'true';
+      hideNoiseToggle.setAttribute('aria-pressed', String(!active));
+      findingsSections.classList.toggle('hide-noise', !active);
+      hideNoiseToggle.textContent = active ? 'Hide likely noise' : 'Show likely noise';
+    });
+  }
 });

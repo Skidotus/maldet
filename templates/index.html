@@ -39,6 +39,10 @@
         <div class="tally-value">{{ critical }}</div>
       </div>
     </div>
+    <p class="text-muted small mb-4">
+      Tally shows the worse of each repo's two scores — see the table below for the full
+      vulnerability / malicious-pattern breakdown per repo.
+    </p>
 
     {# ---------------------------------------------------------
        Register table
@@ -56,8 +60,8 @@
               <th>Owner</th>
               <th>Language</th>
               <th>Stars</th>
-              <th>Disposition</th>
-              <th>Score</th>
+              <th>Vulnerability</th>
+              <th>Malicious Pattern</th>
               <th>Scanned</th>
               <th></th>
             </tr>
@@ -71,10 +75,14 @@
                   {% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
                 </td>
                 <td><i class="bi bi-star-fill text-muted me-1" aria-hidden="true"></i>{{ repo.stars }}</td>
-                <td>
-                  <span class="seal-badge seal-{{ repo.risk_level | lower }}">{{ repo.risk_level }}</span>
-                </td>
-                <td><span class="score-{{ repo.risk_level | lower }}">{{ repo.final_score | round | int }}</span></td>
+                <td><span class="axis-cell">
+                  <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
+                  <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | round | int }}</span>
+                </span></td>
+                <td><span class="axis-cell">
+                  <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
+                  <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | round | int }}</span>
+                </span></td>
                 <td class="text-muted">{{ repo.scanned_at.strftime('%d %b %Y, %H:%M') if repo.scanned_at else '—' }}</td>
                 <td class="text-end">
                   <a href="{{ url_for('detail', repo_id=repo.id) }}" class="btn btn-sm btn-outline-parchment row-action">View</a>

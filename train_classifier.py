@@ -29,7 +29,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
-from scanner import NOISE_RULES, IGNORE_PATHS, normalize_severity
+from scanner import NOISE_RULES, IGNORE_PATHS, normalize_severity, frequency_key
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
 
@@ -70,15 +70,18 @@ def build_features(df):
     )
     df["is_known_noise_text"] = df["issue_text"].isin(NOISE_RULES)
     df["snippet_length"] = df["code_snippet"].str.len()
+    df["frequency_key"] = df.apply(
+        lambda r: frequency_key(r["tool"], r["issue_text"]), axis=1
+    )
 
     total_repos = df["repo_id"].nunique()
     freq = (
-        df.groupby(["tool", "issue_text"])["repo_id"]
+        df.groupby(["tool", "frequency_key"])["repo_id"]
         .nunique()
         .div(total_repos)
         .rename("repo_frequency")
     )
-    df = df.join(freq, on=["tool", "issue_text"])
+    df = df.join(freq, on=["tool", "frequency_key"])
     return df, total_repos
 
 
@@ -90,6 +93,18 @@ def weak_label(df):
         | df["is_ignored_path"]
         | (df["repo_frequency"] >= HIGH_FREQUENCY_THRESHOLD)
     )
+
+    # Deliberately NOT special-casing "yara severity=high" as auto-trusted
+    # here, despite that seeming reasonable on paper — checked it against
+    # real data first. Several "composite" high-severity rules turned out
+    # far more common in real code than intended (detect_download_and_execute
+    # fires in 53% of repos, detect_persistence_mechanism in 42%,
+    # detect_base64_exec in 21% — mostly CI scripts, dotfile docs, and
+    # legitimate encode/decode code, not malice). Only detect_reverse_shell
+    # and detect_clipboard_hijack turned out genuinely rare (~1%), and they
+    # clear LOW_FREQUENCY_THRESHOLD on their own merit below — no rule
+    # deserves blanket trust just for being "high" severity by design intent;
+    # let the observed frequency decide, same as every other tool.
     is_confident_signal = (
         (~df["is_known_noise_text"])
         & (~df["is_ignored_path"])
@@ -158,9 +173,33 @@ def main():
     print("Confusion matrix (rows=actual, cols=predicted) [noise, real]:")
     print(confusion_matrix(y_test, y_pred))
 
+    # A live scan sees findings whose exact (tool, frequency_key) never
+    # appeared in this training corpus — there's no way to know if a brand
+    # new finding type is rare or common. default_frequency uses the median
+    # across distinct finding TYPES (not individual findings) as the
+    # fallback: the per-finding median is skewed high (~0.28) by a handful
+    # of extremely repetitive boilerplate rules, whereas most distinct rule
+    # types are actually narrow/specific (median ~0.007). Defaulting new,
+    # unseen findings toward "rare" errs on the side of caution — a
+    # reasonable posture for a security tool encountering something novel.
+    freq_lookup = (
+        df.groupby(["tool", "frequency_key"])["repo_frequency"]
+        .first()
+        .to_dict()
+    )
+    default_frequency = float(np.median(list(freq_lookup.values())))
+
+    artifact = {
+        "pipeline": pipeline,
+        "frequency_lookup": freq_lookup,
+        "default_frequency": default_frequency,
+        "total_repos": total_repos,
+    }
+
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    joblib.dump(pipeline, MODEL_PATH)
-    print(f"\nSaved model to {MODEL_PATH}")
+    joblib.dump(artifact, MODEL_PATH)
+    print(f"\nSaved model + frequency lookup ({len(freq_lookup):,} entries, "
+          f"default={default_frequency:.4f}) to {MODEL_PATH}")
 
     return pipeline, df
 

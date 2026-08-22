@@ -276,6 +276,13 @@ code { color: var(--parchment); background: none; }
 .score-high     { color: var(--contested); font-weight: 600; }
 .score-critical { color: var(--rejected); font-weight: 600; }
 
+.axis-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
 /* ============================================================
    Buttons
    ============================================================ */
@@ -393,6 +400,16 @@ code { color: var(--parchment); background: none; }
   border-radius: 0.375rem;
 }
 
+button.tool-section__header {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
 .tool-section__header {
   display: flex;
   align-items: center;
@@ -409,6 +426,47 @@ code { color: var(--parchment); background: none; }
   color: var(--text);
 }
 
+.tool-section__chevron {
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  flex: none;
+}
+.tool-section__header.collapsed .tool-section__chevron { transform: rotate(-90deg); }
+
+/* ============================================================
+   Findings — tool filter chips
+   ============================================================ */
+.tool-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tool-filter-chip {
+  background-color: var(--ink-elevated);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.tool-filter-chip:hover { border-color: var(--accent); }
+.tool-filter-chip[aria-pressed="false"] { opacity: 0.45; }
+
+.tool-filter-chip__count {
+  font-family: var(--bs-font-monospace);
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .finding-row { padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--hairline); }
 .finding-row:last-child { border-bottom: none; }
 
@@ -421,7 +479,20 @@ code { color: var(--parchment); background: none; }
 }
 
 .finding-row__location { font-family: var(--bs-font-monospace); font-size: 0.8rem; color: var(--muted); }
+.finding-row__confidence {
+  font-family: var(--bs-font-monospace);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-left: auto;
+}
 .finding-row__text { font-size: 0.9rem; }
+
+/* Findings the FP classifier scores low-confidence are visually
+   de-emphasized, not hidden — nothing is silently filtered, the reasoning
+   stays visible (see finding-row__confidence), this just helps the eye
+   prioritize what's more likely to matter. */
+.finding-row--likely-noise { opacity: 0.55; }
+.finding-row--likely-noise:hover { opacity: 1; }
 
 .code-snippet {
   background-color: var(--ink);
@@ -445,3 +516,22 @@ code { color: var(--parchment); background: none; }
   border-radius: 0.375rem;
   padding: 1.1rem;
 }
+
+/* ============================================================
+   Findings summary line + hide-noise toggle (Detail page)
+   ============================================================ */
+.findings-summary {
+  background-color: var(--ink-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  color: var(--parchment);
+}
+
+#hideNoiseToggle[aria-pressed="true"] {
+  background-color: var(--ink-elevated-2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#findingsSections.hide-noise .finding-row--likely-noise { display: none; }

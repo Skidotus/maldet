@@ -9,6 +9,38 @@ from scanner import scan_repo
 
 app = Flask(__name__)
 
+# Confidence thresholds for the plain-English findings summary — same
+# "likely noise" cutoff (<0.3) used to dim findings in detail.html, so the
+# summary text and the visual treatment always agree with each other.
+SUMMARY_REAL_THRESHOLD  = 0.5
+SUMMARY_NOISE_THRESHOLD = 0.3
+
+def build_findings_summary(total, likely_real, likely_noise, top_finding):
+    """Rule-based summary for now (counts + the single highest-priority
+    finding) — same shape of output an LLM-generated summary would
+    eventually replace, without needing that dependency to be useful today."""
+    if total == 0:
+        return "No findings — this scan came back clean."
+    if likely_real == 0:
+        return (f"All {total} finding{'s' if total != 1 else ''} look like noise "
+                 "(low confidence) — nothing here likely needs attention.")
+
+    parts = [f"{likely_real} finding{'s' if likely_real != 1 else ''} likely need attention"]
+    if likely_noise:
+        parts.append(f"{likely_noise} look{'s' if likely_noise == 1 else ''} like noise")
+    summary = ", ".join(parts) + "."
+
+    if top_finding:
+        text = top_finding["issue_text"] or ""
+        if len(text) > 90:
+            text = text[:87] + "..."
+        loc = f" in {top_finding['filename']}" if top_finding.get("filename") else ""
+        conf = top_finding.get("confidence")
+        conf_text = f" ({round(conf * 100)}% confidence)" if conf is not None else ""
+        summary += f" Most notable: {text}{loc}{conf_text}."
+
+    return summary
+
 def get_db():
     return pymysql.connect(
         host=DB_HOST,
@@ -74,31 +106,36 @@ def index():
     try:
         
         cursor.execute("""
-            SELECT 
+            SELECT
                 r.id,
                 r.repo_name,
                 r.owner,
                 r.language,
                 r.stars,
                 r.scanned_at,
-                rs.final_score,
-                rs.risk_level,
-                rs.high_count,
-                rs.medium_count,
-                rs.low_count
+                rs.vuln_score, rs.vuln_level,
+                rs.malware_score, rs.malware_level
             FROM repositories r
             JOIN risk_scores rs ON r.id = rs.repo_id
             ORDER BY r.scanned_at DESC
         """)
         repos = cursor.fetchall()
 
-        # Count by risk level for summary cards
+        # Tally by the WORSE of the two axes — a compact "does this repo
+        # need any attention at all" summary for the top strip. Full
+        # per-axis breakdown is still shown per-repo in the table below;
+        # this tally is deliberately coarse, not a third blended score.
+        LEVEL_RANK = {"Safe": 0, "Low": 1, "Medium": 2, "High": 3, "Critical": 4}
+        def worse_level(r):
+            return max(r['vuln_level'] or 'Safe', r['malware_level'] or 'Safe',
+                       key=lambda lvl: LEVEL_RANK.get(lvl, 0))
+
         total    = len(repos)
-        safe     = sum(1 for r in repos if r['risk_level'] == 'Safe')
-        low      = sum(1 for r in repos if r['risk_level'] == 'Low')
-        medium   = sum(1 for r in repos if r['risk_level'] == 'Medium')
-        high     = sum(1 for r in repos if r['risk_level'] == 'High')
-        critical = sum(1 for r in repos if r['risk_level'] == 'Critical')
+        safe     = sum(1 for r in repos if worse_level(r) == 'Safe')
+        low      = sum(1 for r in repos if worse_level(r) == 'Low')
+        medium   = sum(1 for r in repos if worse_level(r) == 'Medium')
+        high     = sum(1 for r in repos if worse_level(r) == 'High')
+        critical = sum(1 for r in repos if worse_level(r) == 'Critical')
 
         return render_template('index.html',
             repos    = repos[:10],
@@ -236,17 +273,28 @@ def detail(repo_id):
         """, (repo_id,))
         tool_totals = {row['tool']: row['total'] for row in cursor.fetchall()}
 
+        # Aggregated over ALL findings (not just the capped set below), so
+        # the summary stays accurate even for repos with 100K+ findings.
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(confidence >= %s) AS likely_real,
+                SUM(confidence < %s) AS likely_noise
+            FROM scan_results WHERE repo_id = %s
+        """, (SUMMARY_REAL_THRESHOLD, SUMMARY_NOISE_THRESHOLD, repo_id))
+        summary_counts = cursor.fetchone()
+
         cursor.execute(f"""
             SELECT * FROM (
                 SELECT *, ROW_NUMBER() OVER (
                     PARTITION BY tool
-                    ORDER BY {SEVERITY_RANK} DESC, id ASC
+                    ORDER BY {SEVERITY_RANK} DESC, confidence DESC, id ASC
                 ) AS rn
                 FROM scan_results
                 WHERE repo_id = %s
             ) ranked
             WHERE rn <= %s
-            ORDER BY {SEVERITY_RANK} DESC, tool ASC
+            ORDER BY {SEVERITY_RANK} DESC, confidence DESC, tool ASC
         """, (repo_id, FINDINGS_PER_TOOL_LIMIT))
         findings = cursor.fetchall()
 
@@ -271,12 +319,23 @@ def detail(repo_id):
         history_dates  = [str(h['scanned_at']) for h in history]
         history_scores = [h['final_score'] for h in history]
 
+        # findings[0], if present, is already the globally highest
+        # severity+confidence finding (that's what the ORDER BY above sorts
+        # for), so no extra query needed to find the "most notable" one.
+        findings_summary = build_findings_summary(
+            total       = summary_counts["total"],
+            likely_real = int(summary_counts["likely_real"] or 0),
+            likely_noise = int(summary_counts["likely_noise"] or 0),
+            top_finding = findings[0] if findings else None,
+        )
+
         return render_template('detail.html',
             repo          = repo,
             risk          = risk,
             findings      = findings,
             tools         = tools,
             tool_totals   = tool_totals,
+            findings_summary = findings_summary,
             history_dates  = json.dumps(history_dates),
             history_scores = json.dumps(history_scores)
         )
@@ -301,11 +360,8 @@ def history():
                 r.owner,
                 r.language,
                 r.stars,
-                rs.final_score,
-                rs.risk_level,
-                rs.high_count,
-                rs.medium_count,
-                rs.low_count,
+                rs.vuln_score, rs.vuln_level,
+                rs.malware_score, rs.malware_level,
                 r.scanned_at
             FROM repositories r
             JOIN risk_scores rs ON r.id = rs.repo_id
