@@ -151,12 +151,23 @@ DEP_CHECKER_CATEGORIES = [
     ("Typosquatting:", "Typosquatting"),
     ("Unpinned dependency:", "Unpinned dependency"),
     ("Loose version constraint:", "Loose version constraint"),
+    # setup.py/npm-hook findings embed a variable name/hook/class before the
+    # fixed wording (e.g. "setup.py calls {name}(...)"), so these are matched
+    # as a substring anywhere in the text rather than a startswith prefix —
+    # added when check_setup_py/check_npm_install_hooks were introduced,
+    # since without these they all fell into "dep_checker: other" together,
+    # burying exactly the rare install-time-execution findings this exists
+    # to surface.
+    ("setup.py overrides the install process", "setup.py install-command override"),
+    ("setup.py calls", "setup.py dangerous install-time call"),
+    ("runs automatically on npm install and", "npm install hook (dangerous pattern)"),
+    ("worth a manual look", "npm install hook (informational)"),
 ]
 
 def frequency_key(tool, issue_text):
     if tool == "dep_checker":
-        for prefix, category in DEP_CHECKER_CATEGORIES:
-            if issue_text.startswith(prefix):
+        for marker, category in DEP_CHECKER_CATEGORIES:
+            if marker in issue_text:
                 return category
         return "dep_checker: other"
     return issue_text
