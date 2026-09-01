@@ -6,7 +6,7 @@ import subprocess
 import tomllib
 from difflib import SequenceMatcher
 
-KNOWN_PACKAGES = [
+KNOWN_PACKAGES_PY = [
     "requests", "flask", "django", "numpy", "pandas",
     "scipy", "matplotlib", "tensorflow", "torch", "sklearn",
     "sqlalchemy", "celery", "redis", "pillow", "boto3",
@@ -17,40 +17,69 @@ KNOWN_PACKAGES = [
     "werkzeug", "jinja2", "click", "rich", "typer"
 ]
 
+# Node's own real (if sometimes deprecated) packages — kept separate from
+# KNOWN_PACKAGES_PY so a package.json dependency is only ever compared
+# against other npm packages. Comparing across ecosystems produced false
+# positives like npm's real "request" package being flagged as a typosquat
+# of Python's "requests", which have nothing to do with each other.
+KNOWN_PACKAGES_NPM = [
+    "react", "react-dom", "express", "lodash", "axios", "webpack",
+    "eslint", "vue", "angular", "jquery", "moment", "chalk",
+    "commander", "debug", "async", "underscore", "mocha", "jest",
+    "typescript", "next", "redux", "socket.io", "mongoose", "cors",
+    "dotenv", "nodemon", "prettier", "request", "yargs", "inquirer",
+    "colors", "uuid", "rimraf", "glob", "minimist", "semver",
+    "chokidar", "ws", "body-parser", "morgan", "passport"
+]
+
+ECOSYSTEM_BY_FILE = {"package.json": "npm"}  # everything else parsed by
+                                              # parse_dependencies() is Python
+
 # Check for typosquatting
 
-def is_typosquat(package_name, threshold=0.85):
+def is_typosquat(package_name, ecosystem="python", threshold=0.85):
     package_name = package_name.lower().strip()
-    
-    if package_name in KNOWN_PACKAGES:
+    known_packages = KNOWN_PACKAGES_NPM if ecosystem == "npm" else KNOWN_PACKAGES_PY
+
+    if package_name in known_packages:
         return None
-    
-    for known in KNOWN_PACKAGES:
+
+    for known in known_packages:
         ratio = SequenceMatcher(None, package_name, known).ratio()
         if ratio >= threshold and ratio < 1.0:
-            return known  
-    
+            return known
+
     return None
 
 
 #Parse dependency files. Need to add another dependency file for other code language
 
 def _parse_pep508_name_version(raw):
-    """Parses a PEP 508 requirement string ('requests>=2.0', 'flask[async]')
-    into (name, version), using the same simplified 3-way classification
-    (==, >=, else "unpinned") that requirements.txt parsing already uses —
-    other operators (~=, <=, <, >, !=) fall into "unpinned" too, same
-    simplification, not a new one."""
+    """Parses a PEP 508 requirement string ('requests>=2.0', 'flask[async]',
+    'sqlalchemy<3,>=1.4') into (name, version), using the same simplified
+    3-way classification (==, >=, else "unpinned") that requirements.txt
+    parsing already uses — other operators (~=, <=, <, >, !=) fall into
+    "unpinned" too, same simplification, not a new one.
+
+    The name is always taken as everything before the FIRST operator
+    character, rather than splitting on a specific operator like ">=" —
+    splitting on ">=" directly used to mis-parse a compound constraint like
+    "sqlalchemy<3,>=1.4" into name="sqlalchemy<3," (everything before the
+    ">="), which then falsely tripped the typosquat checker on its own
+    mangled name."""
     raw = re.sub(r"\[[^\]]*\]", "", raw).split(";")[0].strip()
-    if "==" in raw:
-        name, version = raw.split("==", 1)
-        return name.strip(), version.strip()
-    elif ">=" in raw:
-        name, version = raw.split(">=", 1)
-        return name.strip(), f">={version.strip()}"
+    match = re.search(r"[<>=!~\s]", raw)
+    if not match:
+        return (raw, "unpinned") if raw else (None, None)
+
+    name = raw[:match.start()].strip()
+    spec = raw[match.start():].strip()
+    if spec.startswith("=="):
+        return name, spec[2:].strip()
+    elif spec.startswith(">="):
+        return name, spec
     else:
-        name = re.split(r"[<>=!~\s]", raw)[0].strip()
-        return name, "unpinned" if name else (None, None)
+        return name, "unpinned"
 
 
 def _table_style_version(value):
@@ -296,7 +325,8 @@ def check_suspicious_patterns(repo_path):
             continue
 
         # Check 2: Typosquatting
-        imitated = is_typosquat(name)
+        ecosystem = ECOSYSTEM_BY_FILE.get(filename, "python")
+        imitated = is_typosquat(name, ecosystem)
         if imitated:
             findings.append({
                 "tool":         "dep_checker",
