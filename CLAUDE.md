@@ -25,7 +25,7 @@ Requires system tools on PATH: `bandit`, `semgrep` (needs `semgrep login` once),
 `yara`, `clamscan`, `7z`, plus a running MySQL instance matching `config.py`.
 
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
-`GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `CLAUDE_API_KEY`.
+`GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
 No test suite or lint config exists in this repo currently.
 

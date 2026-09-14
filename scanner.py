@@ -3,7 +3,6 @@ import re
 import subprocess
 import shutil
 import json
-import time
 import requests
 import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
@@ -80,7 +79,12 @@ def extract_archives(repo_path, password="infected"):
     count = 0
     for root, dirs, files in os.walk(repo_path):
         for file in files:
-            if file.endswith(('.zip', '.7z', 'rar')):
+            # lower() so an uppercase/mixed-case extension (.ZIP, .Rar) isn't
+            # skipped — a trivial evasion otherwise, and malicious archives
+            # are exactly where that matters. '.rar' was previously written
+            # as 'rar' with no dot, which matched any filename ending in
+            # those three letters rather than the extension.
+            if file.lower().endswith(('.zip', '.7z', '.rar')):
                 filepath = os.path.join(root,file)
                 ext = file.rsplit('.', 1)[-1]
                 extract_dir = filepath.replace(f'.{ext}' , '_extracted')
@@ -187,10 +191,62 @@ NOISE_RULES = [
     "A Flask app appears to be run with debug=True, which exposes the Werkzeug debugger and allows the execution of arbitrary code.",
 ]
 
-IGNORE_PATHS = [
-    "test", "docs", "example",
-    "migration", "locale", "doc"
-]
+# Whole path SEGMENTS (directory or file names) that mark a finding as
+# scaffolding rather than real application code.
+#
+# These are matched as complete segments, never as substrings. The previous
+# version of this check was `any(p in filename.lower() for p in IGNORE_PATHS)`
+# over a list that included "doc" and "test", which silently discarded every
+# finding in:
+#     /Dockerfile, /docker-compose.yml, /docker/*   ("doc" inside "docker")
+#     /documents.py, /doctor.py                     ("doc" again)
+#     /latest.py, /testimonials.py                  ("test" inside them)
+# Dockerfiles are squarely in scope for this tool — curl|sh piping, baked-in
+# secrets, running as root — so that was a real false-negative hole, and it
+# hit 813 distinct filenames in the scan corpus. Segment matching fixes it
+# without loosening the actual test/docs exclusions.
+IGNORE_PATH_SEGMENTS = frozenset({
+    "test", "tests", "testing", "__tests__",
+    "doc", "docs",
+    "example", "examples",
+    "migration", "migrations",
+    "locale", "locales",
+    "fixture", "fixtures",
+})
+
+# Files that are test scaffolding by their own name regardless of directory:
+# pytest's test_*.py / conftest.py, Go's *_test.go, JS/TS's *.test.js and
+# *.spec.ts. Anchored so "latest.py" and "testimonials.py" don't match.
+IGNORE_FILENAME_RE = re.compile(
+    r"""^(?:
+          test_[^/]*                  # test_foo.py
+        | conftest\.py                 # pytest fixture module
+        | [^/]*_test\.[a-z0-9]+        # foo_test.go, foo_test.py
+        | [^/]*\.(?:test|spec)\.[a-z0-9]+  # foo.test.js, foo.spec.ts
+    )$""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def is_ignored_path(filename):
+    """True if this finding sits in test/docs/example scaffolding rather than
+    real application code.
+
+    Shared with train_classifier.py's weak labeling on purpose — this logic
+    used to be written out twice, and when the substring bug above was
+    present in both copies the classifier was actively *trained* to treat
+    Dockerfile findings as noise. One definition, one place to fix.
+    """
+    parts = [p for p in (filename or "").lower().replace("\\", "/").split("/") if p]
+    if not parts:
+        return False
+    # any directory along the path
+    if any(p in IGNORE_PATH_SEGMENTS for p in parts[:-1]):
+        return True
+    basename = parts[-1]
+    return (basename in IGNORE_PATH_SEGMENTS
+            or bool(IGNORE_FILENAME_RE.match(basename)))
+
 
 def filter_noise(findings):
     filtered = []
@@ -201,7 +257,7 @@ def filter_noise(findings):
             continue
 
         # Skip ALL findings from test/docs/locale files
-        if any(p in f["filename"].lower() for p in IGNORE_PATHS):
+        if is_ignored_path(f["filename"]):
             continue
 
         # Downgrade SHA1/MD5 from high to medium
@@ -568,7 +624,6 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
             on_progress(stage)
 
     report("Fetching repository info")
-    repo_url  = f"https://github.com/{repo}"
     repo_info = get_repo_info(repo)
 
     report("Cloning repository")

@@ -1,16 +1,24 @@
 # MalDet — Project Notes
 
-Snapshot as of 2026-09-02. Written for the FYP report / your own reference —
+Snapshot as of 2026-09-14. Written for the FYP report / your own reference —
 update as things change rather than treating this as a one-time record.
 
 ## Advantages (current state)
 
 - **Real aggregation value, actually working end-to-end.** Bandit, Semgrep,
-  YARA, ClamAV, and dep_checker all run and get reduced to one score and
-  verdict — the core positioning claim in PRODUCT.md is real, not aspirational.
-- **Tested against real data, not a toy demo.** The live DB has 196 scanned
-  repos and 249K+ findings. Every fix this session was verified against
-  that real data, not just unit-tested in isolation.
+  YARA, ClamAV, and dep_checker all run and get reduced to two scored axes
+  and verdicts — the core positioning claim in PRODUCT.md is real, not
+  aspirational.
+- **Tested against real data, not a toy demo.** The live DB has 155 scanned
+  repos and ~235K findings. Every fix has been verified against that real
+  data, not just unit-tested in isolation — including several bugs that were
+  only findable by querying the corpus (see the IGNORE_PATHS and dep_checker
+  parsing fixes below).
+- **The classifier now has a ground-truth-backed number, not just
+  self-grading.** A 168-finding hand-reviewed set (`eval_sample.json`) gives
+  precision 0.52 / recall 0.53 / F1 0.53, against a 0.28 baseline for
+  treating every finding as real. Modest, but honest and defensible — and
+  measurably better than before the IGNORE_PATHS fix (0.49 / 0.38 / 0.43).
 - **Complete, cohesive UI.** Dashboard, New Scan, Detail, History, and the
   scan-status page all exist and follow one considered design system
   (wax-seal risk badges, ledger layout) — not a default Bootstrap look.
@@ -25,11 +33,18 @@ update as things change rather than treating this as a one-time record.
   the detail page support the "track a repo over time" positioning claim.
 - **schema.sql now matches reality.** It was empty before; now it's an
   accurate, documented source of truth for the actual live schema.
-- **ML component has honest methodology, not just a black box.** No
-  ground-truth labels exist, so the classifier uses clearly-labeled weak
-  supervision, and two real calibration problems were found and fixed by
-  reading the code rather than guessing (YARA under-confidence, dep_checker
-  text uniqueness).
+- **ML component has honest methodology, not just a black box.** Training
+  labels are weak (bootstrapped from noise rules + repo-frequency, since
+  hand-labeling 235K findings isn't feasible), but that's stated plainly
+  rather than hidden, the evaluation set is held out and never trained on,
+  and several real calibration problems were found and fixed by reading the
+  code and querying the corpus rather than guessing (YARA under-confidence,
+  dep_checker text uniqueness, the IGNORE_PATHS label contamination).
+- **The tool has been turned on itself, and the result was reported rather
+  than buried.** `app.py` shipped with `debug=True` on `0.0.0.0`; Bandit
+  flags exactly that pattern, but the rule sits in MalDet's own
+  `NOISE_RULES`, so scanning this repo with this tool would not have caught
+  it. Fixed, and documented in-code as a limitation of the noise filter.
 
 ## Disadvantages (current state)
 
@@ -39,17 +54,35 @@ update as things change rather than treating this as a one-time record.
   including install-hook scripts) are covered.
 - **No automated test suite.** Every fix has been verified by manual/live
   testing against the real app and DB — thorough, but not repeatable or
-  regression-proof going forward.
+  regression-proof going forward. The IGNORE_PATHS bug is the clearest
+  argument for one: it survived in two separate copies of the same logic for
+  six weeks, and a single unit test over a handful of paths would have
+  caught it immediately.
 - **In-memory scan job tracking.** Job status lives in a process-lifetime
-  dict; a server restart (including the dev auto-reloader on every `.py`
-  save) kills any in-progress scan and forgets its status.
+  dict; a server restart kills any in-progress scan and forgets its status.
+  (The dev auto-reloader used to do this on every `.py` save; `use_reloader`
+  is now pinned off for exactly that reason, so this is down to deliberate
+  restarts only.)
+- **Existing scan data is missing findings the IGNORE_PATHS bug discarded.**
+  The fix only affects new scans — findings dropped at scan time were never
+  stored. Recovering them for the 155 repos already scanned needs a full
+  rescan (hours of re-cloning), not the partial `rescan_yara_dep.py` path.
+  Findings in `Dockerfile`/`docker-compose.yml` are the notable gap.
 - **ClamAV has produced zero real hits** across all scanned repos — expected,
   since it's built for compiled malware, not source code, but worth being
   honest that this engine's contribution is currently unproven on this
   workload.
-- **LLM plain-English summary is entirely unbuilt**, and the spec is
-  ambiguous: PRODUCT.md says Ollama/llama3.2, but `config.py` and
-  `requirements.txt` already point to the Claude API instead.
+- **LLM plain-English summary is still unbuilt.** The rule-based version in
+  `app.py:build_findings_summary` covers the need for now and is shaped as a
+  drop-in replacement target. The Ollama-vs-hosted-API ambiguity is at least
+  resolved on the code side: the unused `anthropic` dependency and
+  `CLAUDE_API_KEY` slot are gone, so PRODUCT.md's Ollama/llama3.2 spec is
+  now the only stated intent.
+- **Hand labels are AI-assisted, not independent.** The 168-finding
+  evaluation set was labeled by AI first-pass with author confirmation, and
+  the author agreed with every suggestion. That has to be disclosed wherever
+  the precision/recall numbers are cited — it's a weaker claim than fully
+  independent review.
 
 ---
 
@@ -98,18 +131,88 @@ update as things change rather than treating this as a one-time record.
   rare, high-signal findings this feature exists to catch. Added proper
   categories and retrained.
 
+## What's improved (2026-09-14 — code audit pass)
+
+Prompted by a read-through of the whole codebase looking for missed work.
+Four commits, each verified against the live corpus rather than assumed:
+
+- **`IGNORE_PATHS` was silently discarding real findings** (`932acd6`).
+  `filter_noise()` excluded any path *containing* "test"/"doc"/etc. as a
+  substring, and because "doc" sits inside "docker" it threw away every
+  finding in `/Dockerfile`, `/docker-compose.yml` and `/docker/*`, plus
+  `/documents.py`, `/doctor.py`, `/latest.py` and `/testimonials.py`. 931
+  distinct filenames in the corpus match. Dockerfiles are squarely in scope
+  for this tool (curl|sh piping, baked-in secrets, running as root), so this
+  was a false-negative hole in a scanner whose entire job is not missing
+  those. Replaced with `is_ignored_path()`, matching whole path segments plus
+  anchored test-file conventions; verified on 34 real corpus paths (16
+  previously-dropped app files now kept, 18 genuine test/doc paths still
+  dropped, no regressions).
+  - **It had also contaminated the model.** The same logic was written out a
+    second time in `train_classifier.py`'s weak labeling, so the classifier
+    was being actively *trained* to call Dockerfile findings noise. Both
+    call sites now share one function. Retraining after the fix improved the
+    hand-labeled scores from 0.49/0.38/0.43 to 0.52/0.53/0.53
+    (precision/recall/F1) — recall being the meaningful move, 25 of 47 real
+    findings caught vs. 18.
+  - Timeline worth knowing: the buggy filter landed 2026-07-31, and the
+    Dockerfile findings still in the DB are all from 07-29 scans, i.e. from
+    before the bug. Every scan since has been dropping them.
+- **`app.py` served the Werkzeug debugger to the whole local network**
+  (`c67ac52`). `debug=True` on `host='0.0.0.0'` is an arbitrary-code-execution
+  path for anyone who could reach port 5000. Both now default safe and are
+  opt-in via `MALDET_DEBUG`/`MALDET_HOST`/`MALDET_PORT`; `use_reloader` is
+  pinned off so a `.py` save can't kill an in-flight scan.
+- **Two dep_checker false-positive bugs** (`1e8bc53`), both found while
+  hand-labeling the evaluation set:
+  - `_parse_pep508_name_version()` split compound constraints like
+    `sqlalchemy<3,>=1.4` on `>=`, so the package name came out as
+    `sqlalchemy<3,` — which then tripped the typosquat checker against its
+    own mangled text. Now takes the name as everything before the first
+    operator.
+  - `is_typosquat()` compared every dependency against one Python-only
+    known-package list, flagging npm's real `request` package as a typosquat
+    of Python's `requests`. Now ecosystem-aware, keyed off which manifest
+    the dependency came from.
+- **Removed dead weight** (`fc1fce7`). The `anthropic` dependency and
+  `CLAUDE_API_KEY` config slot were never imported or read by anything —
+  leftovers from the unbuilt LLM summary, and they contradicted PRODUCT.md's
+  Ollama spec. Also uninstalled ~838MB of unused venv packages
+  (`playwright` + its browser binaries, `pillow`, `pillow-avif-plugin`).
+- Smaller: archive extraction now case-folds extensions, so `payload.ZIP` /
+  `malware.RaR` are no longer skipped outright (a one-keystroke evasion), and
+  `'rar'` is `'.rar'` rather than matching any name ending in those letters.
+  Dropped a stale `import time` and an unused `repo_url`, and a misleading
+  f-string prefix on a query with nothing to interpolate.
+- Rewrote the stale claims in PRODUCT.md (it still described the classifier
+  and background scanning as unbuilt, and `schema.sql` as empty) and added
+  the two-axis scoring model, the real evaluation numbers, and the
+  AI-assisted-labeling disclosure.
+
 ## What needs improvement (near-term, actionable)
 
-- Build a small hand-labeled evaluation holdout for a real precision/recall
-  number — right now the classifier is only evaluated against its own weak
-  labels, which is a lower bar.
-- Extend dep_checker to other ecosystems (`go.mod`, `Cargo.toml`, etc.) —
-  Python and Node are now covered.
-- Decide and build the LLM plain-English summary feature — resolve the
-  Ollama-vs-Claude-API question first.
-- Add at least minimal automated tests (route smoke tests, a couple of
-  `scanner.py`/`dep_checker.py` unit tests) so future changes don't rely
-  purely on manual re-testing.
+- **Full rescan of all 155 repos** to recover the findings the IGNORE_PATHS
+  bug discarded — particularly `Dockerfile`/`docker-compose.yml`. Hours of
+  runtime, so an overnight job; `rescan_yara_dep.py` won't do it since the
+  loss is in Bandit/Semgrep output.
+- **Automated tests.** Route smoke tests plus unit tests over
+  `is_ignored_path()`, `_parse_pep508_name_version()` and `normalize_severity()`
+  — the three places where a silent logic bug has already happened at least
+  once each.
+- **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
+  Python and Node are covered.
+- **Build the Ollama/llama3.2 plain-English summary.** Scope it to the top
+  ~20 findings per scan, not all of them — per-finding LLM inference across
+  the corpus is hours-to-days versus seconds for the Random Forest, so the
+  Random Forest stays the scorer and the LLM only explains.
+- **Dockerise for the team** — `bandit`/`semgrep`/`yara`/`clamscan`/`7z`
+  plus MySQL is a painful per-person install, and a compose file would make
+  it one command. Needs env-var config (since `config.py` is gitignored),
+  a story for `semgrep login`, and ClamAV's ~300MB signature DB.
+- **Independently confirm a slice of the evaluation labels**, or have a
+  groupmate review the ambiguous ones, so the precision/recall figures rest
+  on something stronger than AI-suggested labels the author agreed with
+  wholesale.
 
 ## Limitations (structural, not just "todo")
 
@@ -117,10 +220,21 @@ update as things change rather than treating this as a one-time record.
   permanent design constraint per PRODUCT.md, not a gap to close.
 - **No real concurrency.** Even with background execution, there's no job
   queue — only one scan realistically runs at a time.
-- **Weak-supervised ML is inherently bounded.** Without genuine
-  hand-labeled ground truth, any "accuracy" claim is only as good as the
-  proxy labels it was measured against — this needs to be stated plainly
-  in the report, not oversold as validated accuracy.
+- **Weak-supervised ML is inherently bounded.** *Training* labels are still
+  proxies (noise rules + repo-frequency), because hand-labeling 235K
+  findings isn't feasible for one person — so the model can only ever be as
+  good as those proxies allow. What has changed is the *evaluation*: the
+  168-finding hand-reviewed holdout gives a real number (precision 0.52,
+  recall 0.53) instead of the model grading itself. Quote those figures, not
+  `train_classifier.py`'s self-graded ones, and state that the labels were
+  AI-assisted with author confirmation.
+- **Recall is the weak axis, and that's a design posture worth defending
+  explicitly.** At the 0.5 confidence threshold the classifier misses
+  roughly half the genuinely real findings in the evaluation set. It is
+  tuned to favour a quiet, trustworthy list over a thorough one. For a
+  "should I install this?" pre-flight check that's arguable; for an audit
+  tool it wouldn't be. Lowering the threshold trades precision back for
+  recall and can be re-measured against the same holdout.
 - **No CI/CD or staging environment.** Changes are validated against the
   live dev DB/app directly — reasonable for an FYP, not how a production
   deployment would work.
