@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import uuid
 from datetime import datetime
@@ -265,7 +266,7 @@ def detail(repo_id):
             END
         """
 
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT tool, COUNT(*) AS total
             FROM scan_results
             WHERE repo_id = %s
@@ -437,9 +438,23 @@ def api_results(repo_id):
 if __name__ == '__main__':
     # threaded=True so status-page polling isn't queued behind other
     # requests while a scan's background thread is running.
+    #
+    # debug and host both default to the safe option and are opt-in by env
+    # var. debug=True serves the Werkzeug debugger, which is an arbitrary
+    # code execution path for anyone who can reach the port; combined with
+    # host='0.0.0.0' (bind every interface) that exposed this machine to the
+    # whole local network. Worth noting for the writeup: Bandit flags exactly
+    # this pattern, but that rule sits in scanner.py's NOISE_RULES, so
+    # scanning this repo with MalDet itself would not have caught it.
+    #
+    # use_reloader stays off even in debug: it restarts the process on every
+    # .py save, and scan job state lives in the in-memory SCANS dict, so a
+    # reload silently kills any in-progress scan and forgets its status.
+    debug = os.environ.get("MALDET_DEBUG", "").lower() in ("1", "true", "yes")
     app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=True,
+        host=os.environ.get("MALDET_HOST", "127.0.0.1"),
+        port=int(os.environ.get("MALDET_PORT", "5000")),
+        debug=debug,
+        use_reloader=False,
         threaded=True
     )

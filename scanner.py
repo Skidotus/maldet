@@ -80,7 +80,12 @@ def extract_archives(repo_path, password="infected"):
     count = 0
     for root, dirs, files in os.walk(repo_path):
         for file in files:
-            if file.endswith(('.zip', '.7z', 'rar')):
+            # lower() so an uppercase/mixed-case extension (.ZIP, .Rar) isn't
+            # skipped — a trivial evasion otherwise, and malicious archives
+            # are exactly where that matters. '.rar' was previously written
+            # as 'rar' with no dot, which matched any filename ending in
+            # those three letters rather than the extension.
+            if file.lower().endswith(('.zip', '.7z', '.rar')):
                 filepath = os.path.join(root,file)
                 ext = file.rsplit('.', 1)[-1]
                 extract_dir = filepath.replace(f'.{ext}' , '_extracted')
@@ -568,7 +573,6 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
             on_progress(stage)
 
     report("Fetching repository info")
-    repo_url  = f"https://github.com/{repo}"
     repo_info = get_repo_info(repo)
 
     report("Cloning repository")
