@@ -4,7 +4,7 @@ A web-based static analysis tool that scans public GitHub repositories for malwa
 vulnerable dependencies, and supply chain attacks using multiple detection engines
 combined with machine learning (ML) risk classification.
 
-> Final Year Project (FYP) — Diploma in Information Security
+> Final Year Project (FYP) — Diploma in Cybersecurity Technology
 
 ---
 
