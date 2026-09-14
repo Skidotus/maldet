@@ -5,3 +5,6 @@ __pycache__/
 *.pkl
 *.log
 .env
+
+# timestamped safety copies from `build_eval_sample.py --force`
+*.bak
