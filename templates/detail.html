@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}{{ repo.owner }}/{{ repo.repo_name }}{% endblock %}
+
+{% block content %}
+
+  <div class="repo-header mb-4">
+    <div>
+      <h1 class="h3 mb-0">{{ repo.repo_name }}</h1>
+      <div class="repo-header__meta">
+        <span>{{ repo.owner }}</span>
+        <a href="https://github.com/{{ repo.owner }}/{{ repo.repo_name }}" target="_blank" rel="noopener noreferrer">
+          <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>github.com/{{ repo.owner }}/{{ repo.repo_name }}
+        </a>
+        {% if repo.language %}<span><i class="bi bi-code-slash me-1" aria-hidden="true"></i>{{ repo.language }}</span>{% endif %}
+        <span><i class="bi bi-star-fill me-1" aria-hidden="true"></i>{{ repo.stars }}</span>
+        <span>Scanned {{ repo.scanned_at.strftime('%d %b %Y, %H:%M') if repo.scanned_at else '—' }}</span>
+      </div>
+    </div>
+    <div class="repo-header__actions">
+      <a href="{{ url_for('rescan', repo_id=repo.id) }}" class="btn btn-outline-parchment" id="rescanBtn">
+        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Rescan
+      </a>
+      <span class="seal-badge seal-{{ risk.vuln_level | lower }} align-self-center" title="Vulnerability">{{ risk.vuln_level }}</span>
+      <span class="seal-badge seal-{{ risk.malware_level | lower }} align-self-center" title="Malicious Pattern">{{ risk.malware_level }}</span>
+    </div>
+  </div>
+
+  {# ---------------------------------------------------------
+     Two separate score axes, not one blended number: Bandit/Semgrep
+     findings mean "this code has an exploitable weakness" (an attacker's
+     problem), YARA/ClamAV/dep_checker findings mean "this code looks like
+     it's trying to do something malicious" (the code author's intent) —
+     different threat models, so scored and shown separately.
+     --------------------------------------------------------- #}
+  <p class="text-muted small mb-2">Vulnerability — insecure coding patterns (Bandit, Semgrep)</p>
+  <div class="ledger-strip mb-3">
+    <div class="ledger-cell ledger-cell--total">
+      <div class="tally-label">Score</div>
+      <div class="tally-value">{{ risk.vuln_score | round | int }}</div>
+    </div>
+    <div class="ledger-cell ledger-cell--contested">
+      <div class="tally-label">High</div>
+      <div class="tally-value">{{ risk.vuln_high }}</div>
+    </div>
+    <div class="ledger-cell ledger-cell--flagged">
+      <div class="tally-label">Medium</div>
+      <div class="tally-value">{{ risk.vuln_medium }}</div>
+    </div>
+    <div class="ledger-cell ledger-cell--minor">
+      <div class="tally-label">Low</div>
+      <div class="tally-value">{{ risk.vuln_low }}</div>
+    </div>
+  </div>
+
+  <p class="text-muted small mb-2">Malicious Pattern — signs of intentionally malicious code (YARA, ClamAV, dep_checker)</p>
+  <div class="ledger-strip mb-4">
+    <div class="ledger-cell ledger-cell--total">
+      <div class="tally-label">Score</div>
+      <div class="tally-value">{{ risk.malware_score | round | int }}</div>
+    </div>
+    <div class="ledger-cell ledger-cell--contested">
+      <div class="tally-label">High</div>
+      <div class="tally-value">{{ risk.malware_high }}</div>
+    </div>
+    <div class="ledger-cell ledger-cell--flagged">
+      <div class="tally-label">Medium</div>
+      <div class="tally-value">{{ risk.malware_medium }}</div>
+    </div>
+    <div class="ledger-cell ledger-cell--minor">
+      <div class="tally-label">Low</div>
+      <div class="tally-value">{{ risk.malware_low }}</div>
+    </div>
+  </div>
+
+  {% if history_dates and history_dates != '[]' %}
+    <div class="chart-card mb-4">
+      <h2 class="h6 mb-3">Score Trend</h2>
+      <canvas id="trendChart" height="80"></canvas>
+    </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------
+     Findings, grouped by detection engine
+     --------------------------------------------------------- #}
+  <h2 class="h5 mb-3">Findings</h2>
+
+  {% if findings_summary %}
+    <p class="findings-summary mb-3">{{ findings_summary }}</p>
+  {% endif %}
+
+  {% if tools and tools|length > 0 %}
+
+    {# Filter chips — toggle a tool's whole section on/off. Independent of
+       the per-section collapse below: this controls whether a section
+       renders at all, collapse controls whether an active one is open. #}
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <div class="tool-filter-bar" role="group" aria-label="Filter findings by tool">
+        {% for tool, tool_findings in tools.items() %}
+          <button type="button" class="tool-filter-chip" data-tool="{{ tool }}" aria-pressed="true">
+            {{ tool }} <span class="tool-filter-chip__count">{{ tool_findings|length }}</span>
+          </button>
+        {% endfor %}
+      </div>
+      <button type="button" id="hideNoiseToggle" class="btn btn-sm btn-outline-parchment" aria-pressed="false">
+        Hide likely noise
+      </button>
+    </div>
+
+    <div class="d-flex flex-column gap-3" id="findingsSections">
+      {% for tool, tool_findings in tools.items() %}
+        <div class="tool-section" data-tool="{{ tool }}">
+          <button type="button" class="tool-section__header" data-bs-toggle="collapse"
+                  data-bs-target="#toolBody-{{ loop.index }}" aria-expanded="true"
+                  aria-controls="toolBody-{{ loop.index }}">
+            <span class="tool-section__title">{{ tool }}</span>
+            <span class="d-flex align-items-center gap-2">
+              <span class="text-muted small">
+                {% if tool_totals[tool] > tool_findings|length %}
+                  showing {{ tool_findings|length }} of {{ tool_totals[tool] }} findings (highest severity first)
+                {% else %}
+                  {{ tool_findings|length }} finding{{ 's' if tool_findings|length != 1 else '' }}
+                {% endif %}
+              </span>
+              <i class="bi bi-chevron-down tool-section__chevron" aria-hidden="true"></i>
+            </span>
+          </button>
+          <div class="collapse show" id="toolBody-{{ loop.index }}">
+          {% for f in tool_findings %}
+            <div class="finding-row{{ ' finding-row--likely-noise' if f.confidence is not none and f.confidence < 0.3 else '' }}">
+              <div class="finding-row__meta">
+                <span class="seal-badge seal-{{ f.severity | lower }}">{{ f.severity }}</span>
+                {% if f.filename %}
+                  <span class="finding-row__location">{{ f.filename }}{% if f.line_number %}:{{ f.line_number }}{% endif %}</span>
+                {% endif %}
+                {% if f.confidence is not none %}
+                  <span class="finding-row__confidence">{{ (f.confidence * 100) | round | int }}% likely real</span>
+                {% endif %}
+              </div>
+              <div class="finding-row__text">{{ f.issue_text }}</div>
+              {% if f.code_snippet %}
+                <pre class="code-snippet">{{ f.code_snippet }}</pre>
+              {% endif %}
+            </div>
+          {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="ledger-book">
+      <div class="empty-state">
+        <span class="seal-mark seal-mark--large" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40">
+            <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" stroke-width="0.8"/>
+            <path d="M20 9 L22.5 16.5 L30 16.5 L24 21 L26 29 L20 24.5 L14 29 L16 21 L10 16.5 L17.5 16.5 Z"
+                  fill="currentColor" opacity="0.85"/>
+          </svg>
+        </span>
+        <h2 class="h5 text-light">No findings</h2>
+        <p class="mb-0">Every detection engine came back clean on this scan.</p>
+      </div>
+    </div>
+  {% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+  {% if history_dates and history_dates != '[]' %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script>
+      new Chart(document.getElementById('trendChart'), {
+        type: 'line',
+        data: {
+          labels: {{ history_dates | safe }},
+          datasets: [{
+            label: 'Risk Score',
+            data: {{ history_scores | safe }},
+            borderColor: '#c9a24a',
+            backgroundColor: 'rgba(201, 162, 74, 0.15)',
+            tension: 0.25,
+            fill: true,
+            pointRadius: 3,
+            pointBackgroundColor: '#c9a24a'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#a8987e' }, grid: { color: '#4a3b2c' } },
+            y: { beginAtZero: true, ticks: { color: '#a8987e' }, grid: { color: '#4a3b2c' } }
+          }
+        }
+      });
+    </script>
+  {% endif %}
+{% endblock %}

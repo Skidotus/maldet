@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+    <h1 class="h3 mb-0">Dashboard</h1>
+    <a href="{{ url_for('scan') }}" class="btn btn-ribbon">
+      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Scan
+    </a>
+  </div>
+
+  {% if total and total > 0 %}
+
+    {# ---------------------------------------------------------
+       Ledger tally strip — one bound strip, five divided cells,
+       never five separate same-size cards.
+       --------------------------------------------------------- #}
+    <div class="ledger-strip mb-4">
+      <div class="ledger-cell ledger-cell--total">
+        <div class="tally-label">Total</div>
+        <div class="tally-value">{{ total }}</div>
+      </div>
+      <div class="ledger-cell ledger-cell--cleared">
+        <div class="tally-label">Safe</div>
+        <div class="tally-value">{{ safe }}</div>
+      </div>
+      <div class="ledger-cell ledger-cell--flagged">
+        <div class="tally-label">Low / Medium</div>
+        <div class="tally-value">{{ low + medium }}</div>
+      </div>
+      <div class="ledger-cell ledger-cell--contested">
+        <div class="tally-label">High</div>
+        <div class="tally-value">{{ high }}</div>
+      </div>
+      <div class="ledger-cell ledger-cell--rejected">
+        <div class="tally-label">Critical</div>
+        <div class="tally-value">{{ critical }}</div>
+      </div>
+    </div>
+    <p class="text-muted small mb-4">
+      Tally shows the worse of each repo's two scores — see the table below for the full
+      vulnerability / malicious-pattern breakdown per repo.
+    </p>
+
+    {# ---------------------------------------------------------
+       Register table
+       --------------------------------------------------------- #}
+    <div class="ledger-book">
+      <div class="ledger-book__header">
+        <h2 class="h6 mb-0">Recent Entries</h2>
+        <a href="{{ url_for('history') }}" class="text-decoration-none">Open register ({{ total }}) &rarr;</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-ledger align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Repo Name</th>
+              <th>Owner</th>
+              <th>Language</th>
+              <th>Stars</th>
+              <th>Vulnerability</th>
+              <th>Malicious Pattern</th>
+              <th>Scanned</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for repo in repos %}
+              <tr>
+                <td class="repo-name">{{ repo.repo_name }}</td>
+                <td class="repo-owner">{{ repo.owner }}</td>
+                <td>
+                  {% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+                </td>
+                <td><i class="bi bi-star-fill text-muted me-1" aria-hidden="true"></i>{{ repo.stars }}</td>
+                <td><span class="axis-cell">
+                  <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
+                  <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | round | int }}</span>
+                </span></td>
+                <td><span class="axis-cell">
+                  <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
+                  <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | round | int }}</span>
+                </span></td>
+                <td class="text-muted">{{ repo.scanned_at.strftime('%d %b %Y, %H:%M') if repo.scanned_at else '—' }}</td>
+                <td class="text-end">
+                  <a href="{{ url_for('detail', repo_id=repo.id) }}" class="btn btn-sm btn-outline-parchment row-action">View</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  {% else %}
+
+    <div class="ledger-book">
+      <div class="empty-state">
+        <span class="seal-mark seal-mark--large" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40">
+            <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" stroke-width="0.8"/>
+            <path d="M20 9 L22.5 16.5 L30 16.5 L24 21 L26 29 L20 24.5 L14 29 L16 21 L10 16.5 L17.5 16.5 Z"
+                  fill="currentColor" opacity="0.85"/>
+          </svg>
+        </span>
+        <h2 class="h5 text-light">No repositories scanned yet</h2>
+        <p class="mb-3">Run your first scan to see results here.</p>
+        <a href="{{ url_for('scan') }}" class="btn btn-ribbon">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Scan
+        </a>
+      </div>
+    </div>
+
+  {% endif %}
+
+{% endblock %}
