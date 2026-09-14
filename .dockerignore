@@ -1,0 +1,25 @@
+# Keep the build context small and secret-free.
+
+# config.py holds real credentials. The container generates its own from
+# environment variables at startup (docker/entrypoint.sh), so this must
+# never be baked into an image layer.
+config.py
+
+venv/
+.git/
+__pycache__/
+*.pyc
+*.log
+*.bak
+
+# Tooling / local working dirs, not part of the app
+.claude/
+.impeccable/
+design/
+
+# Seed data is bind-mounted into the MySQL container by docker-compose,
+# so it doesn't need to be inside the app image.
+db/seed_data.sql.gz
+
+# Scratch from the abandoned guided-review pass
+guided_review.json

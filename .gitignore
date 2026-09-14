@@ -6,5 +6,13 @@ __pycache__/
 *.log
 .env
 
+# The trained classifier is an exception to *.pkl above. It has to be in the
+# repo: scanner.py's score_findings() falls back to p_real=1.0 for every
+# finding when the artifact is missing, which silently inflates every risk
+# score instead of erroring. Tracking it means a fresh clone (or a Docker
+# build) scores identically to this machine, and the evaluation figures in
+# NOTES.md are reproducible by someone else. 3.2MB.
+!model/risk_classifier.pkl
+
 # timestamped safety copies from `build_eval_sample.py --force`
 *.bak

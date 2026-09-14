@@ -33,7 +33,79 @@ combined with machine learning (ML) risk classification.
 
 ---
 
-## System Requirements
+## Quick start with Docker (recommended)
+
+If you just want MalDet running, use this. It needs **Docker** and **git**,
+and nothing else — no Python, no virtualenv, no MySQL setup, no installing
+`yara`/`clamav`/`7z`, no `semgrep login`.
+
+```bash
+git clone https://github.com/Skidotus/maldet.git
+cd maldet
+cp .env.example .env
+```
+
+Open `.env` and paste in a GitHub token (see below — it takes a minute and
+needs no permissions). Then:
+
+```bash
+docker compose up
+```
+
+Open **http://localhost:5000**. The dashboard arrives already populated with
+~20 real scanned repositories spanning Safe through Critical, so there's
+something to look at immediately.
+
+After that, `docker compose up` starts in seconds and `docker compose down`
+stops it. Anything you scan yourself persists between restarts.
+
+### The GitHub token
+
+MalDet only reads *public* repository metadata, so the token needs **no
+scopes at all** — its only job is raising GitHub's API rate limit from 60
+requests/hour to 5,000.
+
+1. github.com → Settings → Developer settings → Personal access tokens →
+   **Tokens (classic)**
+2. **Generate new token**, tick **nothing** under scopes
+3. Paste it into `.env` as `GITHUB_TOKEN=`
+
+Use your own; don't reuse a teammate's.
+
+Optionally add a free `SEMGREP_APP_TOKEN` from semgrep.dev for Semgrep's full
+ruleset. Without it Semgrep still runs on community rules — fewer findings,
+no errors.
+
+### What to expect the first time
+
+- **10–20 minutes and ~1.5 GB**: building the image and downloading ClamAV's
+  signature database (~110 MB). Both are cached, so it only happens once.
+  In a hurry? Set `SKIP_FRESHCLAM=1` in `.env` — ClamAV then reports nothing
+  and the other four engines are unaffected.
+- **~2 GB disk** total once settled, across the image, database and signatures.
+- **Give Docker 4 GB of RAM.** The default 2 GB is tight; Semgrep is
+  memory-hungry on large repositories. On Docker Desktop: Settings →
+  Resources.
+
+### Notes and gotchas
+
+- The dashboard is published to `127.0.0.1` only — reachable from this
+  machine's browser, not from anything else on the network. That's
+  deliberate.
+- **Port 5000 already in use?** Usually a locally-running `python3 app.py`.
+  Stop it, or set `MALDET_PORT=5001` in `.env`.
+- **Windows** needs WSL2 for Docker Desktop. That's normally automatic, but
+  on some machines it requires enabling virtualisation in the BIOS.
+- **Apple Silicon Macs** are fine — every tool has an ARM build.
+- Your credentials are generated inside the container from `.env` at startup.
+  If you already have a local `config.py`, it is left untouched.
+
+---
+
+## System Requirements (manual install)
+
+Only needed if you're setting up without Docker — to develop against the code
+directly, for instance.
 
 - OS: Ubuntu 22.04+
 - RAM: 4GB minimum (8GB recommended)
@@ -43,7 +115,7 @@ combined with machine learning (ML) risk classification.
 
 ---
 
-## Installation (Fresh Setup)
+## Installation (Fresh Setup, without Docker)
 
 ### 1. Clone the repository
 

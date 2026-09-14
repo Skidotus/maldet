@@ -1,0 +1,13 @@
+# Shell scripts must keep LF endings. Git on Windows converts to CRLF by
+# default, which makes docker/entrypoint.sh fail inside the Linux container
+# with a confusing `bad interpreter: no such file or directory`.
+*.sh text eol=lf
+
+# Same reasoning — these are read by Linux tooling in the container.
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+*.sql text eol=lf
+
+# Binary: never touch line endings, never try to diff or merge.
+*.pkl binary
+*.sql.gz binary

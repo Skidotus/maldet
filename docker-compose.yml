@@ -1,0 +1,65 @@
+# MalDet — app + database, one command.
+#
+#   cp .env.example .env     # then paste in a GitHub token
+#   docker compose up
+#   → http://localhost:5000
+#
+# Values come from .env; the defaults below only cover the non-secret ones.
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-maldet-root}
+      MYSQL_DATABASE: ${DB_NAME:-fyp_scanner}
+      MYSQL_USER: ${DB_USER:-fypuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-maldet-dev}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Anything in this directory runs once, on an empty data directory
+      # only, in filename order. MySQL applies it against MYSQL_DATABASE,
+      # so neither file needs a CREATE DATABASE or USE statement.
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed_data.sql.gz:/docker-entrypoint-initdb.d/02-seed.sql.gz:ro
+    healthcheck:
+      # The app's entrypoint re-checks this properly; ping only proves the
+      # server is up, not that the schema and seed have finished importing.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # Optional. Without it Semgrep still runs, on community rules only.
+      SEMGREP_APP_TOKEN: ${SEMGREP_APP_TOKEN:-}
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-fyp_scanner}
+      DB_USER: ${DB_USER:-fypuser}
+      DB_PASSWORD: ${DB_PASSWORD:-maldet-dev}
+      # Bind every interface *inside* the container; the port publish below
+      # is what actually limits reachability. Debugger stays off.
+      MALDET_HOST: 0.0.0.0
+      MALDET_PORT: 5000
+      SKIP_FRESHCLAM: ${SKIP_FRESHCLAM:-0}
+    ports:
+      # 127.0.0.1 prefix is deliberate: reachable from this machine's
+      # browser, not from anything else on the network. Drop the prefix only
+      # if you actually intend to expose it.
+      - "127.0.0.1:${MALDET_PORT:-5000}:5000"
+    volumes:
+      # Signature database persists, so the ~110MB download happens once
+      # rather than on every container rebuild.
+      - clamav_db:/var/lib/clamav
+
+volumes:
+  mysql_data:
+  clamav_db:
