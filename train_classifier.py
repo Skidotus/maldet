@@ -2,10 +2,12 @@
 Trains a Random Forest to score each finding with P(real issue), instead of
 counting every finding equally in calculate_risk().
 
-There's no hand-labeled ground truth (no one has marked individual findings
-as real-issue-vs-noise), so this bootstraps weak labels from two signals
-that are already implicit in the data:
-  - the existing NOISE_RULES / IGNORE_PATHS heuristics in scanner.py
+There's no hand-labeled ground truth at training scale, so this bootstraps
+weak labels from two signals that are already implicit in the data. (A
+168-finding hand-reviewed set does exist — eval_sample.json, built by
+build_eval_sample.py — but it's a held-out *evaluation* set scored by
+evaluate_classifier.py, deliberately never trained on.) The two signals:
+  - the existing NOISE_RULES / is_ignored_path() heuristics in scanner.py
   - how many different repos a given (tool, issue_text) shows up in — a
     rule that fires across a huge fraction of unrelated repos is almost
     certainly boilerplate, not a specific finding about this repo
@@ -29,7 +31,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
-from scanner import NOISE_RULES, IGNORE_PATHS, normalize_severity, frequency_key
+from scanner import NOISE_RULES, is_ignored_path, normalize_severity, frequency_key
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
 
@@ -65,9 +67,10 @@ def build_features(df):
     df["issue_text"] = df["issue_text"].fillna("")
     df["code_snippet"] = df["code_snippet"].fillna("")
 
-    df["is_ignored_path"] = df["filename"].str.lower().apply(
-        lambda f: any(p in f for p in IGNORE_PATHS)
-    )
+    # scanner.is_ignored_path, not a second copy of the logic — the two used
+    # to be written out separately, which meant a substring bug in both
+    # copies trained the model to call Dockerfile findings noise.
+    df["is_ignored_path"] = df["filename"].apply(is_ignored_path)
     df["is_known_noise_text"] = df["issue_text"].isin(NOISE_RULES)
     df["snippet_length"] = df["code_snippet"].str.len()
     df["frequency_key"] = df.apply(
