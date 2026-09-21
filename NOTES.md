@@ -1,6 +1,6 @@
 # MalDet — Project Notes
 
-Snapshot as of 2026-09-14. Written for the FYP report / your own reference —
+Snapshot as of 2026-09-22. Written for the FYP report / your own reference —
 update as things change rather than treating this as a one-time record.
 
 ## Advantages (current state)
@@ -16,9 +16,11 @@ update as things change rather than treating this as a one-time record.
   parsing fixes below).
 - **The classifier now has a ground-truth-backed number, not just
   self-grading.** A 168-finding hand-reviewed set (`eval_sample.json`) gives
-  precision 0.52 / recall 0.53 / F1 0.53, against a 0.28 baseline for
+  precision 0.52 / recall 0.62 / F1 0.56, against a 0.28 baseline for
   treating every finding as real. Modest, but honest and defensible — and
-  measurably better than before the IGNORE_PATHS fix (0.49 / 0.38 / 0.43).
+  improving across two measured steps: 0.49/0.38/0.43 before the
+  IGNORE_PATHS fix, 0.52/0.53/0.53 after it, and the current figures after
+  20 known-malicious repos were added to the training corpus (2026-09-19).
 - **Complete, cohesive UI.** Dashboard, New Scan, Detail, History, and the
   scan-status page all exist and follow one considered design system
   (wax-seal risk badges, ledger layout) — not a default Bootstrap look.
@@ -189,16 +191,87 @@ Four commits, each verified against the live corpus rather than assumed:
   the two-axis scoring model, the real evaluation numbers, and the
   AI-assisted-labeling disclosure.
 
+## What's improved (2026-09-22 — malicious training data)
+
+- **The classifier has finally seen real malicious code.** `malware_repos.txt`
+  + `batch_scan.py` added 20 known-malicious / offensive-security repos
+  (LaZagne, pupy, byob, Empire, PowerSploit, Backstabbers-Knife-Collection,
+  PayloadsAllTheThings, …) to the corpus overnight on 2026-09-19. They scored
+  where you'd hope — pupy 1128, Empire 871, PayloadsAllTheThings 688, all
+  Critical — which is itself evidence the two-axis scoring separates
+  "malicious" from "merely vulnerable" correctly. The corpus is now 178 repos
+  and ~237.7K findings.
+- **Retraining on that corpus moved recall, which was the stated weak axis.**
+  Against the same untouched 168-finding holdout: recall 0.53 → 0.62 (29 of
+  47 real findings caught, up from 25), F1 0.53 → 0.56, precision unchanged
+  at 0.52. Per-tool, semgrep improved (67% → 73%) and bandit slipped
+  (69% → 64%). The gain is the point: before this the model had almost no
+  examples of what a genuine malicious finding looks like, since only 12 of
+  156 repos carried meaningful malicious patterns.
+- **Fixed: one oversized finding could destroy an entire scan's results.**
+  `byt3bl33d3r/CrackMapExec` failed its save with MySQL error 1406 ("Data too
+  long for column 'code_snippet'") after a 4-minute scan — one Bandit finding
+  on a single-line file in `cme/modules/impersonate.py` exceeded the 65,535
+  *byte* TEXT limit, and took all 240 of the repo's findings down with it.
+  `save_to_db()` now fits every value to its column first (`_fit_text` for
+  TEXT, byte-measured; `_fit_varchar` for VARCHAR, character-measured — the
+  two limits are counted differently and the tables are utf8mb4, so a
+  character-count check alone would still overflow). Exactly one snippet in
+  the whole corpus needed truncating. Offensive repos are full of minified and
+  generated source, so this is normal input here, not an edge case.
+- Worth knowing for the report: the failed save also left an **orphan
+  `repositories` row** (id 225, no findings, no risk score) that would have
+  shown on the dashboard as a clean repo. `save_to_db()` commits the
+  repository row before inserting findings, so a rollback doesn't remove it.
+  The successful rescan repaired the row in place via the existing upsert,
+  but the underlying ordering is unchanged — see below.
+
+- **Tested and rejected: giving the model the flagged code itself.** The
+  model sees `code_snippet` only as a character count, so two findings with
+  the same warning text are indistinguishable to it no matter what the code
+  does. A real pair from Empire, both scoring 0.3797:
+  `subprocess.call("su - ahmed -c 'echo {{payload}} | base64 --decode | sudo bash'")`
+  and `subprocess.check_output("which powershell")`. Added the snippet text
+  as a second TF-IDF feature (line numbers stripped, code-style token
+  pattern, `min_df=5` so per-repo identifiers can't be memorised) and
+  retrained. **It did not work**, and the reason matters more than the
+  result:
+  - Against the same 168-finding holdout: precision 0.52 → 0.50, recall
+    0.62 → 0.64, F1 unchanged at 0.56. One more real finding caught, three
+    more false alarms. A wash, on a 168-item sample — i.e. noise.
+  - The Empire pair afterwards: 0.362 vs 0.367. Still indistinguishable.
+  - Code tokens drew only 4.5% of total feature importance, and the ones it
+    did use were generic (`login`, `requires`, `assert`, `subprocess`) — not
+    `base64`, `sudo` or `bash`.
+  - **Diagnosis: the bottleneck is the labels, not the features.** The weak
+    labels are generated from repo-rarity and the noise-rule list, and
+    nothing in them encodes "base64 piped to sudo bash is dangerous". The
+    model cannot learn a distinction its answer key never makes, so richer
+    input about the code had nothing to attach to. Reverted; the patch is
+    kept for the report rather than the tree.
+  - **The implication for the next step**: the way to make this model reason
+    about danger is a better label source, not better features. The obvious
+    candidate now exists — 20 repos known to be malicious vs ~150 ordinary
+    ones — which is a far stronger signal than rarity and is currently used
+    only as extra training rows, not as labels.
+
 ## What needs improvement (near-term, actionable)
 
 - **Full rescan of all 155 repos** to recover the findings the IGNORE_PATHS
   bug discarded — particularly `Dockerfile`/`docker-compose.yml`. Hours of
   runtime, so an overnight job; `rescan_yara_dep.py` won't do it since the
   loss is in Bandit/Semgrep output.
+- **Make `save_to_db()` atomic.** It commits the `repositories` row before
+  inserting findings, so any failure during the findings loop leaves a repo
+  row with no findings and no risk score — which renders as a clean, Safe
+  repo rather than a failure. This actually happened (CrackMapExec, above).
+  Dropping the intermediate commit would fix it; the reason to think before
+  doing so is that the largest repo in the corpus has ~157K findings, and
+  that becomes one very large transaction.
 - **Automated tests.** Route smoke tests plus unit tests over
-  `is_ignored_path()`, `_parse_pep508_name_version()` and `normalize_severity()`
-  — the three places where a silent logic bug has already happened at least
-  once each.
+  `is_ignored_path()`, `_parse_pep508_name_version()`, `normalize_severity()`
+  and now `_fit_text()`/`_fit_varchar()` — the places where a silent logic bug
+  has already happened at least once each.
 - **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
   Python and Node are covered.
 - **Build the Ollama/llama3.2 plain-English summary.** Scope it to the top
@@ -225,12 +298,13 @@ Four commits, each verified against the live corpus rather than assumed:
   findings isn't feasible for one person — so the model can only ever be as
   good as those proxies allow. What has changed is the *evaluation*: the
   168-finding hand-reviewed holdout gives a real number (precision 0.52,
-  recall 0.53) instead of the model grading itself. Quote those figures, not
+  recall 0.62) instead of the model grading itself. Quote those figures, not
   `train_classifier.py`'s self-graded ones, and state that the labels were
   AI-assisted with author confirmation.
-- **Recall is the weak axis, and that's a design posture worth defending
-  explicitly.** At the 0.5 confidence threshold the classifier misses
-  roughly half the genuinely real findings in the evaluation set. It is
+- **Recall is still the weak axis, and that's a design posture worth
+  defending explicitly.** At the 0.5 confidence threshold the classifier
+  misses 18 of the 47 genuinely real findings in the evaluation set (it
+  missed 22 before the malicious repos were added). It is
   tuned to favour a quiet, trustworthy list over a thorough one. For a
   "should I install this?" pre-flight check that's arguable; for an audit
   tool it wouldn't be. Lowering the threshold trades precision back for
