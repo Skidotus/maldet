@@ -534,6 +534,42 @@ def calculate_category_risk(findings):
 
 #DB Functionality
 
+# A finding that overflows its column kills the *entire* save, not just its
+# own row: byt3bl33d3r/CrackMapExec lost a 4-minute scan and all ~20K of its
+# other findings to MySQL error 1406 on one oversized code_snippet. Offensive
+# and malicious repos are full of minified or generated source that puts a
+# whole file on one line, so this is normal input here, not an edge case.
+# Truncating the one value that doesn't fit is strictly better than
+# discarding the repo.
+#
+# The two helpers differ because MySQL measures the two column types
+# differently: TEXT caps at 65,535 *bytes*, while VARCHAR(n) caps at n
+# *characters*. These tables are utf8mb4, so a string that passes a
+# character-count check can still overflow a TEXT column once encoded.
+
+_TRUNCATED = "...[truncated]"
+
+
+def _fit_text(value, max_bytes=65535):
+    """Trim a value to fit a TEXT column, which is limited in bytes."""
+    text = "" if value is None else str(value)
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    budget = max_bytes - len(_TRUNCATED.encode("utf-8"))
+    # errors="ignore" drops the partial multi-byte character the byte-slice
+    # may have cut in half.
+    return encoded[:budget].decode("utf-8", "ignore") + _TRUNCATED
+
+
+def _fit_varchar(value, max_chars):
+    """Trim a value to fit a VARCHAR column, which is limited in characters."""
+    text = "" if value is None else str(value)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars - len(_TRUNCATED)] + _TRUNCATED
+
+
 def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk):
     db     = get_db()
     cursor = db.cursor()
@@ -576,9 +612,14 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
                     (repo_id, tool, severity, confidence, issue_text,
                      filename, line_number, code_snippet)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (repo_id, f["tool"], f["severity"], f.get("p_real"),
-                  f["issue_text"], f["filename"], f.get("line_number", 0),
-                  f.get("code_snippet", "")))
+            """, (repo_id,
+                  _fit_varchar(f["tool"], 50),
+                  _fit_varchar(f["severity"], 20),
+                  f.get("p_real"),
+                  _fit_text(f["issue_text"]),
+                  _fit_varchar(f["filename"], 500),
+                  f.get("line_number", 0),
+                  _fit_text(f.get("code_snippet", ""))))
 
         # Save risk score — high_count/medium_count/low_count/final_score/
         # risk_level stay as the blended "overall" figure (kept only for
