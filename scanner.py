@@ -384,6 +384,108 @@ def run_clamav(path):
     print(f"    ClamAV found {len(findings)} threats")
     return findings
 
+#GuardDog (Datadog) — supply-chain malware heuristics
+
+# GuardDog cannot share this project's virtualenv: it requires click >=8.4.1
+# while semgrep pins click ~=8.1.8, and installing it alongside silently
+# upgrades click out from under semgrep. It therefore lives in its own
+# environment and is invoked as an external command, exactly like yara,
+# clamscan and 7z already are. PATH is checked first so a system or Docker
+# install wins; the project-local venv is the developer fallback.
+GUARDDOG_TIMEOUT = 300
+_GUARDDOG_LOCAL = os.path.join(os.path.dirname(__file__), ".venv-guarddog", "bin", "guarddog")
+
+
+def _guarddog_bin():
+    found = shutil.which("guarddog")
+    if found:
+        return found
+    if os.path.exists(_GUARDDOG_LOCAL):
+        return _GUARDDOG_LOCAL
+    return None
+
+
+def _guarddog_severity(rule, location, risk_map):
+    """GuardDog separates what code *can* do from what it *is* doing, and only
+    treats the two together as a real risk — that correlation is the whole
+    reason to run it rather than more pattern rules. So a rule that the
+    correlation engine surfaced in `risks` carries the severity it assigned;
+    an uncorrelated `threat-` rule is medium; anything else is low."""
+    risk_severity = risk_map.get((rule, location))
+    if risk_severity:
+        return normalize_severity(risk_severity)
+    return "medium" if rule.startswith("threat-") else "low"
+
+
+def run_guarddog(path):
+    print("  Running GuardDog...")
+    findings = []
+    binary = _guarddog_bin()
+    if binary is None:
+        print("    GuardDog not installed, skipping")
+        return findings
+
+    # The ecosystem argument only changes which *metadata* rules apply, and
+    # metadata rules need a registry lookup we don't do for a cloned repo.
+    # The source-code rules are shared, so `pypi` here scans JavaScript
+    # exactly as `npm` would — verified against the same sample.
+    cmd = [binary, "pypi", "scan", path, "--output-format", "json"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=GUARDDOG_TIMEOUT)
+        # The kernel sandbox is on by default and aborts the scan where it
+        # isn't available (common in containers and CI). Retry unsandboxed
+        # rather than losing the detector entirely — we are reading files,
+        # not executing the package.
+        if not result.stdout.strip():
+            result = subprocess.run(cmd + ["--no-sandbox"], capture_output=True,
+                                    text=True, timeout=GUARDDOG_TIMEOUT)
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        print("    GuardDog: no parsable output, skipping")
+        return findings
+    except subprocess.TimeoutExpired:
+        print(f"    GuardDog timed out after {GUARDDOG_TIMEOUT}s, skipping")
+        return findings
+    except Exception as e:
+        print(f"    GuardDog error: {e}")
+        return findings
+
+    # (rule, location) -> severity, for the correlated risks
+    risk_map = {
+        (r.get("threat_rule"), r.get("threat_location")): r.get("severity")
+        for r in data.get("risks", []) or []
+    }
+    correlated_rules = {rule for rule, _ in risk_map}
+
+    for rule, entries in (data.get("results") or {}).items():
+        # A bare capability ("this code can open a socket") is not a finding —
+        # by GuardDog's own model it only means something paired with a threat
+        # indicator. Reporting them unfiltered would bury the real hits under
+        # thousands of low-severity rows, which is the exact problem the rest
+        # of this pipeline exists to solve.
+        if not entries or (not rule.startswith("threat-")
+                           and rule not in correlated_rules):
+            continue
+        for entry in entries:
+            location = entry.get("location", "") or ""
+            filename, _, line = location.rpartition(":")
+            if not filename:            # no line number in the location
+                filename, line = location, "0"
+            message = (entry.get("message") or "").strip()
+            findings.append({
+                "tool":         "guarddog",
+                "severity":     _guarddog_severity(rule, location, risk_map),
+                "issue_text":   f"{message} [{rule}]" if message
+                                else f"GuardDog rule: {rule}",
+                "filename":     "/" + filename.lstrip("/"),
+                "line_number":  int(line) if line.isdigit() else 0,
+                "code_snippet": (entry.get("code") or "").strip(),
+            })
+
+    print(f"    GuardDog found {len(findings)} issues")
+    return findings
+
 #False-positive classifier (train_classifier.py)
 
 MODEL_ARTIFACT_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
@@ -486,6 +588,7 @@ TOOL_CATEGORY = {
     "yara":        "malicious_pattern",
     "clamav":      "malicious_pattern",
     "dep_checker": "malicious_pattern",
+    "guarddog":    "malicious_pattern",
     "virustotal":  "malicious_pattern",  # legacy tool name from old scans
 }
 
@@ -687,6 +790,9 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
 
         report("Running ClamAV")
         findings += run_clamav(path)
+
+        report("Running GuardDog")
+        findings += run_guarddog(path)
 
         report("Checking dependencies")
         findings += check_dependencies(path)

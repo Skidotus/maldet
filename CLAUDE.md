@@ -24,6 +24,19 @@ python3 app.py                    # runs on http://localhost:5000, debug=True
 Requires system tools on PATH: `bandit`, `semgrep` (needs `semgrep login` once),
 `yara`, `clamscan`, `7z`, plus a running MySQL instance matching `config.py`.
 
+`guarddog` is deliberately **not** in `requirements.txt` — it requires
+click >=8.4.1 while semgrep pins click ~=8.1.8, so installing it into `venv/`
+silently upgrades click and breaks semgrep. It gets its own environment:
+
+```bash
+python3 -m venv .venv-guarddog && .venv-guarddog/bin/pip install guarddog
+```
+
+`run_guarddog()` looks for `guarddog` on PATH first (Docker installs it to
+/opt and symlinks it there), then falls back to `.venv-guarddog/bin/guarddog`.
+Like every other detector it skips silently when absent, so a missing binary
+looks like a clean scan — verify it runs rather than assuming.
+
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
@@ -44,7 +57,7 @@ synchronously inside the `/scan` request:
 4. Runs detectors in sequence, each returning a list of findings dicts with the
    shape `{tool, severity, issue_text, filename, line_number, code_snippet}`:
    `run_bandit`, `run_semgrep`, `run_yara` (rules in `rules.yar`), `run_clamav`,
-   `check_dependencies` (from `dep_checker.py`)
+   `run_guarddog`, `check_dependencies` (from `dep_checker.py`)
 5. `filter_noise()` — drops low-value Bandit rules and anything under
    test/docs/example/migration/locale paths; downgrades some high findings to medium
 6. `calculate_risk()` — weights high/medium(capped 30)/low(capped 20) into a score,

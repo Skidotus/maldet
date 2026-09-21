@@ -29,7 +29,7 @@
   {# ---------------------------------------------------------
      Two separate score axes, not one blended number: Bandit/Semgrep
      findings mean "this code has an exploitable weakness" (an attacker's
-     problem), YARA/ClamAV/dep_checker findings mean "this code looks like
+     problem), YARA/ClamAV/GuardDog/dep_checker findings mean "this code looks like
      it's trying to do something malicious" (the code author's intent) —
      different threat models, so scored and shown separately.
      --------------------------------------------------------- #}
@@ -53,7 +53,7 @@
     </div>
   </div>
 
-  <p class="text-muted small mb-2">Malicious Pattern — signs of intentionally malicious code (YARA, ClamAV, dep_checker)</p>
+  <p class="text-muted small mb-2">Malicious Pattern — signs of intentionally malicious code (YARA, ClamAV, GuardDog, dep_checker)</p>
   <div class="ledger-strip mb-4">
     <div class="ledger-cell ledger-cell--total">
       <div class="tally-label">Score</div>

@@ -10,7 +10,7 @@ combined with machine learning (ML) risk classification.
 
 ## Features
 
-- Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV)
+- Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV, GuardDog)
 - Supply chain attack detection (OSV + custom dependency checker)
 - ML risk classification (Random Forest)
 - Scan history and risk trend tracking
@@ -25,7 +25,7 @@ combined with machine learning (ML) risk classification.
 |-------|-----------|
 | Backend | Python 3.12, Flask |
 | Database | MySQL 8.0 |
-| Static Analysis | Bandit, Semgrep, YARA, ClamAV |
+| Static Analysis | Bandit, Semgrep, YARA, ClamAV, GuardDog |
 | Supply Chain | OSV Scanner, Custom dependency checker |
 | Machine Learning | scikit-learn (Random Forest) |
 | Frontend | HTML, CSS, JavaScript |
@@ -37,7 +37,7 @@ combined with machine learning (ML) risk classification.
 
 If you just want MalDet running, use this. It needs **Docker** and **git**,
 and nothing else — no Python, no virtualenv, no MySQL setup, no installing
-`yara`/`clamav`/`7z`, no `semgrep login`.
+`yara`/`clamav`/`7z`/`guarddog`, no `semgrep login`.
 
 ```bash
 git clone https://github.com/Skidotus/maldet.git
@@ -166,6 +166,22 @@ You should see `(venv)` at the start of your terminal line.
 pip install -r requirements.txt
 ```
 
+### 6a. Install GuardDog (separate virtualenv — do not skip the reason)
+
+GuardDog detects supply-chain malware: obfuscated payloads, install-time
+network calls, credential access, reverse shells. It needs its **own**
+virtualenv because it requires click >=8.4.1 while Semgrep pins click
+~=8.1.8 — putting both in `venv/` silently upgrades click and breaks Semgrep.
+
+```bash
+python3 -m venv .venv-guarddog
+.venv-guarddog/bin/pip install guarddog
+.venv-guarddog/bin/guarddog --version
+```
+
+Nothing else to configure — the scanner finds it automatically. If you skip
+this step scans still run, just without GuardDog's findings.
+
 ### 6. Login to Semgrep (required before first scan)
 
 ```bash
@@ -228,6 +244,7 @@ bandit --version
 semgrep --version
 yara --version
 clamscan --version
+.venv-guarddog/bin/guarddog --version
 mysql --version
 mysql -u fypuser -p fyp_scanner -e "SHOW TABLES;"
 ```

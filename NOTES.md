@@ -255,6 +255,38 @@ Four commits, each verified against the live corpus rather than assumed:
     ones — which is a far stronger signal than rarity and is currently used
     only as extra training rows, not as labels.
 
+- **Added GuardDog as a sixth detector** (`run_guarddog()`), Datadog's
+  supply-chain malware scanner. It is the first detector in the pipeline that
+  reasons about *malicious intent* rather than insecure coding: reverse
+  shells, obfuscated payloads (base64/chr/steganography/PyArmor), install-time
+  network calls in `setup.py`, browser-credential and process-memory access,
+  cryptomining, DLL injection, npm preinstall hooks. Confirmed working on real
+  malicious source — 13 findings on LaZagne, including Firefox credential
+  reads and memory scraping, which is precisely what that tool does.
+  - **Only `threat-` rules and correlated risks are reported.** GuardDog
+    separates what code *can* do (`capability-*`) from what it *is* doing
+    (`threat-*`), and only treats the pair together as a real risk. Reporting
+    bare capabilities would add thousands of low-severity rows — the exact
+    noise problem the rest of this pipeline exists to solve — so they're
+    dropped unless the correlation engine surfaced them in `risks`.
+  - **It cannot go in `requirements.txt`.** GuardDog requires click >=8.4.1;
+    semgrep pins click ~=8.1.8. Installing it into `venv/` upgrades click and
+    breaks semgrep with no warning. It lives in `.venv-guarddog/` (gitignored)
+    and is invoked as an external command like `yara`/`clamscan`/`7z`;
+    `run_guarddog()` prefers a `guarddog` on PATH so the Docker install (own
+    venv under /opt, symlinked) wins. Docker verifies it immediately after
+    install, because like every detector here it skips silently when missing —
+    a failed install would otherwise look like a clean scan.
+- **Corrected a wrong assumption in the malicious corpus.**
+  `dasfreak/Backstabbers-Knife-Collection` was added on 2026-09-19 as the
+  supply-chain centrepiece — "real malicious npm and PyPI packages". It isn't.
+  The git repo is 2.8MB of HTML, CSS, fonts and two `.js` files: the dataset's
+  landing page. The samples are distributed separately. It scores 4 (Low) and
+  GuardDog finds nothing, correctly. One of the 20 "known-malicious" training
+  repos therefore contributes no malicious examples, and the note in
+  `malware_repos.txt` now says so. Worth stating in the report as a corpus
+  limitation found by inspection rather than assumed away.
+
 ## What needs improvement (near-term, actionable)
 
 - **Full rescan of all 155 repos** to recover the findings the IGNORE_PATHS
