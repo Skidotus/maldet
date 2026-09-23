@@ -17,6 +17,18 @@ rescan:
      932acd6. That loss is in Bandit/Semgrep output, so rescan_yara_dep.py
      can't repair it — only a full rescan can.
 
+  3. Repairing Semgrep findings that have no code snippet. Scans run before
+     `semgrep login` stored the literal string "requires login" where the
+     matched line should be: 12,238 findings across 105 repos, all from the
+     2026-07-29 and 2026-08-22 runs. Every scan since 2026-09-15 is clean.
+     The snippet was never captured, so only a rescan recovers it. The
+     affected repos are listed in rescan_requires_login.txt:
+
+         python3 batch_scan.py rescan_requires_login.txt --resume
+
+     Budget ~2-4 hours for those 105 (mean 78s per repo in batch_scan.log),
+     and run it when nothing else needs the memory — Semgrep peaks near 2GB.
+
 Usage:
     python3 batch_scan.py repos.txt              # scan the repos listed
     python3 batch_scan.py repos.txt --new-only   # skip any already in the DB

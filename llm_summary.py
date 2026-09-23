@@ -33,7 +33,9 @@ Setup (no API key, runs locally):
 Configuration, all optional:
     MALDET_OLLAMA_HOST     default http://localhost:11434
     MALDET_OLLAMA_MODEL    default qwen3.5:2b
-    MALDET_OLLAMA_TIMEOUT  default 300 (seconds)
+    MALDET_OLLAMA_TIMEOUT  default 600 (seconds)
+    MALDET_OLLAMA_KEEP_ALIVE  how long the model stays in RAM after a
+                              scan; default 60s
     MALDET_OLLAMA_DISABLE  set to 1 to skip the LLM entirely
 """
 
@@ -45,7 +47,7 @@ import requests
 
 OLLAMA_HOST    = os.environ.get("MALDET_OLLAMA_HOST", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL   = os.environ.get("MALDET_OLLAMA_MODEL", "qwen3.5:2b")
-OLLAMA_TIMEOUT = int(os.environ.get("MALDET_OLLAMA_TIMEOUT", "300"))
+OLLAMA_TIMEOUT = int(os.environ.get("MALDET_OLLAMA_TIMEOUT", "600"))
 
 # How many (tool, issue_text) groups reach the prompt. Fifteen keeps the
 # prompt near ~600 tokens, which matters because this is expected to run on
@@ -57,7 +59,19 @@ MAX_GROUPS = 15
 SEVERITY_WEIGHT = {"high": 10, "medium": 3, "low": 1}
 
 # Long enough for a useful paragraph, short enough to bound CPU generation.
-MAX_TOKENS = 320
+# 200 rather than 320: with think=False the whole budget goes to the answer,
+# and qwen used it to write 6-9 sentences where the prompt asks for 3-5.
+# Fewer tokens also means less generation time, which means less time holding
+# ~2.9GB of model in RAM.
+MAX_TOKENS = 200
+
+# How long Ollama keeps the model loaded after a request. Its default is 5
+# minutes, which on a memory-tight machine means ~2.9GB sits resident long
+# after the scan that needed it -- this is what has been triggering
+# systemd-oomd on the dev VM. 60s is short enough to free memory promptly,
+# long enough that a batch of scans still reuses one load rather than paying
+# a cold start (measured: 20-35s warm, up to 290s cold) for every repo.
+KEEP_ALIVE = os.environ.get("MALDET_OLLAMA_KEEP_ALIVE", "60s")
 
 
 def is_disabled():
@@ -209,6 +223,7 @@ def summarize(repo_label, findings, vuln, malware):
                 # Non-reasoning models accept and ignore this, so it is safe
                 # to send unconditionally.
                 "think": False,
+                "keep_alive": KEEP_ALIVE,
                 "options": {
                     # Low temperature: this is a factual restatement of a
                     # finished scan, not creative writing.

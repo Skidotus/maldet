@@ -114,9 +114,12 @@ and granite4.2:3b by comparing all three on real findings: llama3.2 invented a
 score scale that does not exist, and qwen was the fastest of the three with
 nothing fabricated. Requests send `"think": False` — qwen and granite are
 reasoning models, and without it qwen returns an empty response while granite
-writes its private reasoning into the summary. Tune via `MALDET_OLLAMA_MODEL` /
-`MALDET_OLLAMA_HOST` / `MALDET_OLLAMA_TIMEOUT`, or set
-`MALDET_OLLAMA_DISABLE=1` to skip it.
+writes its private reasoning into the summary. The request also sets
+`keep_alive` (default 60s, `MALDET_OLLAMA_KEEP_ALIVE`) so the ~2.4GB model is
+released shortly after a scan instead of sitting in RAM for Ollama's default
+five minutes — on a memory-tight machine that idle residency is what triggers
+the OOM killer. Tune via `MALDET_OLLAMA_MODEL` / `MALDET_OLLAMA_HOST` /
+`MALDET_OLLAMA_TIMEOUT`, or set `MALDET_OLLAMA_DISABLE=1` to skip it.
 
 **Adding a new detector**: write a `run_x(path)` function in `scanner.py` returning
 findings in the standard dict shape, call it inside `scan_repo()` and append its
