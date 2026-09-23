@@ -9,20 +9,26 @@ repositories for malware, vulnerable dependencies, and supply chain attacks, com
 several detection engines with an ML risk classifier. It's a Final Year Project (FYP)
 for a Diploma in Information Security.
 
-**Current state**: core scan pipeline (`scanner.py`, `dep_checker.py`) and Flask routes
-(`app.py`) are implemented, but `templates/`, `static/`, and `model/` (the ML classifier)
-referenced by the README and by `app.py`'s `render_template()` calls do not exist yet.
-`schema.sql` is empty. Don't assume these exist — check before referencing them.
+**Current state**: the scan pipeline (`scanner.py`, `dep_checker.py`), the queue
+(`job_queue.py`, `worker.py`), Flask routes (`app.py`), `templates/`, `static/`,
+`model/` (the Random Forest classifier) and `schema.sql` all exist and are wired
+together. `llm_summary.py` is written and verified but not yet committed.
 
 ## Setup & running
 
 ```bash
 source venv/bin/activate
-python3 app.py                    # runs on http://localhost:5000, debug=True
+python3 app.py                    # web UI on http://localhost:5000
+python3 worker.py                 # scan worker — run one, in a second terminal
 ```
 
-Requires system tools on PATH: `bandit`, `semgrep` (needs `semgrep login` once),
-`yara`, `clamscan`, `7z`, plus a running MySQL instance matching `config.py`.
+Requires system tools on PATH: `bandit`, `semgrep` (needs `semgrep login` once —
+without it semgrep withholds matched code and stores the literal string
+`requires login` as the snippet), `yara`, `clamscan`, `7z`, plus a running MySQL
+instance matching `config.py`.
+
+Semgrep is capped by `MALDET_SEMGREP_MAX_MEMORY` (default 1500MB) because it is
+the pipeline's largest consumer.
 
 `guarddog` is deliberately **not** in `requirements.txt` — it requires
 click >=8.4.1 while semgrep pins click ~=8.1.8, so installing it into `venv/`
@@ -44,11 +50,28 @@ No test suite or lint config exists in this repo currently.
 
 ## Architecture
 
-**Request flow**: `app.py` (Flask routes) → `scanner.py:scan_repo()` (orchestrator) →
-writes results to MySQL → `app.py` reads back for `index`/`detail`/`history` views.
+**Request flow**: `app.py` (Flask routes) → `job_queue.enqueue()` writes a row to
+`scan_jobs` → `worker.py` (separate process) claims it → `scanner.py:scan_repo()`
+(orchestrator) → writes results to MySQL → `app.py` reads back for
+`index`/`detail`/`history` views.
+
+**Running it needs two processes**: `python3 app.py` serves the site, `python3
+worker.py` runs the scans. The web app never scans — it only enqueues. Start
+both, or submitted scans sit in the queue forever.
+
+**`job_queue.py` + `worker.py`** — the scan queue, backed by the `scan_jobs`
+table. Exactly **one** worker consumes it, and `claim_next()` refuses to claim
+while another job is running. That single-consumer rule is a memory constraint,
+not a style choice: semgrep peaks near 2GB (measured) and clamscan near 1GB, so
+two concurrent scans do not fit the 4GB deployment target. Don't scale the
+worker above 1 without raising the RAM. `recover_stale()` runs at worker
+startup and fails jobs orphaned by a crash, which would otherwise block the
+queue forever. Visitors are tracked by a `maldet_job` cookie so each sees their
+own scan; previously *any* visitor was redirected into whichever scan was
+running.
 
 **`scanner.py:scan_repo(repo, archive_password)`** is the pipeline entry point, run
-synchronously inside the `/scan` request:
+by `worker.py` (not inside the web request):
 1. `get_repo_info()` — GitHub API metadata (uses `GITHUB_TOKEN`)
 2. `clone_repo()` — shallow clone into `/tmp/maldet_scan_temp/<owner>_<repo>`
 3. `extract_archives()` — extracts `.zip`/`.7z`/`.rar` with 7z, trying a password
@@ -81,7 +104,6 @@ the rule-based `app.py:build_findings_summary()`. It explains, it never
 scores — the prompt hands it the already-decided risk levels and forbids
 re-rating them. Everything returns `None` rather than raising, so a missing
 or slow Ollama falls back to the rule-based text instead of failing a scan.
-
 The model is `qwen3.5:2b` (`ollama pull qwen3.5:2b`), chosen over llama3.2:3b
 and granite4.2:3b by comparing all three on real findings: llama3.2 invented a
 score scale that does not exist, and qwen was the fastest of the three with
@@ -95,10 +117,12 @@ writes its private reasoning into the summary. Tune via `MALDET_OLLAMA_MODEL` /
 findings in the standard dict shape, call it inside `scan_repo()` and append its
 output to `findings` before `filter_noise()` runs.
 
-**Database**: MySQL, `pymysql` with `DictCursor`. Expected tables (per queries in
-`app.py`/`scanner.py`, `schema.sql` is currently empty so this is inferred):
-`repositories`, `risk_scores`, `scan_results`, `scan_history`. Update `schema.sql`
-whenever the schema changes — it's the source of truth for a fresh DB setup.
+**Database**: MySQL, `pymysql` with `DictCursor`. Tables (defined in `schema.sql`):
+`repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`.
+Update `schema.sql` whenever the schema changes — it's the source of truth for a
+fresh DB setup. `scan_jobs.queued_at` is `DATETIME(6)`: whole-second precision
+made jobs submitted in the same second compare as simultaneous, so everyone was
+told they were first in the queue.
 
 ## Branching
 

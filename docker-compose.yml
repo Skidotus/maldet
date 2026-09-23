@@ -4,6 +4,14 @@
 #   docker compose up
 #   → http://localhost:5000
 #
+# Three services: db, app (web) and worker (runs the scans, one at a time).
+# On a 4GB VPS add swap before first use -- semgrep peaks near 2GB and the
+# kernel has nowhere to go without it:
+#
+#   sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile
+#   sudo mkswap /swapfile && sudo swapon /swapfile
+#   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+#
 # Values come from .env; the defaults below only cover the non-secret ones.
 
 services:
@@ -59,6 +67,42 @@ services:
       # Signature database persists, so the ~110MB download happens once
       # rather than on every container rebuild.
       - clamav_db:/var/lib/clamav
+    # The web process only reads the database and enqueues jobs now, so it
+    # needs a fraction of what the worker does.
+    mem_limit: ${MALDET_APP_MEM:-512m}
+
+  # The only process that runs scans. Kept separate from `app` so the web
+  # side can be restarted, or given more workers, without touching a scan in
+  # progress -- and so that scans serialise no matter how many visitors
+  # submit at once. Do not scale this above 1: the whole memory argument for
+  # a small VPS rests on one semgrep (~2GB measured) running at a time.
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["python3", "worker.py"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SEMGREP_APP_TOKEN: ${SEMGREP_APP_TOKEN:-}
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-fyp_scanner}
+      DB_USER: ${DB_USER:-fypuser}
+      DB_PASSWORD: ${DB_PASSWORD:-maldet-dev}
+      SKIP_FRESHCLAM: ${SKIP_FRESHCLAM:-0}
+      # Semgrep's own ceiling. 1500MB leaves room for clamscan (~1GB peak)
+      # and MySQL on a 4GB host.
+      MALDET_SEMGREP_MAX_MEMORY: ${MALDET_SEMGREP_MAX_MEMORY:-1500}
+      # The LLM summary needs ~3GB for the model and does not fit on a 4GB
+      # box alongside semgrep. Off by default; the rule-based summary in
+      # app.py renders instead and nothing fails. Set to 0 on a larger host.
+      MALDET_OLLAMA_DISABLE: ${MALDET_OLLAMA_DISABLE:-1}
+    volumes:
+      - clamav_db:/var/lib/clamav
+    # Scans are the memory-hungry half of this project; the cap makes the
+    # container the thing that dies under pressure rather than MySQL.
+    mem_limit: ${MALDET_WORKER_MEM:-2600m}
 
 volumes:
   mysql_data:

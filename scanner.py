@@ -284,12 +284,24 @@ def filter_noise(findings):
 #Semgrep functionality
 
 
+# Ceiling for semgrep's own memory use, in MB. Tunable because the right
+# value is hardware-dependent: generous on a dev box, essential on the 4GB
+# VPS this deploys to.
+SEMGREP_MAX_MEMORY_MB = int(os.environ.get("MALDET_SEMGREP_MAX_MEMORY", "1500"))
+
+
 def run_semgrep(path):
     print("  Running Semgrep (this may take a few minutes)...")
     findings = []
     try:
         result = subprocess.run(
-            ["semgrep", "--config=auto", path, "--json", "--quiet"],
+            ["semgrep", "--config=auto", path, "--json", "--quiet",
+             # Measured at 1,976MB peak on a trivial directory -- the largest
+             # single consumer in the pipeline, against 4GB on the deployment
+             # VPS. Semgrep skips files it cannot fit in this budget rather
+             # than failing, so the cost of the cap is a few unscanned large
+             # files instead of the OOM killer taking out MySQL mid-scan.
+             "--max-memory", str(SEMGREP_MAX_MEMORY_MB)],
             capture_output=True, text=True, timeout=300
         )
         

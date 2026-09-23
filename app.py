@@ -1,12 +1,11 @@
 import json
 import os
-import threading
-import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from scanner import scan_repo
+import job_queue
 
 app = Flask(__name__)
 
@@ -51,51 +50,66 @@ def get_db():
         cursorclass=pymysql.cursors.DictCursor
     )
 
-# In-memory scan job tracking — single-user local tool, so a process-lifetime
-# dict is enough; no need for a DB table or a task queue. Scans run in a
-# background thread so /scan can redirect immediately to a status page that
-# survives refreshes, instead of holding the request open for the whole
-# pipeline (see git history for why: refreshing mid-scan used to strand the
-# user with no way to tell whether it was still running).
-SCANS      = {}
-SCANS_LOCK = threading.Lock()
+# Scan jobs live in the `scan_jobs` table (see job_queue.py), not in memory.
+# This used to be a process-lifetime dict, which suited a single-user local
+# tool but breaks once the app is deployed: a restart stranded every running
+# scan, a second web worker could not see the first one's jobs, and a second
+# visitor was redirected into someone else's scan instead of being queued.
+#
+# Scans are executed by worker.py, a separate single process. The web side
+# now only enqueues, so no amount of traffic can start a second semgrep --
+# which is the constraint that matters on a small VPS, where one semgrep
+# peaks near 2GB against 4GB of RAM.
 
-def _find_running_job_id():
-    with SCANS_LOCK:
-        for job_id, job in SCANS.items():
-            if job["status"] == "running":
-                return job_id
+
+def _visitor_job_id():
+    """The job this browser last submitted, if it is still queued or running.
+
+    Replaces the old global check, which sent *every* visitor to whichever
+    scan happened to be running -- fine when there was only ever one user,
+    wrong once the tool is public: a second visitor would be shown a
+    stranger's scan instead of getting their own queued. A cookie keeps the
+    "survives refresh" behaviour that check existed for, without leaking one
+    visitor's scan into another's browser.
+    """
+    job_id = request.cookies.get("maldet_job")
+    if not job_id:
+        return None
+    job = job_queue.get_job(job_id)
+    if job and job["status"] in ("queued", "running"):
+        return job_id
     return None
 
+
+def _redirect_to_job(job_id):
+    """Send the visitor to their status page and remember the job."""
+    resp = redirect(url_for('scan_status', job_id=job_id))
+    # No sensitive content: an opaque job id, so the visitor can find their
+    # own scan again after a refresh. Lasts a day; the job outlives it in
+    # the table either way.
+    resp.set_cookie("maldet_job", job_id, max_age=86400, samesite="Lax")
+    return resp
+
+
 def _start_scan_job(repo, archive_password):
-    job_id = uuid.uuid4().hex
-    with SCANS_LOCK:
-        SCANS[job_id] = {
-            "repo":       repo,
-            "status":     "running",
-            "stage":      "Queued",
-            "started_at": datetime.now(),
-            "repo_id":    None,
-            "error":      None,
-        }
+    """Queue a scan. Returns the job id; the worker picks it up."""
+    return job_queue.enqueue(repo, archive_password)
 
-    def run():
-        def on_progress(stage):
-            with SCANS_LOCK:
-                SCANS[job_id]["stage"] = stage
-        try:
-            result = scan_repo(repo, archive_password, on_progress=on_progress)
-            with SCANS_LOCK:
-                SCANS[job_id]["status"]  = "done"
-                SCANS[job_id]["stage"]   = "Done"
-                SCANS[job_id]["repo_id"] = result["repo_id"]
-        except Exception as e:
-            with SCANS_LOCK:
-                SCANS[job_id]["status"] = "error"
-                SCANS[job_id]["error"]  = str(e)
 
-    threading.Thread(target=run, daemon=True).start()
-    return job_id
+def _job_payload(job, job_id):
+    """Shape a scan_jobs row the way the status page and its poller expect."""
+    return {
+        "status":     job["status"],
+        "stage":      job["stage"],
+        "repo":       job["repo"],
+        "repo_id":    job["repo_id"],
+        "error":      job["error"],
+        # Queued jobs have not started, so the page shows when it was
+        # submitted instead of leaving the visitor with a blank timestamp.
+        "started_at": (job["started_at"] or job["queued_at"]),
+        "position":   job_queue.queue_position(job_id),
+    }
+
 
 #dashbaord
 
@@ -156,12 +170,13 @@ def index():
 
 @app.route('/scan', methods=['GET', 'POST'])
 def scan():
-    # If a scan is already running (this tab, another tab, or a previous
-    # session that navigated away), always land back on its status page
-    # instead of a blank form — this is what makes the scan survive refresh.
-    running_job_id = _find_running_job_id()
-    if running_job_id:
-        return redirect(url_for('scan_status', job_id=running_job_id))
+    # If this visitor already has a scan queued or running, land back on its
+    # status page instead of a blank form — this is what makes the scan
+    # survive refresh. Other visitors' scans are none of their business; they
+    # queue behind them rather than being shown someone else's progress.
+    own_job_id = _visitor_job_id()
+    if own_job_id:
+        return _redirect_to_job(own_job_id)
 
     if request.method == 'GET':
         return render_template('scan.html')
@@ -199,32 +214,28 @@ def scan():
             error="Invalid GitHub URL. Example: https://github.com/owner/repo")
 
     job_id = _start_scan_job(repo, archive_password)
-    return redirect(url_for('scan_status', job_id=job_id))
+    return _redirect_to_job(job_id)
 
 
 # Scan status page — polled by JS, safe to refresh/reopen at any time
 
 @app.route('/scan/<job_id>')
 def scan_status(job_id):
-    job = SCANS.get(job_id)
+    job = job_queue.get_job(job_id)
     if not job:
         return redirect(url_for('scan'))
-    return render_template('scan_status.html', job=job, job_id=job_id)
+    return render_template('scan_status.html',
+                           job=_job_payload(job, job_id), job_id=job_id)
 
 
 @app.route('/api/scan-status/<job_id>')
 def api_scan_status(job_id):
-    job = SCANS.get(job_id)
+    job = job_queue.get_job(job_id)
     if not job:
         return jsonify({"error": "Not found"}), 404
-    return jsonify({
-        "status":     job["status"],
-        "stage":      job["stage"],
-        "repo":       job["repo"],
-        "repo_id":    job["repo_id"],
-        "error":      job["error"],
-        "started_at": job["started_at"].isoformat(),
-    })
+    payload = _job_payload(job, job_id)
+    payload["started_at"] = payload["started_at"].isoformat()
+    return jsonify(payload)
 
 # Repo Detail page
 
@@ -410,12 +421,12 @@ def rescan(repo_id):
         db.close()
 
     # Run scan again
-    running_job_id = _find_running_job_id()
-    if running_job_id:
-        return redirect(url_for('scan_status', job_id=running_job_id))
+    own_job_id = _visitor_job_id()
+    if own_job_id:
+        return _redirect_to_job(own_job_id)
 
     job_id = _start_scan_job(repo_slug, "infected")
-    return redirect(url_for('scan_status', job_id=job_id))
+    return _redirect_to_job(job_id)
 
 
 #API scan status
@@ -457,8 +468,8 @@ if __name__ == '__main__':
     # scanning this repo with MalDet itself would not have caught it.
     #
     # use_reloader stays off even in debug: it restarts the process on every
-    # .py save, and scan job state lives in the in-memory SCANS dict, so a
-    # reload silently kills any in-progress scan and forgets its status.
+    # .py save. Job state now survives that (it is in scan_jobs), but a
+    # reload still drops in-flight requests for no benefit here.
     debug = os.environ.get("MALDET_DEBUG", "").lower() in ("1", "true", "yes")
     app.run(
         host=os.environ.get("MALDET_HOST", "127.0.0.1"),

@@ -88,3 +88,32 @@ CREATE TABLE IF NOT EXISTS scan_results (
     FOREIGN KEY (repo_id) REFERENCES repositories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Scan job queue. Replaces the in-memory SCANS dict in app.py, which was
+-- fine for a single-user local tool but loses every job on restart and is
+-- invisible across processes -- so with more than one web worker, or a web
+-- process separate from the scanner, nobody can see anyone else's job.
+--
+-- Deliberately a table rather than Redis/Celery: MySQL is already running,
+-- and on a 4GB VPS a broker is memory this project cannot spare. Exactly
+-- one worker process consumes this queue, which is what keeps peak memory
+-- to a single semgrep (~2GB) instead of one per concurrent visitor.
+CREATE TABLE IF NOT EXISTS scan_jobs (
+    id               VARCHAR(32)  NOT NULL PRIMARY KEY,   -- uuid4().hex
+    repo             VARCHAR(255) NOT NULL,               -- "owner/name"
+    archive_password VARCHAR(255) NULL,
+    status           ENUM('queued','running','done','error')
+                                  NOT NULL DEFAULT 'queued',
+    stage            VARCHAR(100) NOT NULL DEFAULT 'Queued',
+    repo_id          INT          NULL,
+    error            TEXT         NULL,
+    -- DATETIME(6), not DATETIME: queue position is computed by comparing
+    -- queued_at, and whole-second precision makes every job submitted in the
+    -- same second look simultaneous -- so three visitors arriving together
+    -- were all told they were first.
+    queued_at        DATETIME(6)  NOT NULL,
+    started_at       DATETIME(6)  NULL,
+    finished_at      DATETIME(6)  NULL,
+    -- the worker's "oldest waiting job" lookup, and the position count
+    INDEX idx_status_queued (status, queued_at),
+    FOREIGN KEY (repo_id) REFERENCES repositories(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
