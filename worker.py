@@ -43,22 +43,30 @@ def _handle_stop(signum, frame):
     print("\n[worker] stop requested; finishing current scan then exiting", flush=True)
 
 
-def main():
-    signal.signal(signal.SIGINT, _handle_stop)
-    signal.signal(signal.SIGTERM, _handle_stop)
+def run_forever(recover=True, label="worker"):
+    """Consume the queue until stopped. Safe to call from a thread.
 
-    recovered = job_queue.recover_stale()
-    if recovered:
-        print(f"[worker] marked {recovered} interrupted job(s) as failed", flush=True)
+    Split out of main() so app.py can run it inline for local development
+    (one command instead of two terminals). Signal handling stays in main()
+    because signal.signal() only works on the main thread.
 
-    print(f"[worker] ready, polling every {POLL_SECONDS}s", flush=True)
+    `recover` is False for the inline worker: recover_stale() fails every job
+    marked running, which is correct at the start of the one true worker but
+    would kill a scan in progress if a second worker started beside it.
+    """
+    if recover:
+        recovered = job_queue.recover_stale()
+        if recovered:
+            print(f"[{label}] marked {recovered} interrupted job(s) as failed", flush=True)
+
+    print(f"[{label}] ready, polling every {POLL_SECONDS}s", flush=True)
 
     while not _stop:
         try:
             job = job_queue.claim_next()
         except Exception as e:
             # A database blip should not kill the worker; back off and retry.
-            print(f"[worker] queue unavailable ({type(e).__name__}: {e}), retrying", flush=True)
+            print(f"[{label}] queue unavailable ({type(e).__name__}: {e}), retrying", flush=True)
             time.sleep(POLL_SECONDS * 5)
             continue
 
@@ -66,7 +74,7 @@ def main():
             time.sleep(POLL_SECONDS)
             continue
 
-        print(f"[worker] scanning {job['repo']} (job {job['id'][:8]})", flush=True)
+        print(f"[{label}] scanning {job['repo']} (job {job['id'][:8]})", flush=True)
         started = time.time()
         try:
             result = scan_repo(
@@ -75,14 +83,20 @@ def main():
                 on_progress=lambda stage, _id=job["id"]: job_queue.set_stage(_id, stage),
             )
             job_queue.finish(job["id"], result["repo_id"])
-            print(f"[worker] done {job['repo']} in {time.time()-started:.0f}s", flush=True)
+            print(f"[{label}] done {job['repo']} in {time.time()-started:.0f}s", flush=True)
         except Exception as e:
             # Every failure must land in the row, or the visitor's status page
             # spins forever on a job nobody is working on.
             job_queue.fail(job["id"], e)
-            print(f"[worker] FAILED {job['repo']}: {type(e).__name__}: {e}", flush=True)
+            print(f"[{label}] FAILED {job['repo']}: {type(e).__name__}: {e}", flush=True)
 
-    print("[worker] stopped", flush=True)
+    print(f"[{label}] stopped", flush=True)
+
+
+def main():
+    signal.signal(signal.SIGINT, _handle_stop)
+    signal.signal(signal.SIGTERM, _handle_stop)
+    run_forever(recover=True, label="worker")
 
 
 if __name__ == "__main__":

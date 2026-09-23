@@ -18,8 +18,7 @@ together. `llm_summary.py` is written and verified but not yet committed.
 
 ```bash
 source venv/bin/activate
-python3 app.py                    # web UI on http://localhost:5000
-python3 worker.py                 # scan worker — run one, in a second terminal
+python3 app.py                    # web UI + inline scan worker — this is enough
 ```
 
 Requires system tools on PATH: `bandit`, `semgrep` (needs `semgrep login` once —
@@ -55,9 +54,15 @@ No test suite or lint config exists in this repo currently.
 (orchestrator) → writes results to MySQL → `app.py` reads back for
 `index`/`detail`/`history` views.
 
-**Running it needs two processes**: `python3 app.py` serves the site, `python3
-worker.py` runs the scans. The web app never scans — it only enqueues. Start
-both, or submitted scans sit in the queue forever.
+**Local dev is one process**: `python3 app.py` starts the web UI *and* an
+inline scan worker, so scans actually run. `MALDET_INLINE_WORKER=0` disables
+it if you are also running `worker.py` by hand.
+
+**Deployed is two processes**: gunicorn serves the site (`docker-compose.yml`
+runs `gunicorn --workers 2 app:app`) and `worker.py` runs the scans. The
+inline worker never starts under gunicorn, because gunicorn imports the
+module rather than executing `__main__` — which is deliberate: two gunicorn
+workers each scanning would mean two semgreps (~2GB each) in a 4GB host.
 
 **`job_queue.py` + `worker.py`** — the scan queue, backed by the `scan_jobs`
 table. Exactly **one** worker consumes it, and `claim_next()` refuses to claim

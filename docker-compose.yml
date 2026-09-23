@@ -42,6 +42,20 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # gunicorn, not `python3 app.py`: Flask's built-in server prints "do not
+    # use this in a production deployment" for good reason -- it is not built
+    # to face the internet. Two workers is plenty here because the web process
+    # no longer scans; since the queue change it only reads the database and
+    # writes a job row, measuring ~48MB per copy.
+    #
+    # The scan worker deliberately stays a separate service. Were it inside
+    # this process, two gunicorn workers would mean two concurrent scans, and
+    # two semgreps (~2GB each) do not fit in a 4GB host.
+    command: ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:5000",
+              # A scan is gone from this process now, but a slow GitHub API
+              # call or a large detail page still beats the 30s default.
+              "--timeout", "120",
+              "--access-logfile", "-", "app:app"]
     depends_on:
       db:
         condition: service_healthy

@@ -470,6 +470,32 @@ if __name__ == '__main__':
     # use_reloader stays off even in debug: it restarts the process on every
     # .py save. Job state now survives that (it is in scan_jobs), but a
     # reload still drops in-flight requests for no benefit here.
+    # Run the scan worker inline, so `python3 app.py` alone is a working
+    # install. Without this the site comes up, accepts scans, and then never
+    # runs them -- a silent failure that only makes sense once you know a
+    # second process exists.
+    #
+    # This block is reached only by `python3 app.py`. Under gunicorn the
+    # module is imported rather than executed, so the inline worker never
+    # starts there -- which is the point: two gunicorn workers would
+    # otherwise mean two concurrent scans, and two semgreps (~2GB each) do
+    # not fit the 4GB deployment target. Production keeps worker.py as its
+    # own single process.
+    #
+    # Set MALDET_INLINE_WORKER=0 to turn it off, which is what you want if
+    # you are also running worker.py by hand -- two workers cannot scan at
+    # once (claim_next holds a row lock) but the second is just a wasted
+    # poller. recover=False for the same reason: failing every 'running' job
+    # is right when starting the one true worker, and wrong if another
+    # worker is mid-scan.
+    if os.environ.get("MALDET_INLINE_WORKER", "1").lower() not in ("0", "false", "no"):
+        import threading
+        import worker
+        threading.Thread(
+            target=lambda: worker.run_forever(recover=False, label="inline worker"),
+            daemon=True,
+        ).start()
+
     debug = os.environ.get("MALDET_DEBUG", "").lower() in ("1", "true", "yes")
     app.run(
         host=os.environ.get("MALDET_HOST", "127.0.0.1"),
