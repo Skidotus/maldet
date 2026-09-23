@@ -4,7 +4,7 @@ A web-based static analysis tool that scans public GitHub repositories for malwa
 vulnerable dependencies, and supply chain attacks using multiple detection engines
 combined with machine learning (ML) risk classification.
 
-> Final Year Project (FYP) — Diploma in Information Security
+> Final Year Project (FYP) — Diploma in Cybersecurity Technology
 
 ---
 
@@ -38,6 +38,55 @@ combined with machine learning (ML) risk classification.
 If you just want MalDet running, use this. It needs **Docker** and **git**,
 and nothing else — no Python, no virtualenv, no MySQL setup, no installing
 `yara`/`clamav`/`7z`, no `semgrep login`.
+
+### Installing Docker
+
+Already have it? Run `docker --version` — if that prints a version number,
+skip to the next section.
+
+**Ubuntu / Debian**
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2 docker-buildx
+sudo usermod -aG docker $USER
+```
+
+Then **log out and log back in.** This is the step everyone skips, and
+without it the very next `docker` command fails with `permission denied
+while trying to connect to the Docker daemon socket` even though Docker is
+installed correctly — group membership only applies to new login sessions.
+In a hurry, `newgrp docker` grants it to the current terminal only.
+
+All three packages are needed: `docker.io` is the engine itself,
+`docker-compose-v2` provides the `docker compose` command, and
+`docker-buildx` is the build backend that `docker compose up` uses to build
+the image.
+
+**Windows**
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+It requires **WSL2**, which the installer normally sets up for you; on some
+machines it also needs virtualisation enabled in the BIOS. Run the commands
+below from PowerShell or a WSL terminal.
+
+**macOS**
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) —
+the Apple Silicon build for M1/M2/M3 Macs, the Intel build otherwise.
+
+Docker Desktop bundles Compose and Buildx already, so Windows and macOS need
+nothing beyond it.
+
+**Check it works**
+
+```bash
+docker run --rm hello-world
+```
+
+A short "Hello from Docker!" message means you're ready.
+
+### Getting MalDet running
 
 ```bash
 git clone https://github.com/Skidotus/maldet.git
