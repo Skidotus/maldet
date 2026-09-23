@@ -319,12 +319,124 @@ Four commits, each verified against the live corpus rather than assumed:
     and isn't on this machine. The fallback path, grouping, ranking and
     prompt construction are tested; the generation path is not.
 
+## What's improved (2026-09-23 — deployment, queue, model selection)
+
+The deployment target was fixed this week: a 4GB / 100GB Ubuntu 24 VPS,
+already approved and paid for by the management team, so the hardware is a
+constraint to design against rather than a variable. Most of what follows
+follows from that number.
+
+- **Measured what the pipeline actually costs, instead of guessing.** Peak
+  resident memory, taken with `/usr/bin/time -v` on a trivial directory —
+  real repositories are worse:
+
+  | component            | peak RAM  |
+  |----------------------|-----------|
+  | semgrep              | 1,976 MB  |
+  | clamscan             |   992 MB  |
+  | qwen3.5:2b (loaded)  | ~2,400 MB |
+  | MySQL                |   131 MB  |
+  | Flask app            |    48 MB  |
+  | worker (idle)        |    39 MB  |
+
+  The shape of that table is the finding: **semgrep costs 40x the web
+  application it serves**. Effort spent optimising the web tier would have
+  been wasted. Note too that clamscan takes ~39s to load 3.6M signatures
+  *before scanning a single file*, every invocation.
+
+- **Scans are queued, and exactly one runs at a time.** Job state moved from
+  an in-memory dict to a `scan_jobs` table, consumed by a separate
+  `worker.py` process. The old design was honest about being single-user;
+  deployed, it lost every running scan on restart, was invisible across web
+  workers, and redirected a second visitor into whichever scan was already
+  running — so two people scanning meant one of them watched a stranger's
+  progress bar. The single-consumer rule (`claim_next()` refuses while
+  another job runs, under a row lock) is a memory constraint before it is a
+  correctness one: 1.1GB baseline + one semgrep is 3.1GB of 4GB, and two
+  semgreps do not fit at all. Verified with three simultaneous submissions
+  through the web form: positions 0/1/2, drained strictly in order,
+  available memory never below 3.3GB.
+
+- **`queued_at` is `DATETIME(6)` because whole seconds were wrong.** Three
+  jobs submitted in the same second compared as simultaneous, so every
+  visitor was told they were first. Caught by the concurrency test, not by
+  reading the code — worth remembering that the bug was in a timestamp
+  column, not in the locking.
+
+- **gunicorn replaces the Flask development server**, which the container
+  had been running in production. Two workers, ~121MB for master and both.
+  The worker stays a separate service precisely because it isn't one: were
+  the scanner inside the web process, `--workers 2` would mean two
+  concurrent semgreps. For local development `python3 app.py` now starts an
+  inline worker thread, since gunicorn imports the module rather than
+  executing `__main__` — one command locally, two processes deployed, no
+  configuration switch.
+
+- **The LLM explainer was chosen by comparison, not preference.** All three
+  candidate models were run against real findings from the corpus
+  (`samratashok/nishang`, malicious; `AlessandroZ/LaZagne`, insecure but
+  not):
+
+  | model         | warm speed | verified problem                      |
+  |---------------|------------|---------------------------------------|
+  | qwen3.5:2b    | 22s / 32s  | markdown despite being told not to    |
+  | granite4.2:3b | 29s / 60s  | none                                  |
+  | llama3.2:3b   | 36s / 43s  | invented "426.0 **out of 1000**"      |
+
+  llama3.2 fabricating a maximum that does not exist is disqualifying for a
+  tool whose output is its scores, and it was dropped. Worth recording
+  honestly: an earlier reading of this comparison accused qwen of inventing
+  `xml.dom.minidom`, and checking the prompt showed the string was in the
+  input all along — the model was right and the reviewer was wrong. Two
+  repositories judged by eye is enough to pick a default and **not** enough
+  to claim a methodology; a real evaluation would need ~20 repos with the
+  checks scripted.
+
+- **Both reasoning models break the naive integration, in opposite ways.**
+  qwen and granite think before answering. Left alone, qwen spends its
+  entire token budget thinking and returns an *empty* response; granite
+  writes its reasoning inline, which would have been stored in
+  `risk_scores.llm_summary` and rendered to the user as though it were the
+  summary. `"think": False` fixes both and is ignored by non-reasoning
+  models. The second failure is the dangerous one — it does not error, it
+  produces confident-looking prose that is not an answer.
+
+- **The explainer is disabled on the VPS, and that is the right call.**
+  740MB baseline + 2.4GB model leaves nothing for a 2GB semgrep. Because
+  every path in `llm_summary.py` returns `None` rather than raising, the
+  rule-based summary renders instead and no scan fails —
+  `MALDET_OLLAMA_DISABLE=1` is the default in `docker-compose.yml`. The
+  feature being optional is what makes a 4GB deploy possible at all.
+
+- **Found: 12,238 findings have no code snippet, and it is not a bug in this
+  code.** Semgrep withholds the matched line for registry rules when not
+  authenticated, storing the literal string `requires login` instead. All of
+  them are from the 2026-07-29 and 2026-08-22 runs, before `semgrep login`;
+  every scan since 2026-09-15 is clean. 105 repos are affected, listed in
+  `rescan_requires_login.txt`. The snippet was never captured, so only a
+  rescan recovers it. It does not affect the LLM summary, which is built
+  from rule messages and file paths rather than snippets.
+
+- **Dev-environment finding worth writing down: `systemd-oomd`, not a VS Code
+  bug.** The editor was killed twice in one day mid-session. The kernel OOM
+  killer never fired, so `dmesg` showed nothing; `systemd-oomd` did, killing
+  the whole `snap.code.code-*.scope` (29 and 31 processes) once the user
+  slice passed 50% memory pressure for 20 seconds. Both times the trigger
+  was Ollama loading a model on a 7.9GB VM. This is why the summariser now
+  sets `keep_alive` — it was the model sitting idle for Ollama's default
+  five minutes after a scan, not generation itself, that crossed the
+  threshold.
+
 ## What needs improvement (near-term, actionable)
 
-- **Full rescan of all 155 repos** to recover the findings the IGNORE_PATHS
-  bug discarded — particularly `Dockerfile`/`docker-compose.yml`. Hours of
-  runtime, so an overnight job; `rescan_yara_dep.py` won't do it since the
-  loss is in Bandit/Semgrep output.
+- **Full rescan of the corpus (now 178 repos)**, which two separate problems
+  now require: the findings the IGNORE_PATHS bug discarded (particularly
+  `Dockerfile`/`docker-compose.yml`), and the 12,238 Semgrep findings whose
+  code snippet reads `requires login`. `rescan_yara_dep.py` won't do either,
+  since both losses are in Bandit/Semgrep output. The 105 repos affected by
+  the snippet problem are listed in `rescan_requires_login.txt`; at a mean
+  78s per repo that run alone is 2-4 hours, so it stays an overnight job —
+  and one to run when nothing else needs the memory.
 - **Make `save_to_db()` atomic.** It commits the `repositories` row before
   inserting findings, so any failure during the findings loop leaves a repo
   row with no findings and no risk score — which renders as a clean, Safe
@@ -338,19 +450,25 @@ Four commits, each verified against the live corpus rather than assumed:
   has already happened at least once each.
 - **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
   Python and Node are covered.
-- **Verify the Ollama summary against a real model**, then judge the output
-  quality — the code path is built and the fallback is tested, but no
-  generated summary has been read yet. Check specifically that it doesn't
-  contradict the risk levels or invent file names; tighten the prompt if it
-  does, and consider `llama3.2:1b` if 3b is too slow to demo.
-- **Decide whether Ollama belongs in docker-compose.** Currently it's a
-  host-side optional install; a compose service would need its own container
-  and a ~2GB model volume, which roughly doubles the image footprint for a
-  feature that degrades gracefully when absent.
-- **Dockerise for the team** — `bandit`/`semgrep`/`yara`/`clamscan`/`7z`
-  plus MySQL is a painful per-person install, and a compose file would make
-  it one command. Needs env-var config (since `config.py` is gitignored),
-  a story for `semgrep login`, and ClamAV's ~300MB signature DB.
+- **Evaluate the summariser properly, or stop describing it as evaluated.**
+  The model was picked by reading output for two repositories, which is
+  enough to choose a default and not enough for the report to claim a
+  method. A defensible version: ~20 repos spanning the risk levels, with the
+  checks scripted rather than eyeballed — does the summary contain strings
+  absent from the prompt, does it contradict the stated risk level, does it
+  obey the format. The infrastructure to do this already exists, since
+  summaries can be generated from stored findings without rescanning.
+- **Resolved 2026-09-23: Ollama stays out of docker-compose.** A model
+  container plus a ~2GB volume does not fit the 4GB VPS alongside a 2GB
+  semgrep, so `MALDET_OLLAMA_DISABLE=1` is the compose default and the
+  rule-based summary renders there. Kept here as a decision rather than
+  deleted, because "why is the AI missing in the deployed demo" is a
+  question the report has to answer.
+- **Done (ba2beef, extended 2026-09-23): Dockerised.** `docker compose up`
+  brings up MySQL, the web app under gunicorn, and the scan worker. Config
+  is env-var driven, `SEMGREP_APP_TOKEN` is passed through, and the ClamAV
+  signature DB lives in a named volume so it downloads once. What remains is
+  running it on the actual VPS, which nothing has yet.
 - **Independently confirm a slice of the evaluation labels**, or have a
   groupmate review the ambiguous ones, so the precision/recall figures rest
   on something stronger than AI-suggested labels the author agreed with
