@@ -74,6 +74,23 @@ above but returns findings in the same shape, merged into the same list:
   ratio ≥ 0.85 against a hardcoded `KNOWN_PACKAGES` list), unpinned versions, and
   loose (`>=`/`^`) version constraints
 
+**LLM summary** (`llm_summary.py`): after scoring, `scan_repo()` asks a local
+Ollama model for a plain-English paragraph about the top ~15 finding groups
+and stores it in `risk_scores.llm_summary`; the detail page prefers it over
+the rule-based `app.py:build_findings_summary()`. It explains, it never
+scores — the prompt hands it the already-decided risk levels and forbids
+re-rating them. Everything returns `None` rather than raising, so a missing
+or slow Ollama falls back to the rule-based text instead of failing a scan.
+
+The model is `qwen3.5:2b` (`ollama pull qwen3.5:2b`), chosen over llama3.2:3b
+and granite4.2:3b by comparing all three on real findings: llama3.2 invented a
+score scale that does not exist, and qwen was the fastest of the three with
+nothing fabricated. Requests send `"think": False` — qwen and granite are
+reasoning models, and without it qwen returns an empty response while granite
+writes its private reasoning into the summary. Tune via `MALDET_OLLAMA_MODEL` /
+`MALDET_OLLAMA_HOST` / `MALDET_OLLAMA_TIMEOUT`, or set
+`MALDET_OLLAMA_DISABLE=1` to skip it.
+
 **Adding a new detector**: write a `run_x(path)` function in `scanner.py` returning
 findings in the standard dict shape, call it inside `scan_repo()` and append its
 output to `findings` before `filter_noise()` runs.

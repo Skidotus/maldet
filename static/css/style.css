@@ -528,6 +528,20 @@ button.tool-section__header {
   color: var(--parchment);
 }
 
+/* The machine-written summary carries a left rule so it reads as a quoted
+   voice rather than as the app's own chrome — it is generated prose, and
+   should look different from the measured numbers around it. */
+.findings-summary--llm {
+  border-left: 3px solid var(--accent);
+}
+
+.llm-attribution {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  border-top: 1px solid var(--hairline);
+  padding-top: 0.5rem;
+}
+
 #hideNoiseToggle[aria-pressed="true"] {
   background-color: var(--ink-elevated-2);
   border-color: var(--accent);

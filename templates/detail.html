@@ -85,7 +85,21 @@
      --------------------------------------------------------- #}
   <h2 class="h5 mb-3">Findings</h2>
 
-  {% if findings_summary %}
+  {# The LLM summary and the rule-based one say the same thing at different
+     lengths, so showing both would just be repetition. The LLM version wins
+     when it exists; it's absent for repos scanned before the feature and
+     whenever Ollama wasn't running. Labelled as machine-written because a
+     fluent paragraph about security findings should say where it came
+     from. #}
+  {% if llm_summary %}
+    <div class="findings-summary findings-summary--llm mb-3">
+      <p class="mb-2">{{ llm_summary }}</p>
+      <p class="llm-attribution mb-0">
+        Written by a local language model from the findings below. The risk
+        scores come from the classifier, not from this summary.
+      </p>
+    </div>
+  {% elif findings_summary %}
     <p class="findings-summary mb-3">{{ findings_summary }}</p>
   {% endif %}
 

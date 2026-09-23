@@ -330,7 +330,16 @@ def detail(repo_id):
             top_finding = findings[0] if findings else None,
         )
 
+        # The LLM summary is written once at scan time and stored, because
+        # CPU-only generation takes tens of seconds and this page is
+        # refreshed freely. It is absent for every repo scanned before the
+        # column existed, and whenever Ollama wasn't running, so the
+        # rule-based summary above stays the fallback rather than being
+        # replaced. Template shows one or the other, never both.
+        llm_summary_text = (risk or {}).get("llm_summary")
+
         return render_template('detail.html',
+            llm_summary   = llm_summary_text,
             repo          = repo,
             risk          = risk,
             findings      = findings,

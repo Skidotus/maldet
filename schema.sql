@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS risk_scores (
     malware_low     INT NULL,
     malware_score   FLOAT NULL,
     malware_level   VARCHAR(20) NULL,
+    -- Plain-English summary written by a local LLM (llm_summary.py) at scan
+    -- time, so the cost is paid once per scan rather than on every page view
+    -- — CPU-only generation takes tens of seconds. NULL whenever Ollama was
+    -- unavailable, disabled, or the repo predates this column; app.py then
+    -- falls back to the rule-based build_findings_summary().
+    llm_summary     TEXT NULL,
     FOREIGN KEY (repo_id) REFERENCES repositories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -81,3 +87,4 @@ CREATE TABLE IF NOT EXISTS scan_results (
     code_snippet  TEXT,
     FOREIGN KEY (repo_id) REFERENCES repositories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

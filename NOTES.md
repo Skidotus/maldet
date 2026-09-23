@@ -287,6 +287,38 @@ Four commits, each verified against the live corpus rather than assumed:
   `malware_repos.txt` now says so. Worth stating in the report as a corpus
   limitation found by inspection rather than assumed away.
 
+- **Built the plain-English summary on Ollama** (`llm_summary.py`), the item
+  that had been sitting in this list since 2026-09-14. This is the piece that
+  actually answers "can a model read the tools' output?" — and it can,
+  because every detector already normalises to one shape, so summarising six
+  engines is just summarising one uniform list.
+  - **It explains, it never scores.** The Random Forest decides what's real
+    and `calculate_risk()` decides how bad it is, both before the LLM sees
+    anything; the prompt is handed the finished risk levels and explicitly
+    forbidden from re-rating them. This is the boundary to defend in the
+    report: the scoring component is measured (0.52/0.62 against a
+    hand-reviewed holdout), the explainer is not, and swapping which one does
+    the deciding would throw that away. A fluent model will happily
+    contradict a measured number if the prompt leaves it room to.
+  - **Top ~15 finding *groups*, not all findings.** Findings are collapsed by
+    (tool, issue_text) and ranked by severity weight x classifier confidence
+    — the same weights `calculate_risk()` uses, so "top" means the same thing
+    the score next to it means. Grouping also tells the model "this fired 43
+    times" instead of making it count 43 near-identical lines.
+  - **Generated once at scan time**, stored in `risk_scores.llm_summary`
+    (new column, in `schema.sql` and applied to the live DB). Generating on
+    page view would cost tens of seconds per refresh — this is CPU-only on
+    the dev machine, which has no GPU and 3.7GB free.
+  - **Optional infrastructure.** Every path returns None rather than raising:
+    not installed, not running, timed out, empty or unparsable response. The
+    rule-based `build_findings_summary()` stays as the fallback and the
+    template shows one or the other, never both. Verified: with Ollama
+    absent a full scan completes normally and the detail page renders the
+    rule-based text.
+  - **Not yet verified against a live model** — Ollama needs a sudo install
+    and isn't on this machine. The fallback path, grouping, ranking and
+    prompt construction are tested; the generation path is not.
+
 ## What needs improvement (near-term, actionable)
 
 - **Full rescan of all 155 repos** to recover the findings the IGNORE_PATHS
@@ -306,10 +338,15 @@ Four commits, each verified against the live corpus rather than assumed:
   has already happened at least once each.
 - **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
   Python and Node are covered.
-- **Build the Ollama/llama3.2 plain-English summary.** Scope it to the top
-  ~20 findings per scan, not all of them — per-finding LLM inference across
-  the corpus is hours-to-days versus seconds for the Random Forest, so the
-  Random Forest stays the scorer and the LLM only explains.
+- **Verify the Ollama summary against a real model**, then judge the output
+  quality — the code path is built and the fallback is tested, but no
+  generated summary has been read yet. Check specifically that it doesn't
+  contradict the risk levels or invent file names; tighten the prompt if it
+  does, and consider `llama3.2:1b` if 3b is too slow to demo.
+- **Decide whether Ollama belongs in docker-compose.** Currently it's a
+  host-side optional install; a compose service would need its own container
+  and a ~2GB model volume, which roughly doubles the image footprint for a
+  feature that degrades gracefully when absent.
 - **Dockerise for the team** — `bandit`/`semgrep`/`yara`/`clamscan`/`7z`
   plus MySQL is a painful per-person install, and a compose file would make
   it one command. Needs env-var config (since `config.py` is gitignored),

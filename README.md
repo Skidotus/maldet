@@ -13,6 +13,7 @@ combined with machine learning (ML) risk classification.
 - Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV, GuardDog)
 - Supply chain attack detection (OSV + custom dependency checker)
 - ML risk classification (Random Forest)
+- Plain-English findings summary written by a local LLM (Ollama, optional)
 - Scan history and risk trend tracking
 - Web dashboard with charts
 - Chrome extension support
@@ -181,6 +182,24 @@ python3 -m venv .venv-guarddog
 
 Nothing else to configure — the scanner finds it automatically. If you skip
 this step scans still run, just without GuardDog's findings.
+
+### 6b. Install Ollama (optional — plain-English summaries)
+
+Writes a short plain-English paragraph explaining each scan's findings. It
+runs locally, needs no API key or account, and works offline.
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2:3b
+```
+
+**Skip this if you're short on RAM.** Generation is CPU-only without a GPU
+and takes tens of seconds per scan; `llama3.2:1b` is roughly 3x faster and
+noticeably less articulate. Without Ollama, scans run exactly as before and
+the detail page shows the rule-based summary instead — nothing breaks.
+
+Set `MALDET_OLLAMA_DISABLE=1` to turn it off without uninstalling, or
+`MALDET_OLLAMA_MODEL` to use a different model.
 
 ### 6. Login to Semgrep (required before first scan)
 
