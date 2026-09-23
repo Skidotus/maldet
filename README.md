@@ -239,13 +239,19 @@ runs locally, needs no API key or account, and works offline.
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3.2:3b
+ollama pull qwen3.5:2b
 ```
 
-**Skip this if you're short on RAM.** Generation is CPU-only without a GPU
-and takes tens of seconds per scan; `llama3.2:1b` is roughly 3x faster and
-noticeably less articulate. Without Ollama, scans run exactly as before and
-the detail page shows the rule-based summary instead — nothing breaks.
+Pull exactly this model, or set `MALDET_OLLAMA_MODEL` to whatever you did
+pull — the scanner looks for `qwen3.5:2b` and silently falls back to the
+rule-based summary if it is missing, so a wrong model looks like the feature
+doing nothing.
+
+**Skip this if you're short on RAM.** The model needs roughly 3GB resident
+and generation is CPU-only without a GPU, taking 20-60 seconds per scan. On
+a 4GB machine it does not fit alongside Semgrep (which peaks near 2GB) — set
+`MALDET_OLLAMA_DISABLE=1` there instead. Without Ollama, scans run exactly
+as before and the detail page shows the rule-based summary — nothing breaks.
 
 Set `MALDET_OLLAMA_DISABLE=1` to turn it off without uninstalling, or
 `MALDET_OLLAMA_MODEL` to use a different model.
