@@ -12,7 +12,8 @@ for a Diploma in Information Security.
 **Current state**: the scan pipeline (`scanner.py`, `dep_checker.py`), the queue
 (`job_queue.py`, `worker.py`), Flask routes (`app.py`), `templates/`, `static/`,
 `model/` (the Random Forest classifier) and `schema.sql` all exist and are wired
-together. `llm_summary.py` is written and verified but not yet committed.
+together, including `llm_summary.py`. Everything is committed and pushed to
+the `haikal` branch; no PR into `dev` has been opened yet.
 
 ## Setup & running
 
