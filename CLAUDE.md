@@ -13,7 +13,7 @@ for a Diploma in Information Security.
 (`job_queue.py`, `worker.py`), Flask routes (`app.py`), `templates/`, `static/`,
 `model/` (the Random Forest classifier) and `schema.sql` all exist and are wired
 together, including `llm_summary.py`. Everything is committed and pushed to
-the `haikal` branch; no PR into `dev` has been opened yet.
+the `haikal` branch, which merges into `main` by pull request.
 
 ## Setup & running
 
@@ -135,5 +135,11 @@ told they were first in the queue.
 
 ## Branching
 
-`main` = stable, `dev` = development, `feature/xxx` = one feature per branch, PR'd
-in via GitHub.
+`main` = stable. `haikal` is the working branch and is merged into `main` by
+pull request on GitHub (as PRs #4, #5 and #6 did). Short-lived
+`feature/xxx` branches are also PR'd straight into `main`.
+
+There is no `dev` branch. One existed until early August 2026 and was
+retired; the three-tier `main`/`dev`/`feature` flow this file used to
+describe has not matched the repository since. Don't recreate it without a
+reason — on a solo project the middle tier only adds a merge step.
