@@ -97,7 +97,17 @@ by `worker.py` (not inside the web request):
 
 **`dep_checker.py:check_dependencies(repo_path)`** — separate from the scanner tools
 above but returns findings in the same shape, merged into the same list:
-- `run_pip_audit()` — CVE lookups against `requirements.txt` via `pip-audit`
+- `run_pip_audit()` — CVE lookups via `pip-audit`, against `requirements.txt`
+  directly plus the *exactly-pinned* entries parse_dependencies() finds in
+  `poetry.lock`, `pyproject.toml` and `Pipfile` (written to a temp
+  requirements file). Ranges like `^2.28` are skipped on purpose: a CVE
+  verdict needs one version, and picking one for the repo would report
+  vulnerabilities it may never install. Runs with `--no-deps --disable-pip`
+  so pip-audit never resolves or builds anything from an untrusted repo —
+  its `project_path` mode invokes the project's own build backend, which is
+  arbitrary code execution. Findings are deduped on (advisory id, package,
+  version), since OSV returns one advisory from several sources with
+  differently worded descriptions.
 - `check_suspicious_patterns()` — parses `requirements.txt` and `package.json`,
   flags direct URL/`git+` installs, typosquatted package names (`SequenceMatcher`
   ratio ≥ 0.85 against a hardcoded `KNOWN_PACKAGES` list), unpinned versions, and

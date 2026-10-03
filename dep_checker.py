@@ -3,6 +3,7 @@ import re
 import ast
 import json
 import subprocess
+import tempfile
 import tomllib
 from difflib import SequenceMatcher
 
@@ -244,47 +245,149 @@ def parse_dependencies(repo_path):
 
 #CVE Checker
 
+# Manifests worth a CVE lookup, beyond requirements.txt. Order matters only
+# for which filename a finding is attributed to when the same pin appears in
+# more than one file: a lock file is the most precise statement of what will
+# actually be installed, so it wins.
+CVE_MANIFESTS = ("poetry.lock", "pyproject.toml", "Pipfile")
+
+# A version we can actually look up: one exact release, no operators. CVE
+# matching is version-specific, so a range like "^2.28" or ">=2.0" cannot be
+# resolved to a verdict without picking a version on the repo's behalf --
+# which would mean reporting a CVE for a version the project may never
+# install. Those are left to check_suspicious_patterns()' loose/unpinned
+# checks instead, which is the honest answer for a range.
+_EXACT_VERSION_RE = re.compile(r"^[0-9][0-9A-Za-z.\-+!_]*$")
+
+
+def _exact_pins_from_manifests(repo_path):
+    """{(name, version): manifest_filename} for exactly-pinned Python deps.
+
+    Reuses parse_dependencies() rather than re-reading the TOML, so the
+    pyproject/Poetry/Pipfile/lock quirks it already handles (table-style
+    versions, PEP 621 vs [tool.poetry], compound constraints) stay in one
+    place and cannot drift between the CVE lookup and the pattern checks.
+    """
+    pins = {}
+    for dep in parse_dependencies(repo_path):
+        filename = dep.get("filename")
+        # requirements.txt is audited directly by pip-audit below, and
+        # package.json is npm -- pip-audit is Python-only.
+        if filename not in CVE_MANIFESTS:
+            continue
+        name    = (dep.get("name") or "").strip()
+        version = (dep.get("version") or "").strip()
+        if not name or not _EXACT_VERSION_RE.match(version):
+            continue
+        key = (name, version)
+        # Lock file wins over a manifest stating the same pin.
+        if key not in pins or filename == "poetry.lock":
+            pins[key] = filename
+    return pins
+
+
+def _parse_pip_audit_json(stdout, filename_for):
+    """Turn pip-audit's JSON into findings, attributing each to its manifest.
+
+    filename_for((name, version)) -> the file to blame, so a vulnerability
+    found via poetry.lock points at poetry.lock rather than at the temporary
+    file we fed pip-audit.
+    """
+    findings = []
+    for dep in json.loads(stdout).get("dependencies", []):
+        name    = dep.get("name", "")
+        version = dep.get("version", "")
+        for vuln in dep.get("vulns", []):
+            findings.append({
+                "tool":         "dep_checker",
+                "severity":     "high",
+                "issue_text":   f"CVE found: {vuln['id']} in {name}=={version} — {vuln.get('description', '')[:100]}",
+                "filename":     filename_for((name, version)),
+                "line_number":  0,
+                "code_snippet": f"{name}=={version}",
+                # Dedupe on the advisory itself, not on issue_text: OSV
+                # returns the same id from several sources with differently
+                # worded descriptions, so keying on the text lets one
+                # advisory through two or three times for one dependency.
+                "_vuln_key":    (vuln["id"], name, version),
+            })
+    return findings
+
+
+def _run_pip_audit_on(req_path, filename_for, label):
+    """One pip-audit run against a requirements-format file."""
+    try:
+        result = subprocess.run(
+            ["pip-audit", "-r", req_path, "--format", "json",
+             # Never resolve or install anything: the repo under scan may be
+             # hostile, and pip-audit's project-path mode would invoke the
+             # project's own build backend, which is arbitrary code execution
+             # from untrusted source. Auditing a flat requirements file keeps
+             # this a pure lookup.
+             "--no-deps", "--disable-pip", "--progress-spinner", "off"],
+            capture_output=True, text=True, timeout=120
+        )
+        return _parse_pip_audit_json(result.stdout, filename_for)
+    except json.JSONDecodeError:
+        print(f"    pip-audit ({label}): no usable output")
+    except subprocess.TimeoutExpired:
+        print(f"    pip-audit ({label}): timed out")
+    except Exception as e:
+        print(f"    pip-audit ({label}) error: {e}")
+    return []
+
+
 def run_pip_audit(repo_path):
     """
-    Runs pip-audit against requirements.txt in the repo.
-    Returns findings for any packages with known CVEs.
+    Looks up known CVEs for this repo's Python dependencies.
+
+    Reads requirements.txt directly, and additionally pyproject.toml,
+    Pipfile and poetry.lock via the exact pins parse_dependencies() finds in
+    them. A lock file is the most valuable of these: every entry is already
+    resolved to one version, which is exactly what a CVE lookup needs.
     """
     print("  Running pip-audit...")
     findings = []
 
     req_file = os.path.join(repo_path, "requirements.txt")
-    if not os.path.exists(req_file):
-        print("    pip-audit: no requirements.txt found, skipping")
+    if os.path.exists(req_file):
+        findings += _run_pip_audit_on(
+            req_file, lambda _kv: "requirements.txt", "requirements.txt")
+
+    # Everything else: synthesise a pinned requirements file from the exact
+    # versions already parsed out of the other manifests.
+    pins = _exact_pins_from_manifests(repo_path)
+    if pins:
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix="maldet_pins_", suffix=".txt")
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                for name, version in sorted(pins):
+                    f.write(f"{name}=={version}\n")
+            manifests = sorted(set(pins.values()))
+            findings += _run_pip_audit_on(
+                tmp_path, lambda kv: pins.get(kv, manifests[0]),
+                "+".join(manifests))
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    elif not os.path.exists(req_file):
+        print("    pip-audit: no Python manifest with exact versions, skipping")
         return findings
 
-    try:
-        result = subprocess.run(
-            ["pip-audit", "-r", req_file, "--format", "json", "--progress-spinner", "off"],
-            capture_output=True, text=True, timeout=120
-        )
+    # The same package can be pinned in two manifests, and pip-audit would
+    # then report the same advisory twice for one actual dependency.
+    seen, deduped = set(), []
+    for f in findings:
+        key = f.pop("_vuln_key")
+        if key not in seen:
+            seen.add(key)
+            deduped.append(f)
 
-        data = json.loads(result.stdout)
+    print(f"    pip-audit found {len(deduped)} vulnerable dependencies")
+    return deduped
 
-        for dep in data.get("dependencies", []):
-            for vuln in dep.get("vulns", []):
-                findings.append({
-                    "tool":         "dep_checker",
-                    "severity":     "high",
-                    "issue_text":   f"CVE found: {vuln['id']} in {dep['name']}=={dep['version']} — {vuln.get('description', '')[:100]}",
-                    "filename":     "requirements.txt",
-                    "line_number":  0,
-                    "code_snippet": f"{dep['name']}=={dep['version']}"
-                })
-
-    except json.JSONDecodeError:
-        print("    pip-audit: no output")
-    except subprocess.TimeoutExpired:
-        print("    pip-audit: timed out")
-    except Exception as e:
-        print(f"    pip-audit error: {e}")
-
-    print(f"    pip-audit found {len(findings)} vulnerable dependencies")
-    return findings
 
 #Check suspicious dependency patterns
 
