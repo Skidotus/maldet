@@ -54,6 +54,15 @@ OLLAMA_TIMEOUT = int(os.environ.get("MALDET_OLLAMA_TIMEOUT", "600"))
 # CPU — the dev machine has no GPU, where generation is seconds per sentence.
 MAX_GROUPS = 15
 
+# Reserved slots per risk axis, so one axis cannot crowd out the other. The
+# malware share is deliberately close to half despite malicious-pattern
+# findings being ~2% of all findings by volume: this is a malware scanner, and
+# "ClamAV found a trojan" is more decision-relevant to a visitor than a
+# fifteenth insecure-hash warning. Both are capped rather than fixed, and
+# _select_groups() hands unused slots back to the other axis.
+MAX_MALWARE_GROUPS = 7
+MAX_VULN_GROUPS    = 8
+
 # Same weights calculate_risk() uses, so "top findings" here means the same
 # thing it means in the score the user is reading next to this summary.
 SEVERITY_WEIGHT = {"high": 10, "medium": 3, "low": 1}
@@ -96,19 +105,29 @@ def is_available():
 def _rank_groups(findings):
     """Collapse findings into (tool, issue_text) groups, most important first.
 
+    scanner.finding_category is imported here rather than at module scope:
+    scanner imports this module, so a top-level import is circular and breaks
+    `import app` outright.
+
     Ranked by the same severity weight the risk score uses, multiplied by the
     classifier's confidence that the finding is real — so a high-severity hit
     the model distrusts doesn't outrank a medium one it's sure about.
     """
+    from scanner import finding_category
+
     groups = collections.defaultdict(lambda: {
         "count": 0, "severity": "low", "confidence": 0.0,
         "example_file": "", "example_line": 0, "snippet": "",
+        "category": "malicious_pattern",
     })
 
     for f in findings:
         key = (f.get("tool", ""), (f.get("issue_text") or "").strip())
         g   = groups[key]
         g["count"] += 1
+        # Same function scanner.py scores with, so the two axes mean the same
+        # thing here as they do in the risk levels shown beside this summary.
+        g["category"] = finding_category(f)
 
         severity   = (f.get("severity") or "low").lower()
         confidence = f.get("p_real")
@@ -135,9 +154,42 @@ def _rank_groups(findings):
     return ranked
 
 
+def _select_groups(groups):
+    """Pick MAX_GROUPS, guaranteeing both risk axes are represented.
+
+    Ranking purely by severity x confidence sounds right but is wrong for a
+    malware scanner, because the two axes have wildly different volumes:
+    bandit and semgrep produce ~233k findings between them, many high or
+    medium, while yara/clamav/guarddog produce a few thousand and are often
+    only `low`. The loud vulnerability findings therefore fill every slot and
+    push the quiet malicious-pattern ones out.
+
+    Measured on the 179-repo corpus before this change: 82 repos had malware
+    findings that never reached the prompt, and in 14 of them *none* did --
+    including n1nj4sec/pupy, scored malware=Critical, whose summary was
+    written from style warnings while a ClamAV trojan detection sat unsent.
+    A plausible-sounding summary that omits the trojan is worse than no
+    summary, so each axis gets reserved slots and unused ones are given back.
+    """
+    vuln_groups = [g for g in groups if g["category"] == "vulnerability"]
+    mal_groups  = [g for g in groups if g["category"] == "malicious_pattern"]
+
+    chosen = mal_groups[:MAX_MALWARE_GROUPS] + vuln_groups[:MAX_VULN_GROUPS]
+
+    # Backfill: a repo with no malware findings should still get a full
+    # prompt of vulnerability ones, and vice versa.
+    if len(chosen) < MAX_GROUPS:
+        spare = [g for g in groups if g not in chosen]
+        chosen += spare[:MAX_GROUPS - len(chosen)]
+
+    # Restore the global ranking so the model still reads worst-first.
+    order = {id(g): i for i, g in enumerate(groups)}
+    return sorted(chosen, key=lambda g: order[id(g)])[:MAX_GROUPS]
+
+
 def _build_prompt(repo_label, findings, vuln, malware):
     groups = _rank_groups(findings)
-    top    = groups[:MAX_GROUPS]
+    top    = _select_groups(groups)
 
     lines = []
     for g in top:
