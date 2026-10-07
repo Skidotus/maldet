@@ -47,8 +47,14 @@ def get_repo_info(repo):
 
 #Clone repo
 
-CLONE_TIMEOUT = 300  # scans run in a background thread now, so a longer
-                      # timeout no longer means a longer blocked request
+# Scans run in a worker process, so a longer timeout no longer means a longer
+# blocked request. 300s was too short for the corpus as it actually is: the
+# 2026-10-07 rescan lost three repos to it, all of them simply big --
+# vxunderground/MalwareSourceCode is 2,172MB, mlflow/mlflow 1,457MB and
+# juliocesarfort/public-pentesting-reports 719MB, per the GitHub API. A
+# shallow clone still has to transfer the working tree, and 2GB does not
+# arrive in five minutes.
+CLONE_TIMEOUT = int(os.environ.get("MALDET_CLONE_TIMEOUT", "900"))
 
 def clone_repo(repo):
     path = os.path.join(CLONE_DIR, repo.replace("/", "_"))

@@ -113,6 +113,22 @@ def _norm(text):
             .replace("’", "'").replace(" ", " "))
 
 
+def _num_key(n):
+    """A number's canonical form, so 291 and 291.0 compare equal.
+
+    The prompt states scores as "291.0" and the model writes "291", dropping
+    a trailing zero that carries no information. That is correct behaviour,
+    but a raw string comparison called it a fabricated number -- it accounted
+    for every fabricated_numbers failure in the first real run, four of
+    nineteen summaries, none of them genuine.
+    """
+    try:
+        f = float(n)
+    except (TypeError, ValueError):
+        return n
+    return str(int(f)) if f == int(f) else str(f)
+
+
 def _asserts(text, phrases, window=70):
     """Phrases the summary actually claims, ignoring negated or hedged ones.
 
@@ -139,8 +155,8 @@ def check(summary, prompt, vuln_level, malware_level):
     s, p = _norm(summary), _norm(prompt)
     failures = {}
 
-    nums_in_prompt = set(NUMBER.findall(p))
-    bad_nums = [n for n in NUMBER.findall(s) if n not in nums_in_prompt]
+    nums_in_prompt = {_num_key(n) for n in NUMBER.findall(p)}
+    bad_nums = [n for n in NUMBER.findall(s) if _num_key(n) not in nums_in_prompt]
     if bad_nums:
         failures["fabricated_numbers"] = bad_nums[:5]
 
@@ -214,6 +230,62 @@ def sample(cur, n, stored_only):
     return picked
 
 
+def rescore(cur, path, out_path):
+    """Re-run the checks over a previous run's summaries.
+
+    Prompts are rebuilt from the database, which needs no model -- so a check
+    can be corrected and the same 19 summaries re-judged in seconds instead
+    of regenerating them.
+    """
+    with open(path) as f:
+        prev = json.load(f)
+    results, counter = [], Counter()
+    for r in prev["results"]:
+        if not r.get("summary"):
+            counter["no_summary"] += 1
+            results.append(r)
+            continue
+        owner, _, name = r["repo"].partition("/")
+        cur.execute("""SELECT r.id, rs.vuln_level, rs.vuln_score,
+                              rs.malware_level, rs.malware_score
+                       FROM repositories r JOIN risk_scores rs ON rs.repo_id = r.id
+                       WHERE r.owner = %s AND r.repo_name = %s""", (owner, name))
+        row = cur.fetchone()
+        if not row:
+            results.append(r)
+            continue
+        groups, total = grouped_findings(cur, row["id"])
+        prompt = llm_summary._compose_prompt(
+            r["repo"], groups, total,
+            {"level": row["vuln_level"],    "score": row["vuln_score"]},
+            {"level": row["malware_level"], "score": row["malware_score"]})
+        failures = check(r["summary"], prompt,
+                         row["vuln_level"] or "Safe", row["malware_level"] or "Safe")
+        for k in failures:
+            counter[k] += 1
+        mark = "ok  " if not failures else "FAIL"
+        print(f"{mark} {r['repo']:40s} {','.join(failures)}")
+        results.append({**r, "failures": failures})
+
+    scored = [x for x in results if x.get("summary")]
+    clean  = [x for x in scored if not x["failures"]]
+    print(f"\n{'-'*58}")
+    print(f"summaries scored : {len(scored)}")
+    print(f"fully clean      : {len(clean)}"
+          + (f"  ({len(clean)/len(scored)*100:.0f}%)" if scored else ""))
+    print(f"\nfailures by check:")
+    for name, n in counter.most_common():
+        print(f"  {name:24s} {n:3d}  ({n/max(len(scored),1)*100:.0f}%)")
+    if not counter:
+        print("  none")
+    out = {**prev, "mode": "rescore", "scored": len(scored), "clean": len(clean),
+           "failures_by_check": dict(counter), "results": results}
+    with open(out_path, "w") as f:
+        json.dump(out, f, indent=2)
+    print(f"\nwritten to {out_path}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().split("\n")[0])
     g = ap.add_mutually_exclusive_group(required=True)
@@ -221,6 +293,11 @@ def main():
                    help="score summaries already in the database (no model needed)")
     g.add_argument("--generate", action="store_true",
                    help="generate fresh summaries for the sample (needs Ollama)")
+    g.add_argument("--rescore", metavar="FILE", nargs="?", const=OUTPUT_PATH,
+                   help="re-apply the checks to summaries in a previous run's "
+                        "JSON, without regenerating. For tuning a check: the "
+                        "summaries are fixed data, only the scoring changes, "
+                        "and regenerating 20 of them costs ten minutes of CPU.")
     ap.add_argument("-n", type=int, default=20, help="sample size (default 20)")
     ap.add_argument("--model", help="override MALDET_OLLAMA_MODEL for this run")
     ap.add_argument("--out", default=OUTPUT_PATH)
@@ -231,7 +308,7 @@ def main():
         llm_summary.OLLAMA_MODEL = args.model
 
     print(f"database : {describe()}")
-    print(f"mode     : {'stored' if args.stored else 'generate'}")
+    print(f"mode     : {'rescore' if args.rescore else ('stored' if args.stored else 'generate')}")
     if args.generate:
         print(f"model    : {llm_summary.OLLAMA_MODEL}")
         if not llm_summary.is_available():
@@ -241,6 +318,10 @@ def main():
     db = connect(autocommit=True)
     try:
         cur = db.cursor(pymysql.cursors.DictCursor)
+
+        if args.rescore:
+            return rescore(cur, args.rescore, args.out)
+
         rows = sample(cur, args.n, args.stored)
         print(f"sample   : {len(rows)} repos\n")
         if not rows:
