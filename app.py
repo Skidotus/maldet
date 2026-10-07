@@ -4,6 +4,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from scanner import scan_repo
 import job_queue
 
@@ -44,6 +45,7 @@ def build_findings_summary(total, likely_real, likely_noise, top_finding):
 def get_db():
     return pymysql.connect(
         host=DB_HOST,
+        port=DB_PORT,
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,

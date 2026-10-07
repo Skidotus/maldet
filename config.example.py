@@ -3,6 +3,19 @@
 
 GITHUB_TOKEN = "your_github_token_here"
 DB_HOST      = "localhost"
+
+# Optional. Leave this out entirely and MySQL's default 3306 is used, which
+# is what a local install wants. Set it when the database is reached through
+# an SSH tunnel, since 3306 is normally already taken by the local MySQL:
+#
+#   ssh -L 3307:127.0.0.1:3306 user@your-vps
+#   DB_PORT=3307 python3 backfill_summaries.py
+#
+# The environment variable wins over this value, so a tunnel can be used for
+# one command without editing this file. Worth setting deliberately rather
+# than guessing: a wrong port silently connects to a *different* database
+# with the same table names, which looks like success.
+DB_PORT      = 3306
 DB_USER      = "fypuser"
 DB_PASSWORD  = "your_db_password"
 DB_NAME      = "fyp_scanner"

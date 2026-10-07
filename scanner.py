@@ -6,6 +6,7 @@ import json
 import requests
 import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from dep_checker import check_dependencies
 import llm_summary
 
@@ -17,6 +18,7 @@ CLONE_DIR = "/tmp/maldet_scan_temp"
 def get_db():
     return pymysql.connect(
         host=DB_HOST,
+        port=DB_PORT,
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,

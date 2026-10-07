@@ -16,12 +16,13 @@ import sys
 import time
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from scanner import extract_archives, run_yara, filter_noise
 from dep_checker import check_dependencies
 
 CLONE_DIR = "/tmp/maldet_rescan_temp"
 
-conn = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+conn = pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
                         cursorclass=pymysql.cursors.DictCursor)
 
 with conn.cursor() as cur:

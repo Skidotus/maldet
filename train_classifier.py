@@ -31,6 +31,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from scanner import NOISE_RULES, is_ignored_path, normalize_severity, frequency_key
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
@@ -46,7 +47,7 @@ LOW_FREQUENCY_THRESHOLD = 0.02
 
 def load_findings():
     conn = pymysql.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
         cursorclass=pymysql.cursors.DictCursor
     )
     try:

@@ -26,6 +26,7 @@ import pymysql
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME  # noqa: E402
+from db_connect import DB_PORT
 
 OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_data.sql.gz")
 
@@ -109,7 +110,7 @@ def insert_statements(cur, table, repo_ids, key="repo_id"):
 
 def main():
     conn = pymysql.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
         cursorclass=pymysql.cursors.DictCursor,
     )
     try:

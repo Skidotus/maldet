@@ -7,9 +7,10 @@ scan_repo() will produce. Run standalone: `python3 calibrate_thresholds.py`.
 
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from scanner import score_findings, calculate_risk
 
-conn = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+conn = pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
                         cursorclass=pymysql.cursors.DictCursor)
 with conn.cursor() as cur:
     cur.execute("SELECT id, repo_name, owner FROM repositories")
