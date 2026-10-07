@@ -444,10 +444,17 @@ failed for three, and only one of the three is fixable.
     `parti-renaissance/espace-adherent`, `adminlove520/Poc-Monitor_v1.0.1`.
     All four return HTTP 404 to an authenticated API request; verified
     individually rather than inferred from the scan error. Their 349
-    withheld snippets and 349 un-normalised severities cannot be repaired by
-    any amount of rescanning, because the source no longer exists. This is
-    the honest answer to "why is some of your data stale": not neglect, but
-    a corpus built from repositories other people control.
+    withheld code snippets are gone for good, because that text was never
+    captured and the source no longer exists.
+
+    Their severities, however, were repaired without rescanning anything —
+    see "the severities did not need a rescan at all" below. The first
+    version of this section claimed both were unrecoverable, which was
+    wrong, and wrong in the expensive direction: it sent the next step
+    towards a VPS rescan when a one-second UPDATE was sufficient. The
+    lesson worth keeping is that "the repository is gone" and "the data is
+    unrecoverable" are different claims, and the second does not follow
+    from the first.
 
   - **Renamed or transferred — 1 repo, and this one is quiet.**
     `envoyproxy/ai-gateway` is now `theagentrouter/agent-router`. The GitHub
@@ -494,6 +501,54 @@ failed for three, and only one of the three is fixable.
   rather than a defect: 5 of 18 in three weeks is a ~28% churn rate on an
   arbitrary slice, and any figure computed over the corpus is a figure over
   the corpus *as it was when scanned*.
+
+- **The severities did not need a rescan at all, and six repos were being
+  reported at the wrong risk level.** This was the actual cost of the stale
+  data, and it was missed for weeks because "stale repo" sounded like a
+  tidiness problem.
+
+  Semgrep names its severities `error`/`warning`/`info`;
+  `normalize_severity()` maps those to `high`/`medium`/`low`. The July scans
+  predate that mapping being applied, so 779 findings sat in the database
+  with Semgrep's own words — and `SEVERITY_WEIGHT` has no entry for them, so
+  `.get(severity, 1)` scored every one as 1. A Semgrep `error` (its most
+  serious class: script injection, `child_process` from an argument, a
+  hardcoded API key) counted exactly the same as "you used http:// instead
+  of https://".
+
+  The repair needed no network at all. The raw values were still stored and
+  the mapping is a pure lookup, so three UPDATE statements plus the existing
+  `recompute_scores.py` / `recompute_category_scores.py` fixed it:
+  134 `error` → high, 556 `warning` → medium, 89 `info` → low. Result, on
+  the six repos whose level was wrong:
+
+  | repo | vulnerability |
+  |---|---|
+  | `department-of-veterans-affairs/vets-website` | High 94 → **Critical 478** |
+  | `vxunderground/MalwareSourceCode` | High 162 → **Critical 498** |
+  | `Yu9191/Rewrite` | Medium 48 → **High 180** |
+  | `parti-renaissance/espace-adherent` | Medium 26 → **High 95** |
+  | `envoyproxy/ai-gateway` | Low 14 → **Medium 60** |
+  | `juliocesarfort/public-pentesting-reports` | Low 15 → **Medium 60** |
+
+  `vets-website` was off by a factor of five. Note that four of the six are
+  the repositories that no longer exist on GitHub — so the fix reached
+  precisely the data that had been written off as unrecoverable.
+
+  Running the recompute also moved five repos unrelated to the severity
+  problem (`django/django` High → Critical, `InQuest/malware-samples`,
+  `JustVugg/colibri` and `Ne0nd0g/merlin` High → Medium,
+  `opentofu/opentofu` Low → Safe), because their stored scores predated the
+  current classifier-weighted formula. The whole corpus is now on one
+  formula, which is the state any reported figure should be computed from.
+  Distribution afterwards: Medium 45, Critical 40, High 39, Low 33, Safe 22.
+
+  The methodological point for the report is not the fix, it is how it was
+  found. The question "does this stale data actually change any number?"
+  had not been asked for weeks of treating the staleness as housekeeping.
+  It was asked only because the premise — that a deleted repository matters
+  — was challenged, and the honest answer to the challenge was that it
+  matters for the scores, not for the repository.
 
 - **A failed scan no longer reports a repo as clean.** `save_to_db()`
   committed the repositories upsert and both DELETEs before writing a single
@@ -557,9 +612,13 @@ failed for three, and only one of the three is fixable.
 
 ## What needs improvement (near-term, actionable)
 
-- **Mostly done 2026-10-07: the rescan ran.** 12,238 `requires login`
-  findings are down to 389 and the un-normalised severities from 1,513 to
-  779, all of the remainder sitting in 8 repos. Of those, 4 are permanently
+- **Mostly done 2026-10-07: the rescan ran, and the severities are fully
+  fixed.** All 1,513 un-normalised severities are now 0 — repaired in place
+  rather than by rescanning, see the 2026-10-07 section. `requires login`
+  findings are down from 12,238 to 389, and those 389 do need a rescan,
+  since the snippet text was never captured; they are display-only and feed
+  neither the scores nor the LLM prompt. They sit in 8 repos, of which 4 are
+  permanently
   unfixable (deleted or private, HTTP 404) and 1 was renamed out from under
   the corpus; see the 2026-10-07 section. What is left to finish is the
   3 that only failed on a 300s clone timeout, now 900s —
@@ -621,9 +680,12 @@ failed for three, and only one of the three is fixable.
 - **The corpus decays, and some of it is unrecoverable.** Repositories are
   controlled by other people: between 2026-09-19 and 2026-10-07, four of the
   corpus were deleted or made private (HTTP 404) and one was renamed. The
-  404s can never be rescanned, so their findings are permanently frozen at
-  whatever the 2026-07-29 scan captured — including 349 findings whose code
-  snippet reads `requires login`. Any metric computed over the corpus is a
+  404s can never be rescanned, so anything their scan failed to capture is
+  gone — specifically 349 findings whose code snippet reads `requires login`,
+  because that text was never stored. What is *in* the database about them
+  can still be corrected, which is how their severities were fixed on
+  2026-10-07 without any network access; do not assume "repository gone"
+  means "data unrecoverable". Any metric computed over the corpus is a
   metric over the corpus as it was when scanned, and the scan dates differ
   per repo. Report the dates alongside the numbers.
 
