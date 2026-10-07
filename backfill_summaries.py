@@ -181,6 +181,23 @@ def grouped_findings(cur, repo_id):
     return groups, total
 
 
+def _wait_for_ollama(attempts=10, delay=15):
+    """Block until the Ollama service is answering again, or give up.
+
+    The systemd unit restarts on failure, so an outage is usually seconds
+    long and waiting beats abandoning a batch that is hours into its work.
+    Ten attempts at fifteen seconds is two and a half minutes, which covers
+    a restart and a cold model load without hanging an unattended run all
+    night on a service that is genuinely gone.
+    """
+    for n in range(1, attempts + 1):
+        time.sleep(delay)
+        if llm_summary.is_available():
+            return True
+        print(f"    waiting for Ollama... ({n}/{attempts})", flush=True)
+    return False
+
+
 def summarize_one(cur, repo):
     """Generate and store the summary for one already-scanned repo.
 
@@ -276,6 +293,25 @@ def main():
 
             started = time.time()
             text = summarize_one(cur, repo)
+
+            if not text:
+                # Distinguish "this repo produced nothing" from "Ollama is
+                # gone". On 2026-10-07 the service was oom-killed 19 repos
+                # into a run of 158; it restarted four seconds later, but
+                # this loop had already raced through every remaining repo
+                # at 0s each, marking them unavailable for a reason that had
+                # nothing to do with them. Waiting for the service to come
+                # back is almost always right, because the unit restarts
+                # itself -- so wait, and only give up if it stays down.
+                if not llm_summary.is_available():
+                    if not _wait_for_ollama():
+                        print("\n    Ollama did not come back. Stopping here rather "
+                              "than marking every remaining repo unavailable.")
+                        print(f"    {len(targets) - i} repos left; re-run to continue.")
+                        break
+                    print("    Ollama is back, retrying this repo")
+                    text = summarize_one(cur, repo)
+
             if not text:
                 print(f"    no summary produced ({time.time()-started:.0f}s), marked unavailable")
                 failed += 1

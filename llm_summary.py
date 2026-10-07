@@ -74,6 +74,20 @@ SEVERITY_WEIGHT = {"high": 10, "medium": 3, "low": 1}
 # ~2.9GB of model in RAM.
 MAX_TOKENS = 200
 
+# Context window to allocate, in tokens. qwen3.5:2b declares a context length
+# of 262,144 and Ollama sizes its KV cache to the model's declared maximum
+# unless told otherwise -- reserving memory for a 262k-token conversation in
+# order to write a 200-token paragraph from a ~1,300-token prompt. On a
+# 7.9GB machine that over-allocation is what put the user session under
+# memory pressure: systemd-oomd killed the Ollama service mid-batch on
+# 2026-10-07, 19 summaries into a run of 158.
+#
+# 4096 is about 3x the largest prompt this builds (1,317 tokens measured for
+# LaZagne) plus its output, with room for a repo carrying far more finding
+# groups than any in the corpus. Generous rather than tight, because a
+# prompt that exceeded it would be silently truncated by Ollama.
+NUM_CTX = int(os.environ.get("MALDET_OLLAMA_NUM_CTX", "4096"))
+
 # How long Ollama keeps the model loaded after a request. Its default is 5
 # minutes, which on a memory-tight machine means ~2.9GB sits resident long
 # after the scan that needed it -- this is what has been triggering
@@ -353,6 +367,7 @@ def _generate(prompt):
                     # finished scan, not creative writing.
                     "temperature": 0.2,
                     "num_predict": MAX_TOKENS,
+                    "num_ctx": NUM_CTX,
                 },
             },
             timeout=OLLAMA_TIMEOUT,
