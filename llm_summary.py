@@ -119,6 +119,9 @@ def _rank_groups(findings):
         "count": 0, "severity": "low", "confidence": 0.0,
         "example_file": "", "example_line": 0, "snippet": "",
         "category": "malicious_pattern",
+        # Sort key of the example currently held, as a minimum-wins tuple:
+        # (-rank, -confidence, filename, line). See the comparison below.
+        "_best": None,
     })
 
     for f in findings:
@@ -129,29 +132,64 @@ def _rank_groups(findings):
         # thing here as they do in the risk levels shown beside this summary.
         g["category"] = finding_category(f)
 
-        severity   = (f.get("severity") or "low").lower()
+        severity = (f.get("severity") or "low").lower()
+        # Legacy scans stored semgrep's own levels ("error"/"warning"/"info")
+        # before normalize_severity() was applied, and SEVERITY_WEIGHT has no
+        # entry for them -- so they are already weighted as 1, i.e. low. Label
+        # them that way too, instead of telling the model "[semgrep/error]"
+        # about a finding the score treats as low. Keeps this agreeing with
+        # calculate_risk(), and with the SQL grouping in
+        # backfill_summaries.py, which maps the same way.
+        if severity not in SEVERITY_WEIGHT:
+            severity = "low"
         confidence = f.get("p_real")
         if confidence is None:
             confidence = f.get("confidence")
         confidence = 1.0 if confidence is None else float(confidence)
 
-        # Keep the most severe example, breaking ties on confidence, so the
-        # file path shown to the model is the worst instance rather than
-        # whichever happened to be scanned first.
-        if (SEVERITY_WEIGHT.get(severity, 1) > SEVERITY_WEIGHT.get(g["severity"], 1)
-                or confidence > g["confidence"]):
-            g["severity"]     = severity
-            g["confidence"]   = confidence
+        # A group's severity is the worst severity in it, and its confidence
+        # the highest -- tracked independently.
+        #
+        # This used to be one condition, "more severe OR more confident",
+        # which overwrote both fields together. The comment claimed it broke
+        # ties on confidence, but an OR does not break ties: a LOW finding
+        # with higher confidence than the current best overwrote severity
+        # too, silently downgrading a group that contained a HIGH finding.
+        # That mislabelled groups in the prompt and changed their rank, since
+        # rank is severity weight times confidence.
+        rank = SEVERITY_WEIGHT.get(severity, 1)
+        if rank > SEVERITY_WEIGHT.get(g["severity"], 1):
+            g["severity"] = severity
+        g["confidence"] = max(g["confidence"], confidence)
+
+        # The example shown to the model should be the worst instance:
+        # severity first, then confidence. Filename and line are included as
+        # a final tie-break so the choice does not depend on the order the
+        # findings arrived in -- whole groups routinely tie on severity AND
+        # confidence (35 findings of one django group share both), and
+        # without this the example cited at scan time differs from the one a
+        # regenerated summary cites.
+        candidate = (-rank, -confidence,
+                     f.get("filename") or "", f.get("line_number") or 0)
+        if g["_best"] is None or candidate < g["_best"]:
+            g["_best"]        = candidate
             g["example_file"] = f.get("filename") or ""
             g["example_line"] = f.get("line_number") or 0
             g["snippet"]      = (f.get("code_snippet") or "").strip()
 
-    ranked = sorted(
+    # Tie-broken on (tool, issue_text), not left to input order. Python's
+    # sort is stable, so without a tie-break the order of equal-scoring
+    # groups follows whatever order the findings arrived in -- which differs
+    # between a scan (detector order) and a regenerated summary (database
+    # order), and is not guaranteed by MySQL at all without an ORDER BY.
+    # That decided which groups fell either side of the 15-group cut: 21 of
+    # 162 repos selected a different top 15 depending on the path taken.
+    return sorted(
         ({"tool": k[0], "issue_text": k[1], **v} for k, v in groups.items()),
-        key=lambda g: SEVERITY_WEIGHT.get(g["severity"], 1) * max(g["confidence"], 0.01),
-        reverse=True,
+        key=lambda g: (-(SEVERITY_WEIGHT.get(g["severity"], 1)
+                         * max(g["confidence"], 0.01)),
+                       g["tool"], g["issue_text"]),
     )
-    return ranked
 
 
 def _select_groups(groups):
@@ -188,8 +226,21 @@ def _select_groups(groups):
 
 
 def _build_prompt(repo_label, findings, vuln, malware):
-    groups = _rank_groups(findings)
-    top    = _select_groups(groups)
+    """Prompt for a list of raw findings — the scan-time path."""
+    return _compose_prompt(repo_label, _rank_groups(findings), len(findings),
+                           vuln, malware)
+
+
+def _compose_prompt(repo_label, groups, total_findings, vuln, malware):
+    """Prompt from already-grouped findings.
+
+    Split out from _build_prompt so a summary can be produced from groups
+    aggregated by the database instead of from every finding row. That
+    matters when the database is remote: a repo can have tens of thousands
+    of findings but only a few dozen distinct (tool, issue_text) groups, and
+    only the groups are needed here.
+    """
+    top = _select_groups(groups)
 
     lines = []
     for g in top:
@@ -220,7 +271,7 @@ The scan has ALREADY been completed and scored. Two separate scores were produce
 - Vulnerability risk: {vuln['level']} (score {vuln['score']}) — insecure coding patterns that an attacker could exploit. Reported by Bandit and Semgrep.
 - Malicious-pattern risk: {malware['level']} (score {malware['score']}) — signs the code may be intentionally malicious. Reported by YARA, ClamAV, GuardDog and the dependency checker.
 
-{len(findings)} findings survived filtering. The most important kinds, already ranked, are:
+{total_findings} findings survived filtering. The most important kinds, already ranked, are:
 
 {findings_block}
 
@@ -250,6 +301,18 @@ def _strip_markdown(text):
     return text
 
 
+def summarize_groups(repo_label, groups, total_findings, vuln, malware):
+    """summarize() for callers that already have grouped findings.
+
+    Same contract: returns None rather than raising, so a caller can keep
+    going when Ollama is absent or slow.
+    """
+    if is_disabled() or not groups:
+        return None
+    return _generate(_compose_prompt(repo_label, groups, total_findings,
+                                     vuln, malware))
+
+
 def summarize(repo_label, findings, vuln, malware):
     """Return a plain-English summary, or None if the LLM is unavailable.
 
@@ -259,7 +322,16 @@ def summarize(repo_label, findings, vuln, malware):
     if is_disabled() or not findings:
         return None
 
-    prompt = _build_prompt(repo_label, findings, vuln, malware)
+    return _generate(_build_prompt(repo_label, findings, vuln, malware))
+
+
+def _generate(prompt):
+    """Send one prompt to Ollama and clean up what comes back.
+
+    Shared by summarize() and summarize_groups() so the request options and
+    the output guards exist once — a reasoning trace leaking into a stored
+    summary is the same hazard whichever path built the prompt.
+    """
     try:
         resp = requests.post(
             f"{OLLAMA_HOST}/api/generate",
@@ -311,4 +383,19 @@ def summarize(repo_label, findings, vuln, malware):
         return None
 
     text = _strip_markdown(text)
-    return " ".join(text.split())
+    text = " ".join(text.split())
+
+    # MAX_TOKENS is a hard ceiling, so the model can be cut off mid-sentence:
+    # one summary in the first three generated ended "...suggests that the
+    # codebase is actively vulnerable" with no full stop, which reads as a
+    # broken page rather than a short summary. Trim back to the last sentence
+    # that actually finished. Raising MAX_TOKENS instead would undo the
+    # brevity it was lowered to enforce, and would only move the cut-off.
+    if text and text[-1] not in ".!?":
+        cut = max(text.rfind(". "), text.rfind("! "), text.rfind("? "))
+        # Only trim if a usable summary survives; a stub is worse than a
+        # sentence that stops short, and None here means no summary at all.
+        if cut >= 120:
+            text = text[:cut + 1]
+
+    return text
