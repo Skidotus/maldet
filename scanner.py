@@ -689,7 +689,7 @@ def _fit_varchar(value, max_chars):
 
 
 def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk,
-               llm_text=None):
+               llm_text=None, llm_status=None):
     db     = get_db()
     cursor = db.cursor()
 
@@ -752,12 +752,19 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
                  final_score, risk_level,
                  vuln_high, vuln_medium, vuln_low, vuln_score, vuln_level,
                  malware_high, malware_medium, malware_low, malware_score, malware_level,
-                 llm_summary)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 llm_summary, llm_summary_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (repo_id, high, medium, low, score, level,
               vuln["high"], vuln["medium"], vuln["low"], vuln["score"], vuln["level"],
               malware["high"], malware["medium"], malware["low"], malware["score"], malware["level"],
-              _fit_text(llm_text) if llm_text else None))
+              _fit_text(llm_text) if llm_text else None,
+              # "pending" only when a summary is actually expected, so the
+              # page never shows a spinner for a scan that will not produce
+              # one. llm_summary.is_available() checks Ollama is reachable
+              # and has the model, not merely that it is not disabled.
+              llm_status if llm_status is not None else
+              ("done" if llm_text else
+               ("pending" if llm_summary.is_available() else "unavailable"))))
 
         # Save to history
         cursor.execute("""
@@ -826,22 +833,15 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         high, medium, low, score, level = calculate_risk(findings)
         category_risk = calculate_category_risk(findings)
 
-        # After scoring, so the summary describes the same ranked findings
-        # the user will see, and after the scanners, so a CPU-bound model
-        # never competes with Semgrep for memory on a small machine.
-        report("Summarising findings")
-        repo_label = f"{repo_info['owner']}/{repo_info['name']}"
-        summary = llm_summary.summarize(
-            repo_label, findings,
-            category_risk["vulnerability"], category_risk["malicious_pattern"],
-        )
-        if summary:
-            print(f"    LLM summary: {summary[:80]}...")
-
+        # The LLM deliberately does NOT run here. Generation is 20-60s on
+        # CPU, and inside the scan that is 20-60s the visitor spends staring
+        # at a progress bar after the results already exist. The scan saves
+        # and returns; whoever called it generates the summary afterwards and
+        # the detail page shows a placeholder until it lands (see
+        # worker.py and app.py's /api/summary route).
         report("Saving results")
         repo_id = save_to_db(repo_info, findings,
-                             high, medium, low, score, level, category_risk,
-                             summary)
+                             high, medium, low, score, level, category_risk)
 
     finally:
         # clear temp folder

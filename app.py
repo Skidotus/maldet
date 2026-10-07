@@ -241,6 +241,42 @@ def api_scan_status(job_id):
 
 # Repo Detail page
 
+@app.route('/api/summary/<int:repo_id>')
+def api_summary(repo_id):
+    """The plain-English summary for one repo, for the detail page to poll.
+
+    Exists because the summary is written after the scan finishes: the
+    visitor reaches the results page immediately and this fills the
+    paragraph in when the model is done, instead of holding the whole scan
+    open for 20-60s of CPU generation.
+
+    status is one of pending / done / unavailable. "unavailable" is a normal
+    outcome, not an error, and tells the page to stop polling and keep the
+    rule-based summary it already rendered.
+    """
+    db     = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("""SELECT llm_summary, llm_summary_status
+                          FROM risk_scores WHERE repo_id = %s
+                          ORDER BY id DESC LIMIT 1""", (repo_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"status": "unavailable", "summary": None}), 404
+
+        summary = row["llm_summary"]
+        status  = row["llm_summary_status"]
+        if summary:
+            status = "done"
+        elif status != "pending":
+            # NULL (a pre-column row) or an explicit "unavailable".
+            status = "unavailable"
+        return jsonify({"status": status, "summary": summary})
+    finally:
+        cursor.close()
+        db.close()
+
+
 @app.route('/detail/<int:repo_id>')
 def detail(repo_id):
     db     = get_db()
@@ -350,9 +386,15 @@ def detail(repo_id):
         # rule-based summary above stays the fallback rather than being
         # replaced. Template shows one or the other, never both.
         llm_summary_text = (risk or {}).get("llm_summary")
+        # "pending" means the worker is generating it right now, so the page
+        # shows a placeholder and polls. Any other value -- including NULL on
+        # rows from before the column existed -- means stop waiting.
+        llm_pending = (risk or {}).get("llm_summary_status") == "pending" \
+                      and not llm_summary_text
 
         return render_template('detail.html',
             llm_summary   = llm_summary_text,
+            llm_pending   = llm_pending,
             repo          = repo,
             risk          = risk,
             findings      = findings,

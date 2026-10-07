@@ -61,6 +61,17 @@ CREATE TABLE IF NOT EXISTS risk_scores (
     -- unavailable, disabled, or the repo predates this column; app.py then
     -- falls back to the rule-based build_findings_summary().
     llm_summary     TEXT NULL,
+    -- Lets the detail page tell "being written right now" apart from "there
+    -- will never be one". Without it a missing summary is ambiguous, and the
+    -- page cannot honestly show a spinner: it would either spin forever on
+    -- repos scanned with Ollama off, or never spin at all.
+    --   pending     -- scan finished, the worker is generating it
+    --   done        -- llm_summary is populated
+    --   unavailable -- Ollama off/absent, or generation failed; show the
+    --                  rule-based summary and stop waiting
+    -- NULL means a row from before this column existed, treated as
+    -- unavailable.
+    llm_summary_status VARCHAR(12) NULL,
     FOREIGN KEY (repo_id) REFERENCES repositories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

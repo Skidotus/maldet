@@ -181,6 +181,53 @@ def grouped_findings(cur, repo_id):
     return groups, total
 
 
+def summarize_one(cur, repo):
+    """Generate and store the summary for one already-scanned repo.
+
+    Shared by this script's main() and by worker.py, which calls it straight
+    after a scan now that the LLM no longer runs inside scan_repo(). One code
+    path on purpose: a second implementation of the same job is exactly what
+    produced the grouping bugs this script was built to catch.
+
+    `repo` needs id, full_name and the four category risk fields. Returns the
+    summary text, or None -- and records which happened, so the detail page
+    knows whether to keep waiting.
+    """
+    groups, total = grouped_findings(cur, repo["id"])
+    if not groups:
+        cur.execute("""UPDATE risk_scores SET llm_summary_status = 'unavailable'
+                       WHERE repo_id = %s""", (repo["id"],))
+        return None
+
+    text = llm_summary.summarize_groups(
+        repo["full_name"], groups, total,
+        {"level": repo["vuln_level"],    "score": repo["vuln_score"]},
+        {"level": repo["malware_level"], "score": repo["malware_score"]},
+    )
+
+    if text:
+        cur.execute("""UPDATE risk_scores
+                       SET llm_summary = %s, llm_summary_status = 'done'
+                       WHERE repo_id = %s""", (text, repo["id"]))
+    else:
+        # Not an error: Ollama may be absent, slow or have returned something
+        # unusable. The page stops waiting and shows the rule-based summary.
+        cur.execute("""UPDATE risk_scores SET llm_summary_status = 'unavailable'
+                       WHERE repo_id = %s""", (repo["id"],))
+    return text
+
+
+def repo_for_summary(cur, repo_id):
+    """The fields summarize_one() needs, for one repo id."""
+    cur.execute("""SELECT r.id, CONCAT(r.owner, '/', r.repo_name) AS full_name,
+                          rs.vuln_score, rs.vuln_level,
+                          rs.malware_score, rs.malware_level
+                   FROM repositories r
+                   JOIN risk_scores rs ON rs.repo_id = r.id
+                   WHERE r.id = %s""", (repo_id,))
+    return cur.fetchone()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().split("\n")[0])
     ap.add_argument("--limit", type=int, help="stop after this many repos")
@@ -228,18 +275,11 @@ def main():
                 continue
 
             started = time.time()
-            text = llm_summary.summarize_groups(
-                repo["full_name"], groups, total,
-                {"level": repo["vuln_level"],    "score": repo["vuln_score"]},
-                {"level": repo["malware_level"], "score": repo["malware_score"]},
-            )
+            text = summarize_one(cur, repo)
             if not text:
-                print(f"    no summary produced ({time.time()-started:.0f}s), leaving as-is")
+                print(f"    no summary produced ({time.time()-started:.0f}s), marked unavailable")
                 failed += 1
                 continue
-
-            cur.execute("UPDATE risk_scores SET llm_summary = %s WHERE repo_id = %s",
-                        (text, repo["id"]))
             done += 1
             print(f"    stored {len(text)} chars in {time.time()-started:.0f}s")
             if args.show:

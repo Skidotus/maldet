@@ -549,3 +549,11 @@ button.tool-section__header {
 }
 
 #findingsSections.hide-noise .finding-row--likely-noise { display: none; }
+
+/* The rule-based summary shown beneath the "writing a summary" placeholder.
+   Dimmed because it is interim text that is about to be replaced, and it
+   should not compete with the real summary when that arrives. */
+.llm-interim {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}

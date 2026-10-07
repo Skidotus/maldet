@@ -99,6 +99,27 @@
         scores come from the classifier, not from this summary.
       </p>
     </div>
+
+  {% elif llm_pending %}
+    {# The summary is written after the scan finishes, so arriving here with
+       it still missing is the normal case, not an error. The rule-based
+       summary is shown immediately underneath rather than leaving the space
+       blank -- a visitor who does not want to wait has already been told
+       what was found. #}
+    <div class="findings-summary findings-summary--llm mb-3" id="llmPending">
+      <p class="mb-2" id="llmPendingText">
+        <span class="spinner-border spinner-border-sm text-accent me-2" role="status" aria-hidden="true"></span>
+        Writing a plain-English summary of these findings&hellip;
+      </p>
+      {% if findings_summary %}
+        <p class="mb-2 llm-interim" id="llmInterim">{{ findings_summary }}</p>
+      {% endif %}
+      <p class="llm-attribution mb-0">
+        Generated locally, which takes up to a minute. The findings below are
+        complete and final either way.
+      </p>
+    </div>
+
   {% elif findings_summary %}
     <p class="findings-summary mb-3">{{ findings_summary }}</p>
   {% endif %}
@@ -181,6 +202,55 @@
 {% endblock %}
 
 {% block scripts %}
+{% if llm_pending %}
+<script>
+  // The summary is generated after the scan, so this fills it in when the
+  // model finishes. Polling rather than streaming because it is one short
+  // paragraph that arrives once -- there is nothing to stream.
+  (function () {
+    var box     = document.getElementById('llmPending');
+    var text    = document.getElementById('llmPendingText');
+    var interim = document.getElementById('llmInterim');
+    if (!box) { return; }
+
+    var repoId = {{ repo.id | tojson }};
+    // Give up after ~4 minutes. Generation is well under a minute normally;
+    // past this something is wrong, and an honest stop beats a spinner that
+    // never resolves. The rule-based summary stays on screen.
+    var deadline = Date.now() + 4 * 60 * 1000;
+
+    function settle(summary) {
+      if (summary) {
+        text.textContent = summary;
+        text.classList.remove('llm-waiting');
+        if (interim) { interim.remove(); }
+      } else {
+        // No summary coming. Promote the rule-based text in its place.
+        if (interim) {
+          box.parentNode.insertBefore(interim, box);
+          interim.className = 'findings-summary mb-3';
+        }
+        box.remove();
+      }
+    }
+
+    function poll() {
+      if (Date.now() > deadline) { settle(null); return; }
+      fetch('/api/summary/' + repoId)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.status === 'done' && d.summary) { settle(d.summary); }
+          else if (d.status === 'pending')      { setTimeout(poll, 3000); }
+          else                                   { settle(null); }
+        })
+        .catch(function () { setTimeout(poll, 5000); });
+    }
+
+    setTimeout(poll, 3000);
+  })();
+</script>
+{% endif %}
+
   {% if history_dates and history_dates != '[]' %}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script>
