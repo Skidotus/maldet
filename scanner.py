@@ -49,22 +49,23 @@ def get_repo_info(repo):
 
 # Scans run in a worker process, so a longer timeout no longer means a longer
 # blocked request. Raised from 300s after the 2026-10-07 rescan lost three
-# large repos to it -- though 900s did not save them either, and the reason
-# is worth recording because it is not the obvious one.
+# large repos to it; 900s did not save them either, and the cause turned out
+# to be the dull one after two wrong guesses, so it is recorded here to stop
+# a third.
 #
-# Measured while one of those clones was running: the link sustained
-# ~613 KB/s to a CDN, while the clone itself averaged ~36 KB/s, 15x slower,
-# and an earlier attempt transferred zero bytes in 120s. The GitHub API
-# reported the token at its full 5000/5000, so this is not rate limiting
-# either. What is left is server-side pack generation -- git waits, nothing
-# arrives, and a byte-rate average across the stall says nothing useful
-# about the link. 719MB at the measured link speed would be ~20 minutes, so
-# the transfer is not the problem.
+# It is not server-side pack generation, and not rate limiting. Observed with
+# `git clone --progress`: git sits in "Receiving objects" transferring
+# steadily at 36-45 KiB/s. Measured on the same connection, sustained over
+# 60s each: codeload.github.com 46 KB/s, raw.githubusercontent.com 124 KB/s,
+# a CDN 119 KB/s. The clone rate matches codeload almost exactly, so this is
+# simply a slow link whose slowest path happens to be the one git pack data
+# comes from. At 40 KB/s, 719MB takes ~5 hours and 2,172MB takes ~15.
 #
-# 900s is therefore a compromise, not a derived figure: long enough to
-# absorb a bounded stall, short enough that a worker is not held for an
-# hour. The three repos that still fail (719MB, 1,457MB, 2,172MB) need a
-# different approach, not a bigger number -- see NOTES.md.
+# Nothing is wrong with those repositories, and no timeout fixes a link.
+# They want a faster connection -- the deployment VPS, not this dev VM -- so
+# rescanning them belongs with the VPS work rather than with a bigger number
+# here. 900s remains a compromise: generous for a normal repo on a poor
+# connection, short enough not to hold the worker for an hour.
 CLONE_TIMEOUT = int(os.environ.get("MALDET_CLONE_TIMEOUT", "900"))
 
 def clone_repo(repo):

@@ -468,23 +468,27 @@ failed for three, and only one of the three is fixable.
     All three failed a 300s clone timeout, and all three failed again at
     900s.
 
-    The obvious diagnosis — "big repo, slow link, raise the timeout" — is
-    wrong, which is worth knowing before anyone raises it a third time.
-    Measured during one of the failing clones: the link sustained ~613 KB/s
-    to a CDN *while the clone was competing with it*, and the clone itself
-    averaged ~36 KB/s, fifteen times slower; an earlier attempt transferred
-    zero bytes in 120 seconds. The GitHub token was at its full 5000/5000,
-    so not rate limiting. The time is going into server-side pack
-    generation, during which nothing transfers — 719MB at the measured link
-    speed would be about twenty minutes, so the transfer itself is not the
-    constraint.
+    The cause took two wrong guesses to pin down, which is itself worth
+    recording. It is not rate limiting (the token was at its full
+    5000/5000) and it is not server-side pack generation: run with
+    `git clone --progress`, git sits in "Receiving objects" transferring
+    steadily, not waiting. It is simply a slow connection. Measured on the
+    same link, each sustained over 60 seconds — codeload.github.com
+    46 KB/s, raw.githubusercontent.com 124 KB/s, a CDN 119 KB/s — against a
+    clone rate of 36-45 KiB/s. The clone matches codeload almost exactly,
+    so the slowest host on a slow link happens to be the one git pack data
+    comes from. At 40 KB/s, 719MB is ~5 hours, 1,457MB ~10 and 2,172MB ~15.
 
-    So these three are a decision rather than a fix: run them unattended
-    with a much larger ceiling (hours, outcome uncertain), or accept that
-    repositories of this size are out of reach in this environment and say
-    so. They hold 390 of ~223,000 findings, so the scoring impact of leaving
-    them is marginal. `CLONE_TIMEOUT` is 900s and env-overridable
-    (`MALDET_CLONE_TIMEOUT`) either way.
+    Which makes this not a decision about these repositories at all. No
+    timeout fixes a link, and nothing is wrong with the repos — they are
+    large, and this dev VM is on a phone hotspot at ~120 KB/s. They want a
+    faster connection, so **rescanning them belongs with the VPS
+    deployment**, where the link is a datacentre link and the same clones
+    should take minutes. Folding it into work already owed is better than
+    either running a 15-hour clone here or writing the repos off. In the
+    meantime they hold 390 of ~223,000 findings, so the scoring impact of
+    the delay is marginal. `CLONE_TIMEOUT` is 900s, env-overridable via
+    `MALDET_CLONE_TIMEOUT`.
 
   Worth stating in the report as a limitation of corpus-based evaluation
   rather than a defect: 5 of 18 in three weeks is a ~28% churn rate on an
