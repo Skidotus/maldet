@@ -688,6 +688,13 @@ def _fit_varchar(value, max_chars):
     return text[:max_chars - len(_TRUNCATED)] + _TRUNCATED
 
 
+# Findings per INSERT. Large enough that a six-figure repo is a few hundred
+# round trips instead of 157k, small enough to stay well inside MySQL's
+# default 64MB max_allowed_packet even when every row carries a long
+# issue_text and code snippet.
+FINDING_INSERT_BATCH = 500
+
+
 def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk,
                llm_text=None, llm_status=None):
     db     = get_db()
@@ -722,23 +729,42 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
         cursor.execute("DELETE FROM scan_results WHERE repo_id=%s", (repo_id,))
         cursor.execute("DELETE FROM risk_scores   WHERE repo_id=%s", (repo_id,))
 
-        db.commit()
-
-        # Save each finding
-        for f in findings:
-            cursor.execute("""
+        # No commit here, deliberately. There used to be one, which made the
+        # upsert and the two DELETEs durable before a single finding had been
+        # written -- so any failure in the inserts below left the repository
+        # row present with no findings and no risk_scores row. That does not
+        # surface as an error anywhere: it renders as a clean, Safe repo. A
+        # false clean is the worst result a security scanner can produce, and
+        # it has happened at least once already (CrackMapExec).
+        #
+        # Everything from the upsert to scan_history is now one transaction,
+        # so a failed scan leaves the previous scan's results untouched
+        # rather than destroying them. InnoDB's MVCC means readers keep
+        # seeing the old complete scan until this commits, which is also
+        # better for the web UI during a rescan than briefly seeing none.
+        #
+        # Inserted in batches rather than row by row because the transaction
+        # is now held open across all of them, and the largest repo in the
+        # corpus has ~157k findings -- one round trip each would hold it open
+        # for minutes. The batch size bounds the packet, not the transaction.
+        rows = [
+            (repo_id,
+             _fit_varchar(f["tool"], 50),
+             _fit_varchar(f["severity"], 20),
+             f.get("p_real"),
+             _fit_text(f["issue_text"]),
+             _fit_varchar(f["filename"], 500),
+             f.get("line_number", 0),
+             _fit_text(f.get("code_snippet", "")))
+            for f in findings
+        ]
+        for start in range(0, len(rows), FINDING_INSERT_BATCH):
+            cursor.executemany("""
                 INSERT INTO scan_results
                     (repo_id, tool, severity, confidence, issue_text,
                      filename, line_number, code_snippet)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (repo_id,
-                  _fit_varchar(f["tool"], 50),
-                  _fit_varchar(f["severity"], 20),
-                  f.get("p_real"),
-                  _fit_text(f["issue_text"]),
-                  _fit_varchar(f["filename"], 500),
-                  f.get("line_number", 0),
-                  _fit_text(f.get("code_snippet", ""))))
+            """, rows[start:start + FINDING_INSERT_BATCH])
 
         # Save risk score — high_count/medium_count/low_count/final_score/
         # risk_level stay as the blended "overall" figure (kept only for
