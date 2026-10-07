@@ -1,0 +1,37 @@
+# Repos still carrying their original 2026-07-29 scan, and the two
+# problems that scan left behind:
+#
+#   * 389 findings whose code_snippet is the literal string "requires login"
+#     -- semgrep withholds the matched line when not logged in, and these
+#     predate `semgrep login`.
+#   * 1,513 findings with semgrep's own severities (error/warning/info)
+#     stored raw, before normalize_severity() was applied. SEVERITY_WEIGHT has
+#     no entry for those, so they are weighted as 1 -- a semgrep "error",
+#     its highest level, currently counts the same as a "low". This one
+#     affects risk SCORES, not just what is displayed.
+#
+# Neither can be repaired in place: the snippet was never captured, and the
+# severity was never normalised. Only a full rescan fixes them.
+#
+#   python3 batch_scan.py rescan_stale_july.txt --resume
+#
+# Smallest first, so the long tail (home-assistant/core, ~157k findings) runs
+# last and an interrupted run has already fixed most of the list.
+lutfilhadimohdafez/parkingSystem
+adminlove520/Poc-Monitor_v1.0.1
+juliocesarfort/public-pentesting-reports
+envoyproxy/ai-gateway
+tikv/pd
+parti-renaissance/espace-adherent
+The-Art-of-Hacking/h4cker
+stamparm/maltrail
+Yu9191/Rewrite
+vxunderground/MalwareSourceCode
+department-of-veterans-affairs/vets-website
+pass-culture/pass-culture-main
+GitHubSecurityLab/seclab-taskflow-agent
+hongbo-miao/hongbomiao.com
+vivekchand/clawmetry
+cbcoutinho/nextcloud-mcp-server
+mlflow/mlflow
+home-assistant/core

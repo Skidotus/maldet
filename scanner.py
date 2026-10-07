@@ -788,9 +788,14 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
               # page never shows a spinner for a scan that will not produce
               # one. llm_summary.is_available() checks Ollama is reachable
               # and has the model, not merely that it is not disabled.
+              # Defaults to "unavailable", NOT "pending". Only a caller that
+              # will actually generate the summary may claim one is coming --
+              # worker.py sets "pending" itself just before it starts. A
+              # default of "pending" stranded every caller that does not
+              # generate (batch_scan.py, a direct scan_repo()) with a row the
+              # detail page spins on until a worker restart clears it.
               llm_status if llm_status is not None else
-              ("done" if llm_text else
-               ("pending" if llm_summary.is_available() else "unavailable"))))
+              ("done" if llm_text else "unavailable")))
 
         # Save to history
         cursor.execute("""

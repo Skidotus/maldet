@@ -48,6 +48,27 @@ def _handle_stop(signum, frame):
     print("\n[worker] stop requested; finishing current scan then exiting", flush=True)
 
 
+def _mark_pending(repo_id):
+    """Say a summary is coming, if one actually is. True when claimed.
+
+    is_available() checks Ollama is reachable and has the model, not merely
+    that it is not disabled -- so the detail page never shows a spinner for a
+    scan that will not produce a summary.
+    """
+    if not llm_summary.is_available():
+        return False
+    try:
+        db = connect(autocommit=True)
+        try:
+            db.cursor().execute("""UPDATE risk_scores SET llm_summary_status = 'pending'
+                                   WHERE repo_id = %s""", (repo_id,))
+        finally:
+            db.close()
+        return True
+    except Exception:
+        return False
+
+
 def _write_summary(repo_id, repo_label, label):
     """Generate this repo's plain-English summary, after the scan is done.
 
@@ -160,14 +181,20 @@ def run_forever(recover=True, label="worker"):
                 job["archive_password"] or "infected",
                 on_progress=lambda stage, _id=job["id"]: job_queue.set_stage(_id, stage),
             )
+            # Claim the summary before marking the job finished, not after:
+            # finishing is what sends the visitor to the results page, and if
+            # the row still said "unavailable" at that moment the page would
+            # render without a placeholder and never poll.
+            expecting = _mark_pending(result["repo_id"])
+
             job_queue.finish(job["id"], result["repo_id"])
             print(f"[{label}] done {job['repo']} in {time.time()-started:.0f}s", flush=True)
 
-            # The summary runs after the job is marked finished, so the
-            # visitor reaches the results page as soon as the scan is done
-            # rather than waiting another 20-60s for CPU generation. The page
-            # shows a placeholder until this lands.
-            _write_summary(result["repo_id"], job["repo"], label)
+            # Generated after the job is finished, so the visitor reaches the
+            # results page as soon as the scan is done rather than waiting
+            # another 20-60s for CPU generation.
+            if expecting:
+                _write_summary(result["repo_id"], job["repo"], label)
         except Exception as e:
             # Every failure must land in the row, or the visitor's status page
             # spins forever on a job nobody is working on.
