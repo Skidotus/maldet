@@ -4,6 +4,30 @@
 
 {% block content %}
 
+  {# A scan is a snapshot, and the repository it describes can change or
+     disappear afterwards. Saying so here is the whole point of
+     repositories.source_status: without it the page presents months-old
+     findings for a repository that no longer exists as if they were
+     current, which is the one thing a security tool must not do. #}
+  {% if repo.source_status == 'gone' %}
+    <div class="alert app-alert alert-danger-ledger mb-4" role="alert">
+      <strong>This repository is no longer available on GitHub.</strong>
+      It has been deleted or made private since it was scanned, so these
+      findings cannot be refreshed or re-checked. Treat them as a record of
+      what was there on
+      {{ repo.scanned_at.strftime('%d %b %Y') if repo.scanned_at else 'the scan date' }},
+      not as a description of anything you can go and look at today.
+    </div>
+  {% elif repo.source_status == 'renamed' %}
+    <div class="alert app-alert alert-danger-ledger mb-4" role="alert">
+      <strong>This repository has been renamed or transferred.</strong>
+      GitHub now serves it under a different name, so these findings are the
+      superseded original from
+      {{ repo.scanned_at.strftime('%d %b %Y') if repo.scanned_at else 'the scan date' }}.
+      The current scan is stored separately, under the new name.
+    </div>
+  {% endif %}
+
   <div class="repo-header mb-4">
     <div>
       <h1 class="h3 mb-0">{{ repo.repo_name }}</h1>
@@ -18,7 +42,13 @@
       </div>
     </div>
     <div class="repo-header__actions">
-      <a href="{{ url_for('rescan', repo_id=repo.id) }}" class="btn btn-outline-parchment" id="rescanBtn">
+      {# Offering Rescan on a repository that returns 404 just queues a scan
+         that is certain to fail. #}
+      <a href="{{ url_for('rescan', repo_id=repo.id) }}"
+         class="btn btn-outline-parchment{% if repo.source_status == 'gone' %} disabled{% endif %}"
+         {% if repo.source_status == 'gone' %}aria-disabled="true" tabindex="-1"
+         title="This repository is no longer on GitHub, so it cannot be rescanned."{% endif %}
+         id="rescanBtn">
         <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Rescan
       </a>
       <span class="seal-badge seal-{{ risk.vuln_level | lower }} align-self-center" title="Vulnerability">{{ risk.vuln_level }}</span>

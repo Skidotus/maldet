@@ -19,6 +19,21 @@ CREATE TABLE IF NOT EXISTS repositories (
     stars        INT,
     last_pushed  DATETIME,
     scanned_at   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Whether this repository still exists on GitHub as scanned. A scan is
+    -- a snapshot, and repositories are controlled by other people: checked
+    -- 2026-10-07, 4 of 179 had been deleted or made private and 1 renamed,
+    -- all since 2026-09-19. Their findings can never be refreshed, so
+    -- without a flag the UI shows months-old results as current and any
+    -- corpus-wide figure silently includes repos that no longer exist.
+    --   NULL / 'live'  still there (the normal case)
+    --   'gone'         404 to an authenticated request; frozen forever
+    --   'renamed'      now answers under a different full_name; the fresh
+    --                  scan lives under that name and this row is the
+    --                  superseded original
+    -- Rows are flagged rather than deleted on purpose: one of them holds a
+    -- hand-labelled finding from eval_sample.json, and those 168 labels are
+    -- the basis of the only real precision/recall figure this project has.
+    source_status VARCHAR(12) NULL,
     -- Without this, save_to_db()'s upsert (INSERT ... ON DUPLICATE KEY
     -- UPDATE) can't detect an existing repo at all, and every scan inserts
     -- a new row — this is exactly the bug that produced ~45 duplicate
