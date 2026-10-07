@@ -48,12 +48,23 @@ def get_repo_info(repo):
 #Clone repo
 
 # Scans run in a worker process, so a longer timeout no longer means a longer
-# blocked request. 300s was too short for the corpus as it actually is: the
-# 2026-10-07 rescan lost three repos to it, all of them simply big --
-# vxunderground/MalwareSourceCode is 2,172MB, mlflow/mlflow 1,457MB and
-# juliocesarfort/public-pentesting-reports 719MB, per the GitHub API. A
-# shallow clone still has to transfer the working tree, and 2GB does not
-# arrive in five minutes.
+# blocked request. Raised from 300s after the 2026-10-07 rescan lost three
+# large repos to it -- though 900s did not save them either, and the reason
+# is worth recording because it is not the obvious one.
+#
+# Measured while one of those clones was running: the link sustained
+# ~613 KB/s to a CDN, while the clone itself averaged ~36 KB/s, 15x slower,
+# and an earlier attempt transferred zero bytes in 120s. The GitHub API
+# reported the token at its full 5000/5000, so this is not rate limiting
+# either. What is left is server-side pack generation -- git waits, nothing
+# arrives, and a byte-rate average across the stall says nothing useful
+# about the link. 719MB at the measured link speed would be ~20 minutes, so
+# the transfer is not the problem.
+#
+# 900s is therefore a compromise, not a derived figure: long enough to
+# absorb a bounded stall, short enough that a worker is not held for an
+# hour. The three repos that still fail (719MB, 1,457MB, 2,172MB) need a
+# different approach, not a bigger number -- see NOTES.md.
 CLONE_TIMEOUT = int(os.environ.get("MALDET_CLONE_TIMEOUT", "900"))
 
 def clone_repo(repo):

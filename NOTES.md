@@ -461,11 +461,30 @@ failed for three, and only one of the three is fixable.
     catch it either — that cleans duplicates of the *same* name, and these
     are two names for one repository.
 
-  - **Too large to clone in the time allowed — 3 repos, fixable.**
-    `vxunderground/MalwareSourceCode` (2,172MB), `mlflow/mlflow` (1,457MB)
-    and `juliocesarfort/public-pentesting-reports` (719MB), sizes from the
-    API. `CLONE_TIMEOUT` was 300s, and a shallow clone still has to transfer
-    the working tree. Raised to 900s and env-overridable; retried.
+  - **Cannot be cloned here at all — 3 repos, and not for the reason it
+    looks like.** `vxunderground/MalwareSourceCode` (2,172MB),
+    `mlflow/mlflow` (1,457MB) and
+    `juliocesarfort/public-pentesting-reports` (719MB), sizes from the API.
+    All three failed a 300s clone timeout, and all three failed again at
+    900s.
+
+    The obvious diagnosis — "big repo, slow link, raise the timeout" — is
+    wrong, which is worth knowing before anyone raises it a third time.
+    Measured during one of the failing clones: the link sustained ~613 KB/s
+    to a CDN *while the clone was competing with it*, and the clone itself
+    averaged ~36 KB/s, fifteen times slower; an earlier attempt transferred
+    zero bytes in 120 seconds. The GitHub token was at its full 5000/5000,
+    so not rate limiting. The time is going into server-side pack
+    generation, during which nothing transfers — 719MB at the measured link
+    speed would be about twenty minutes, so the transfer itself is not the
+    constraint.
+
+    So these three are a decision rather than a fix: run them unattended
+    with a much larger ceiling (hours, outcome uncertain), or accept that
+    repositories of this size are out of reach in this environment and say
+    so. They hold 390 of ~223,000 findings, so the scoring impact of leaving
+    them is marginal. `CLONE_TIMEOUT` is 900s and env-overridable
+    (`MALDET_CLONE_TIMEOUT`) either way.
 
   Worth stating in the report as a limitation of corpus-based evaluation
   rather than a defect: 5 of 18 in three weeks is a ~28% churn rate on an
