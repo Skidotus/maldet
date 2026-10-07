@@ -427,37 +427,154 @@ follows from that number.
   five minutes after a scan, not generation itself, that crossed the
   threshold.
 
+## What's improved (2026-10-07 — rescan, and what the corpus does on its own)
+
+The rescan NOTES has been owing since 2026-09-14 finally ran, against the 18
+repos still carrying their original 2026-07-29 scan. It cleared 10 of them.
+The other 8 are the interesting part: they did not fail for one reason, they
+failed for three, and only one of the three is fixable.
+
+- **The corpus decays while you are not looking.** `malware_repos.txt` records
+  every entry as confirmed live against the GitHub API on 2026-09-19. Three
+  weeks later, five of the 18 could no longer be rescanned as themselves.
+  Three distinct mechanisms, which matters because they fail differently:
+
+  - **Deleted or made private — 4 repos, permanent.**
+    `department-of-veterans-affairs/vets-website`, `Yu9191/Rewrite`,
+    `parti-renaissance/espace-adherent`, `adminlove520/Poc-Monitor_v1.0.1`.
+    All four return HTTP 404 to an authenticated API request; verified
+    individually rather than inferred from the scan error. Their 349
+    withheld snippets and 349 un-normalised severities cannot be repaired by
+    any amount of rescanning, because the source no longer exists. This is
+    the honest answer to "why is some of your data stale": not neglect, but
+    a corpus built from repositories other people control.
+
+  - **Renamed or transferred — 1 repo, and this one is quiet.**
+    `envoyproxy/ai-gateway` is now `theagentrouter/agent-router`. The GitHub
+    API follows the redirect and answers HTTP 200 with the *new* full_name,
+    so `get_repo_info()` is handed a different owner and name than it asked
+    for, `save_to_db()` upserts on the key it was given, and a second row
+    appears (id 294) while the original (id 72) keeps its July findings
+    forever. The batch log recorded `OK envoyproxy/ai-gateway` for a scan of
+    something else. A 404 fails loudly; a rename succeeds under another name
+    and leaves an orphan, which is worse. `dedupe_repositories.py` does not
+    catch it either — that cleans duplicates of the *same* name, and these
+    are two names for one repository.
+
+  - **Too large to clone in the time allowed — 3 repos, fixable.**
+    `vxunderground/MalwareSourceCode` (2,172MB), `mlflow/mlflow` (1,457MB)
+    and `juliocesarfort/public-pentesting-reports` (719MB), sizes from the
+    API. `CLONE_TIMEOUT` was 300s, and a shallow clone still has to transfer
+    the working tree. Raised to 900s and env-overridable; retried.
+
+  Worth stating in the report as a limitation of corpus-based evaluation
+  rather than a defect: 5 of 18 in three weeks is a ~28% churn rate on an
+  arbitrary slice, and any figure computed over the corpus is a figure over
+  the corpus *as it was when scanned*.
+
+- **A failed scan no longer reports a repo as clean.** `save_to_db()`
+  committed the repositories upsert and both DELETEs before writing a single
+  finding, so a failure in the inserts left the row present with no findings
+  and no risk_scores row — which renders as Safe, not as an error. The
+  intermediate commit is gone and the whole save is one transaction, so a
+  failed rescan leaves the previous results intact. The objection NOTES
+  raised against doing this (157k findings in one transaction) is answered by
+  batching with `executemany`: 20,000 synthetic findings in 0.5s, ~38,700
+  rows/second, so the largest repo is about four seconds inside the
+  transaction. Verified by saving three findings, then saving again with one
+  deliberately unserialisable finding, and confirming the original three
+  survived.
+
+- **The summariser has a number now, and the number is about the checks.**
+  `evaluate_summaries.py` scores a stratified sample against eight
+  mechanical checks (fabricated numbers, invented scales, fabricated
+  filenames, fabricated advisory ids, fabricated tool names, risk-level
+  contradiction, and four format rules). First real run, 20 repos,
+  qwen3.5:2b: 19 produced a summary and **17 passed everything — 89%**. Both
+  failures were six sentences where the prompt asks for three to five, read
+  and confirmed as genuine rather than a splitter artifact.
+
+  The run's real finding was in the checker, twice. It first reported 68%,
+  flagging four summaries for fabricated numbers — all four being the prompt
+  stating "291.0" and the model writing "291". And the contradiction check,
+  on its first run, flagged two summaries that were saying the opposite of
+  what it claimed: "need immediate attention *before* it can be used safely"
+  matched "can be used safely", and "some signs of *potentially* malicious
+  intent" matched "malicious intent". Both corrections went towards
+  precision, because a checker that flags correct output gets ignored and
+  then catches nothing. **The first thing a measurement catches is usually
+  the measurement** — which is a better sentence for the report than a clean
+  score would have been.
+
+- **The summary no longer blocks the results.** It used to run inside
+  `scan_repo()` between scoring and saving. A nishang scan is 48s and its
+  summary another 88s, so nearly two thirds of the wait was a paragraph. The
+  scan now saves and returns, the worker generates afterwards, and the detail
+  page shows a placeholder with the rule-based summary beneath it until the
+  real one arrives. Three independent ways it stops waiting, because a
+  spinner that never resolves is worse than no spinner: the worker marks the
+  row unavailable on failure, a dead worker's "pending" rows are released at
+  the next startup, and the page gives up after four minutes.
+
+- **Four grouping bugs, found by building a second implementation.** The
+  SQL-side aggregation in `backfill_summaries.py` does the same job as
+  `llm_summary._rank_groups()`, so the two were diffed across all 162 scored
+  repos — every disagreement was a defect. Two were pre-existing and had been
+  live since the feature shipped: a group's severity could be *downgraded*
+  by a less-severe finding the classifier was more confident about (the
+  comment claimed to break ties on confidence; the code used `or`, which does
+  not), and equal-scoring groups were ordered by whatever order the findings
+  happened to arrive in, so 21 of 162 repos selected a different top 15
+  depending on the path taken. Two were new: a stored confidence of 0.0 read
+  as 1.0 through `x or 1.0`, inverting "certainly noise" into "certainly
+  real", and MySQL's case-insensitive collation merging 17 issue_texts that
+  Python keeps apart — "Possible hardcoded password: 'abc'" with "...'ABC'".
+  Both paths now build a byte-identical prompt for 161 of 162 repos and
+  select the same top 15 for all 162.
+
 ## What needs improvement (near-term, actionable)
 
-- **Full rescan of the corpus (now 178 repos)**, which two separate problems
-  now require: the findings the IGNORE_PATHS bug discarded (particularly
-  `Dockerfile`/`docker-compose.yml`), and the 12,238 Semgrep findings whose
-  code snippet reads `requires login`. `rescan_yara_dep.py` won't do either,
-  since both losses are in Bandit/Semgrep output. The 105 repos affected by
-  the snippet problem are listed in `rescan_requires_login.txt`; at a mean
-  78s per repo that run alone is 2-4 hours, so it stays an overnight job —
-  and one to run when nothing else needs the memory.
-- **Make `save_to_db()` atomic.** It commits the `repositories` row before
-  inserting findings, so any failure during the findings loop leaves a repo
-  row with no findings and no risk score — which renders as a clean, Safe
-  repo rather than a failure. This actually happened (CrackMapExec, above).
-  Dropping the intermediate commit would fix it; the reason to think before
-  doing so is that the largest repo in the corpus has ~157K findings, and
-  that becomes one very large transaction.
+- **Mostly done 2026-10-07: the rescan ran.** 12,238 `requires login`
+  findings are down to 389 and the un-normalised severities from 1,513 to
+  779, all of the remainder sitting in 8 repos. Of those, 4 are permanently
+  unfixable (deleted or private, HTTP 404) and 1 was renamed out from under
+  the corpus; see the 2026-10-07 section. What is left to finish is the
+  3 that only failed on a 300s clone timeout, now 900s —
+  `vxunderground/MalwareSourceCode`, `mlflow/mlflow` and
+  `juliocesarfort/public-pentesting-reports`, none under 700MB, so an
+  overnight job when nothing else needs the memory. Use
+  `rescan_stale_july.txt`, which is ordered smallest first.
+- **Done 2026-10-07: `save_to_db()` is atomic.** One transaction from the
+  upsert to the history row, with findings inserted in batches of 500 so the
+  157K-finding repo is ~4 seconds inside it rather than minutes. See the
+  2026-10-07 section for the verification.
+- **Handle renamed repositories.** The GitHub API answers a renamed repo with
+  HTTP 200 and the *new* full_name, so `get_repo_info()` returns an owner and
+  name that differ from the ones requested, and `save_to_db()` writes a
+  second row while the original keeps its old findings. Comparing the
+  API's `full_name` against the requested slug would catch it; what to do
+  then is a decision, not a bug fix — update the original row, or record the
+  redirect and retire the old one. Until then, scanning a renamed repo
+  silently produces an orphan, which is how `envoyproxy/ai-gateway` and
+  `theagentrouter/agent-router` both exist in the corpus.
+- **Decide what to do with the 4 dead repositories.** They will misreport
+  permanently. Either drop them, taking the corpus to 175 and saying why, or
+  keep them flagged as frozen at their 2026-07-29 scan. Keeping them is
+  defensible if documented; leaving them silently is not.
 - **Automated tests.** Route smoke tests plus unit tests over
   `is_ignored_path()`, `_parse_pep508_name_version()`, `normalize_severity()`
   and now `_fit_text()`/`_fit_varchar()` — the places where a silent logic bug
   has already happened at least once each.
 - **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
   Python and Node are covered.
-- **Evaluate the summariser properly, or stop describing it as evaluated.**
-  The model was picked by reading output for two repositories, which is
-  enough to choose a default and not enough for the report to claim a
-  method. A defensible version: ~20 repos spanning the risk levels, with the
-  checks scripted rather than eyeballed — does the summary contain strings
-  absent from the prompt, does it contradict the stated risk level, does it
-  obey the format. The infrastructure to do this already exists, since
-  summaries can be generated from stored findings without rescanning.
+- **Done 2026-10-07: the summariser is evaluated.** `evaluate_summaries.py`,
+  20 repos stratified across the risk levels, eight mechanical checks:
+  17 of 19 clean, 89%, both failures being sentence count. `summary_eval.json`
+  holds the run so the figure can be cited. `--rescore` re-judges a saved run
+  without regenerating, which is what made correcting two faulty checks
+  cheap. Quote the 89% with the sample size and the model, and say that two
+  of the eight checks had to be corrected before the number meant anything.
+
 - **Resolved 2026-09-23: Ollama stays out of docker-compose.** A model
   container plus a ~2GB volume does not fit the 4GB VPS alongside a 2GB
   semgrep, so `MALDET_OLLAMA_DISABLE=1` is the compose default and the
@@ -478,6 +595,15 @@ follows from that number.
 
 - **Public-repo-only, no-auth, single-user, local tool** — this is a
   permanent design constraint per PRODUCT.md, not a gap to close.
+- **The corpus decays, and some of it is unrecoverable.** Repositories are
+  controlled by other people: between 2026-09-19 and 2026-10-07, four of the
+  corpus were deleted or made private (HTTP 404) and one was renamed. The
+  404s can never be rescanned, so their findings are permanently frozen at
+  whatever the 2026-07-29 scan captured — including 349 findings whose code
+  snippet reads `requires login`. Any metric computed over the corpus is a
+  metric over the corpus as it was when scanned, and the scan dates differ
+  per repo. Report the dates alongside the numbers.
+
 - **No real concurrency.** Even with background execution, there's no job
   queue — only one scan realistically runs at a time.
 - **Weak-supervised ML is inherently bounded.** *Training* labels are still
