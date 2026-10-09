@@ -1,0 +1,278 @@
+{# A report, not an app page: extends nothing and carries its own styles,
+   because this same file is what WeasyPrint turns into the PDF. An external
+   stylesheet would need a working base_url, and any JavaScript would simply
+   not run, so everything the document needs is here. The palette and type
+   stacks mirror static/css/style.css so the two read as one product. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MalDet report — {{ repo.owner }}/{{ repo.repo_name }}</title>
+<style>
+  /* Paged media: margins and a footer with page numbers, which is the one
+     thing a printed report is always judged on. */
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+    @bottom-left  { content: "MalDet — {{ repo.owner }}/{{ repo.repo_name }}";
+                    font-family: Georgia, serif; font-size: 8pt; color: #5a625b; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages);
+                    font-family: Georgia, serif; font-size: 8pt; color: #5a625b; }
+  }
+
+  :root {
+    --ink: #0f1a14; --muted: #5a625b; --line: #e3e0d6;
+    --surface-2: #f8f6f0; --green: #1f5f43; --green-tint: #e7efe8;
+    --safe: #1f7a3d; --low: #2d6b8f; --medium: #8a6410; --high: #a3521f; --critical: #a8372a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink); background: #fff;
+    font-size: 10.5pt; line-height: 1.55;
+    margin: 0 auto; padding: 24px; max-width: 820px;
+  }
+  h1, h2, h3 { font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif; font-weight: 600; }
+  h1 { font-size: 21pt; line-height: 1.2; margin: 0 0 2px; letter-spacing: -0.01em; }
+  h2 { font-size: 13pt; margin: 26px 0 10px; padding-bottom: 5px; border-bottom: 1.5px solid var(--ink); }
+  h3 { font-size: 11pt; margin: 18px 0 6px; }
+  p  { margin: 0 0 9px; }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 8.6pt; }
+
+  /* Keep headings with their content and never split a table row. */
+  h2, h3 { break-after: avoid; }
+  tr, .keep { break-inside: avoid; }
+  section { break-inside: auto; }
+
+  .masthead { border-bottom: 2.5px solid var(--ink); padding-bottom: 12px; margin-bottom: 4px; }
+  .masthead .product { font-family: "IBM Plex Serif", Georgia, serif; font-size: 8.5pt;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin: 0 0 6px; }
+  .masthead .slug { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10pt; color: var(--muted); }
+  .masthead .dates { font-size: 8.8pt; color: var(--muted); margin-top: 8px; }
+
+  /* The verdict is the one thing a non-technical reader must not miss, so it
+     gets the only heavy block on the page. */
+  .verdict { margin: 18px 0 4px; padding: 14px 16px; background: var(--surface-2);
+             border-left: 5px solid var(--ink); }
+  .verdict .label { font-size: 8.5pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .verdict .level { font-family: "IBM Plex Serif", Georgia, serif; font-size: 19pt; line-height: 1.1; }
+  .verdict .score { font-size: 9pt; color: var(--muted); }
+
+  .lvl-safe{color:var(--safe)} .lvl-low{color:var(--low)} .lvl-medium{color:var(--medium)}
+  .lvl-high{color:var(--high)} .lvl-critical{color:var(--critical)}
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; }
+  th, td { text-align: left; padding: 5px 7px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 8.3pt; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+       border-bottom: 1.5px solid var(--ink); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr:nth-child(even) { background: #fbfaf7; }
+
+  .axes { display: table; width: 100%; border-spacing: 10px 0; margin-left: -10px; }
+  .axis { display: table-cell; width: 50%; border: 1px solid var(--line); padding: 11px 13px; }
+  .axis .name { font-size: 8.5pt; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .axis .val  { font-family: "IBM Plex Serif", Georgia, serif; font-size: 15pt; line-height: 1.2; }
+  .axis .what { font-size: 8.8pt; color: var(--muted); margin-top: 5px; }
+
+  .summary { background: var(--green-tint); border-left: 4px solid var(--green); padding: 12px 14px; }
+  .summary .attrib { font-size: 8.3pt; color: var(--muted); border-top: 1px solid rgba(0,0,0,.09);
+                     padding-top: 6px; margin-top: 8px; }
+
+  .sev { font-size: 8.3pt; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
+  .note { font-size: 8.8pt; color: var(--muted); font-style: italic; }
+  .caveats li { margin-bottom: 5px; font-size: 9.3pt; }
+  .warn { border-left: 4px solid var(--critical); background: #fdf3f1; padding: 11px 13px; margin: 14px 0; }
+
+  /* Download bar: screen only. In the PDF it would print as dead buttons. */
+  .actions { margin: 0 0 22px; padding: 13px 15px; border: 1px solid var(--line);
+             background: var(--surface-2); display: flex; gap: 10px; align-items: center;
+             flex-wrap: wrap; }
+  .actions .grow { flex: 1 1 auto; min-width: 180px; font-size: 9.3pt; color: var(--muted); }
+  .btn { display: inline-block; padding: 8px 15px; border: 1px solid var(--green);
+         background: var(--green); color: #fff; text-decoration: none; font-size: 9.6pt;
+         font-weight: 500; }
+  .btn.alt { background: #fff; color: var(--green); }
+  @media print { .actions { display: none; } body { padding: 0; max-width: none; } }
+</style>
+</head>
+<body>
+
+{% if not for_pdf %}
+  <div class="actions">
+    <span class="grow">Check the report below, then download or share it.</span>
+    <a class="btn" href="{{ url_for('report_pdf', repo_id=repo.id) }}"
+       download="MalDet-{{ repo.owner }}-{{ repo.repo_name }}-{{ generated_at.strftime('%Y-%m-%d') }}.pdf">
+       Download PDF</a>
+    <a class="btn alt" href="{{ url_for('report_pdf', repo_id=repo.id) }}" target="_blank"
+       rel="noopener">Open PDF</a>
+    <a class="btn alt" href="{{ url_for('detail', repo_id=repo.id) }}">Back to results</a>
+  </div>
+{% endif %}
+
+<header class="masthead">
+  <p class="product">MalDet · Static Security Report</p>
+  <h1>{{ repo.repo_name }}</h1>
+  <div class="slug">github.com/{{ repo.owner }}/{{ repo.repo_name }}</div>
+  <div class="dates">
+    Scanned {{ repo.scanned_at.strftime('%d %B %Y at %H:%M') if repo.scanned_at else 'date unknown' }}
+    &nbsp;·&nbsp; Report generated {{ generated_at.strftime('%d %B %Y') }}
+    {%- if repo.language %} &nbsp;·&nbsp; {{ repo.language }}{% endif %}
+    {%- if repo.stars is not none %} &nbsp;·&nbsp; {{ "{:,}".format(repo.stars) }} stars{% endif %}
+  </div>
+</header>
+
+{# A report that describes a repository nobody can look at any more has to say
+   so on the first page, not in a footnote. #}
+{% if repo.source_status == 'gone' %}
+  <div class="warn keep">
+    <strong>This repository is no longer available on GitHub.</strong>
+    It was deleted or made private after this scan, so these findings cannot be
+    re-verified. Read them as a record of what the repository contained on
+    {{ repo.scanned_at.strftime('%d %B %Y') if repo.scanned_at else 'the scan date' }}.
+  </div>
+{% elif repo.source_status == 'renamed' %}
+  <div class="warn keep">
+    <strong>This repository has since been renamed or transferred.</strong>
+    GitHub now serves it under a different name, so this report describes the
+    repository as it stood at the scan date under its former name.
+  </div>
+{% endif %}
+
+{% if risk %}
+<div class="verdict keep">
+  <div class="label">Overall assessment</div>
+  <div class="level lvl-{{ (risk.risk_level or 'safe')|lower }}">{{ risk.risk_level or 'Unknown' }}</div>
+  <div class="score">Combined score {{ risk.final_score|round|int if risk.final_score is not none else '—' }}
+    &nbsp;·&nbsp; {{ "{:,}".format(total) }} findings after filtering</div>
+</div>
+{% endif %}
+
+<section>
+  <h2>Summary</h2>
+  {% if summary %}
+    <div class="summary keep">
+      <p style="margin-bottom:0">{{ summary }}</p>
+      <p class="attrib">Written by a language model running locally on the scanning
+        machine, from the findings in this report. The risk levels above and below were
+        decided by the scoring model, not by this summary.</p>
+    </div>
+  {% else %}
+    <p>{{ fallback_summary }}</p>
+    <p class="note">Generated from finding counts. A plain-English summary was not
+      available for this scan.</p>
+  {% endif %}
+</section>
+
+{% if risk %}
+<section>
+  <h2>Risk, by type</h2>
+  <p>MalDet scores two different questions separately, because they call for
+     different responses: code can be badly written without being hostile, and
+     hostile code is not always badly written.</p>
+  <div class="axes keep">
+    <div class="axis">
+      <div class="name">Vulnerability</div>
+      <div class="val lvl-{{ (risk.vuln_level or 'safe')|lower }}">
+        {{ risk.vuln_level or '—' }}
+        <span style="font-size:9.5pt;color:var(--muted)">
+          ({{ risk.vuln_score|round|int if risk.vuln_score is not none else '—' }})</span>
+      </div>
+      <div class="what">Insecure coding an attacker could exploit. Usually mistakes,
+        and usually fixable in place.</div>
+    </div>
+    <div class="axis">
+      <div class="name">Malicious pattern</div>
+      <div class="val lvl-{{ (risk.malware_level or 'safe')|lower }}">
+        {{ risk.malware_level or '—' }}
+        <span style="font-size:9.5pt;color:var(--muted)">
+          ({{ risk.malware_score|round|int if risk.malware_score is not none else '—' }})</span>
+      </div>
+      <div class="what">Signs the code may be trying to do harm: hidden payloads,
+        credential access, persistence, exfiltration.</div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section>
+  <h2>What each detector found</h2>
+  <table>
+    <thead><tr>
+      <th>Detector</th><th>Looks for</th>
+      <th class="num">High</th><th class="num">Medium</th><th class="num">Low</th><th class="num">Total</th>
+    </tr></thead>
+    <tbody>
+      {% for t in by_tool %}
+      <tr>
+        <td><strong>{{ t.tool }}</strong></td>
+        <td style="font-size:9pt;color:var(--muted)">{{ t.purpose }}</td>
+        <td class="num">{{ t.high }}</td>
+        <td class="num">{{ t.medium }}</td>
+        <td class="num">{{ t.low }}</td>
+        <td class="num"><strong>{{ "{:,}".format(t.total) }}</strong></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No findings were recorded for this repository.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">{{ "{:,}".format(likely_real) }} of {{ "{:,}".format(total) }} findings
+    were rated more likely genuine than noise by the classifier.</p>
+</section>
+
+{% if evidence %}
+<section>
+  <h2>Evidence</h2>
+  <p>Identical findings are grouped, so a single rule firing many times takes one
+     row. Ordered worst first. “Seen” is how many times that finding occurred.</p>
+  <table>
+    <thead><tr>
+      <th>Severity</th><th>Detector</th><th>Finding</th><th class="num">Seen</th><th>Example location</th>
+    </tr></thead>
+    <tbody>
+      {% for e in evidence %}
+      <tr>
+        <td><span class="sev lvl-{{ e.severity }}">{{ e.severity }}</span></td>
+        <td style="font-size:9pt">{{ e.tool }}</td>
+        <td>{{ e.issue_text }}</td>
+        <td class="num">{{ e.occurrences }}</td>
+        <td class="mono" style="word-break:break-all">
+          {{ e.example_file or '—' }}{% if e.example_line %}:{{ e.example_line }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if group_total > shown %}
+    <p class="note">Showing the {{ shown }} most significant of {{ "{:,}".format(group_total) }}
+      distinct findings. The counts in the previous section cover all of them.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section>
+  <h2>How to read this report</h2>
+  <ul class="caveats">
+    <li><strong>This is a static scan.</strong> The code was read, never executed.
+      Behaviour that only appears at runtime is outside what any of these detectors
+      can see.</li>
+    <li><strong>Findings are not all equally real.</strong> A classifier rates each
+      finding on how likely it is to be genuine rather than noise, and that rating
+      weights the scores. Measured against a hand-reviewed sample it reached
+      precision 0.52 and recall 0.62 — useful for ranking, not a verdict on any
+      single finding.</li>
+    <li><strong>A high score is not proof of malice.</strong> Security tools,
+      penetration-testing frameworks and malware research repositories contain the
+      same patterns as real malware by design. The two risk types above exist to
+      keep that distinction visible.</li>
+    <li><strong>Absence of findings is not proof of safety.</strong> A detector that
+      is not installed, or a language none of them parse, produces silence rather
+      than a warning.</li>
+    <li><strong>This scan is a snapshot.</strong> The repository may have changed
+      since {{ repo.scanned_at.strftime('%d %B %Y') if repo.scanned_at else 'the scan date' }}.</li>
+  </ul>
+</section>
+
+</body>
+</html>
