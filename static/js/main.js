@@ -1,5 +1,23 @@
 // MalDet — shared front-end behavior
 
+// Scroll reveal. Content is only hidden once this runs, so without JS (or
+// with reduced motion, handled in CSS) every section is simply visible.
+(function () {
+  if (!('IntersectionObserver' in window)) { return; }
+  document.documentElement.classList.add('js-reveal');
+  document.addEventListener('DOMContentLoaded', function () {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  });
+})();
+
 document.addEventListener('DOMContentLoaded', function () {
   var scanForm = document.getElementById('scanForm');
   var scanSubmitBtn = document.getElementById('scanSubmitBtn');
@@ -8,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function () {
     scanForm.addEventListener('submit', function () {
       scanSubmitBtn.disabled = true;
       scanSubmitBtn.innerHTML =
-        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Scanning…';
+        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Queuing scan…';
     });
   }
 
@@ -43,8 +61,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (noMatchesRow) noMatchesRow.style.display = visible === 0 ? '' : 'none';
       if (countLabel) {
         countLabel.textContent = q
-          ? 'Showing ' + visible + ' of ' + rows.length + ' entries'
-          : 'All Entries (' + rows.length + ')';
+          ? 'Showing ' + visible + ' of ' + rows.length + ' repositories'
+          : 'All repositories (' + rows.length + ')';
       }
     });
   }

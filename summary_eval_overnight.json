@@ -1,0 +1,235 @@
+{
+  "model": "qwen3.5:2b",
+  "mode": "stored",
+  "scored": 23,
+  "clean": 17,
+  "failures_by_check": {
+    "fabricated_numbers": 1,
+    "contradicts_risk": 3,
+    "format_sentence_count": 3
+  },
+  "results": [
+    {
+      "repo": "mlflow/mlflow",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has two critical security issues that are likely caused by ordinary coding mistakes rather than malicious intent. The most serious problem involves the use of FTP, which is an insecure protocol that attackers can exploit to steal data or access files; developers should switch this to a secure method like SFTP or SSH immediately. Additionally, there are 33,923 findings related to command injection vulnerabilities where code runs user-supplied commands directly, which could allow attackers to execute arbitrary code and steal secrets if the input is not properly validated. While some dependencies have unversioned versions that pose supply chain risks, these are less urgent than the immediate threats of insecure protocols and dangerous command execution patterns.",
+      "failures": {
+        "fabricated_numbers": [
+          "923"
+        ]
+      },
+      "seconds": 0.0
+    },
+    {
+      "repo": "samratashok/nishang",
+      "risk": "Medium",
+      "vuln_level": "Low",
+      "malware_level": "High",
+      "summary": "The repository has two distinct security risks: a low vulnerability score of 5.0 indicates that the code contains some insecure patterns, but these are likely just standard mistakes rather than intentional attacks. However, the high malicious-pattern score of 40.0 is concerning because it suggests the code may be intentionally designed to bypass security checks or hide malicious behavior. The most serious findings involve PowerShell scripts that execute dangerous commands like remote shell access and process injection, which are strong indicators of malware rather than routine development errors. While some rules flagged as potentially normal were actually used in legitimate applications, the presence of these specific high-confidence detections means the code should not be trusted without further investigation.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "hongbo-miao/hongbomiao.com",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Low",
+      "summary": "This repository has two distinct security issues that require immediate attention before it can be considered safe for production use. The most critical problem is that the code contains 666 findings, with one specific vulnerability allowing attackers to bypass file system restrictions by manipulating paths in the source code, which could lead to unauthorized access or data theft. Additionally, there are several high-risk secrets and credentials exposed in the repository, including AWS keys, GitHub tokens, and generic API keys that have been shared publicly, meaning anyone who can view this code can steal these sensitive authentication details. While some of the detected patterns appear to be malicious attempts to hide code or execute commands, many of the issues stem from standard insecure coding practices like using untrusted data for file paths or failing to use prepared statements when running database queries against SQL databases.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "replicatedhq/kots",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "High",
+      "summary": "This repository shows serious security issues that could be exploited by attackers, but most of the problems are caused by standard insecure coding practices rather than intentional malicious behavior. The code contains dangerous patterns like executing commands from user-controlled inputs and decoding base64 data to run it, which creates a high risk for command injection and remote code execution vulnerabilities. While some findings suggest the code might be trying to hide its true purpose or bypass security checks, the majority of alerts point to common mistakes developers make when handling file paths, secrets, and external commands. The scan also found several workflow files that leak sensitive information by passing all secrets directly to other automated jobs, which is a significant privacy risk for anyone using this code in production environments.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "step-security/secure-repo",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Low",
+      "summary": "This repository has been flagged as having critical vulnerabilities because it contains insecure coding patterns that attackers could exploit to run malicious code or steal secrets. While the scan also identified some signs of potentially malicious intent, these findings do not necessarily mean the code is intentionally harmful; they mostly point to common mistakes like using unsafe variable interpolation and exposing secrets in environment variables. The most dangerous issues involve running code as root, which allows attackers to gain full control over the container, and executing base64-encoded payloads that could be used to hide malicious instructions. Although there are some medium-severity findings about supply chain attacks and dependency management, these represent standard practices rather than intentional attempts to harm the system. Overall, while the repository is not completely safe due to the critical vulnerabilities, the presence of many low-confidence findings suggests the code may have been written by a developer who made errors rather than an attacker trying to compromise the system.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "n1nj4sec/pupy",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has been flagged as extremely dangerous because it contains multiple critical vulnerabilities that could allow attackers to steal data, execute code, or destroy files on the server. The scan identified specific issues such as using shell commands with 'shell=True' which lets attackers run arbitrary system commands, and a deprecated library called pyCrypto that is no longer secure. These findings indicate that the code likely contains malicious intent rather than just poor security practices, as it uses suspicious techniques like downloading and executing remote files to hide its true purpose. While some issues are related to outdated libraries, the presence of these high-confidence threats means the project should not be used in any production environment without a complete rewrite by a security expert.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "mudler/LocalAI",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "High",
+      "summary": "This repository has two major red flags that indicate it is unsafe to use without significant changes. The code contains several critical vulnerabilities, such as running unverified user commands and insecure gRPC connections, which could allow attackers to execute arbitrary code or tamper with data in ways that are not just bad practice but potentially dangerous exploits. Additionally, the code includes patterns like downloading remote files and executing them directly, which is a known method for malware delivery. While some of these issues might seem like ordinary mistakes made by developers, the high scores from automated tools suggest they represent intentional or systemic risks rather than simple errors. Because of these findings, the repository should not be used in production environments until these security flaws are fixed and verified.",
+      "failures": {
+        "contradicts_risk": "Critical repo described as: ['safe to use']"
+      },
+      "seconds": 0.0
+    },
+    {
+      "repo": "vivekchand/clawmetry",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository shows severe security issues that are likely caused by malicious intent rather than just poor coding habits, as indicated by the Critical scores of 584.0 and 317.0 from automated tools like Bandit and YARA. The most concerning findings involve dangerous patterns such as recursive file deletion, dynamic code loading for execution, and cryptocurrency mining activity, which pose immediate threats to system stability and data integrity. Additionally, there are multiple hardcoded passwords and messaging platform tokens that could be exploited to steal sensitive information or bypass security controls. While some issues like URL schemes and XML parsing vulnerabilities appear less critical, the presence of these malicious patterns suggests the codebase is actively compromised rather than just containing standard bugs.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "kserve/kserve",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Low",
+      "summary": "This repository has two distinct security issues that need immediate attention before it can be used in production. The most critical finding is a Cross-site scripting (XSS) vulnerability caused by untrusted user input, which means an attacker could potentially steal data or inject malicious code into web pages. Additionally, the code uses dangerous shell commands and processes files without proper validation, creating another layer of risk that attackers might exploit to run harmful scripts. While there are some signs of potential malicious intent, these appear to be standard insecure coding patterns rather than intentional attacks, so they can be addressed through routine code reviews. However, because the overall vulnerability score is extremely high at 864.0, the repository should not be deployed until these critical flaws are fixed by the development team.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "BC-SECURITY/Empire",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has been flagged as critical because it contains both severe insecure coding patterns and clear signs of malicious intent, resulting in a vulnerability score of 593.0 and a malicious-pattern score of 241.0. The most alarming issues involve the use of curl piped directly into shell commands like bash, which allows attackers to easily install malware if the code is compromised or the URL is hijacked. Additionally, the code contains multiple instances of ClamAV detections for known malicious agents and tools, such as LinPEAS and DotNetToJScript, indicating that the repository likely hosts active exploits or malware rather than just standard bugs. While some findings like using Jinja2 templates with autoescape disabled could lead to cross-site scripting (XSS), these are treated as ordinary insecure coding practices rather than intentional attacks.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "keybase/client",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Medium",
+      "summary": "This repository has two distinct security issues that require immediate attention. The most critical finding is a vulnerability score of 789, which indicates serious insecure coding patterns that an attacker could exploit to inject malicious code into the system. Additionally, there are several medium-risk findings related to potential malicious intent, such as hardcoded PGP keys and suspicious command execution patterns, which suggest the code might be intentionally harmful or obfuscated. While some of these issues appear to be standard security practices like avoiding unsafe file operations, they still represent significant risks that should not be ignored without careful review.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "chef/chef",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Medium",
+      "summary": "This repository has two distinct security issues that require immediate attention before it can be used in production. The most critical problem is a vulnerability score of 734, which indicates severe insecure coding patterns that an attacker could exploit to compromise the system. Additionally, there are medium-risk findings suggesting the code may contain malicious intent or suspicious behavior, such as downloading and executing remote files or using secrets improperly. While some issues appear to be ordinary mistakes like missing Rails security attributes or hardcoded keys, the presence of a YARA rule specifically designed to detect dangerous downloads combined with execution makes this repository unsafe for any development or deployment use.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "OSC/ondemand",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "High",
+      "summary": "This repository has two major security issues that require immediate attention before it can be used in production. The most critical finding is a high vulnerability risk score of 716.0, which indicates the code contains dangerous patterns like SQL injection and insecure file downloads that an attacker could exploit to steal data or run malicious scripts. While there are also signs of potential malicious intent flagged by tools like YARA and GuardDog, these findings appear to be related to known malware techniques rather than intentional attacks on your own system. However, the code still contains several other serious problems, including a high score of 44.0 for suspicious patterns that might indicate an attempt to bypass security checks or execute remote files. Because of these combined issues, you should not use this repository in any production environment without first fixing all the identified vulnerabilities and removing the dangerous code patterns.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "asamassekou10/ship-safe",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "High",
+      "summary": "This repository has two major red flags that make it unsafe to use without significant changes. The code contains many instances of command injection vulnerabilities, specifically when functions like child_process are called with user-controlled arguments such as file paths or request data. These patterns could allow an attacker to run arbitrary commands on the server if they manage to trick the application into passing malicious input. Additionally, there are signs of potential malicious intent, including destructive operations that delete files and keylogging code that captures user input. While some issues like unencrypted HTTP requests and suspicious URLs are present, these appear to be common security practices rather than deliberate attempts to harm the system. The overall risk score is 647.0, which indicates a critical level of vulnerability that requires immediate attention before deployment.",
+      "failures": {
+        "contradicts_risk": "Critical repo described as: ['safe to use']",
+        "format_sentence_count": 6
+      },
+      "seconds": 0.0
+    },
+    {
+      "repo": "sgl-project/sglang",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has been flagged as extremely dangerous by automated security tools, with a critical vulnerability score of 588.0 and a malicious-pattern score of 122.0, indicating that the code contains severe risks that could be exploited by attackers or signs of intentional harm. The most serious issues involve the use of dynamic code loading and downloading files from the internet to execute them at runtime, which allows an attacker to potentially run arbitrary malware if the code is shared publicly. Additionally, there are multiple instances where shell commands are started without proper validation, creating a high risk for command injection attacks that could allow attackers to execute system commands on your machine. While some findings relate to standard security practices like using deprecated functions or parsing untrusted XML data, these represent common insecure coding patterns rather than evidence of malicious intent. Because the code is hosted on GitHub and appears to be public, it should not be used in any production environment without a thorough review and complete removal of all identified dangerous components.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "wp-graphql/wp-graphql",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has two critical security issues that are highly concerning and indicate malicious intent rather than just ordinary mistakes. The code contains several dangerous patterns, such as downloading files from remote servers and executing them, which could allow an attacker to steal your data or control your system. Additionally, the project uses a secret management feature called secrets: inherit that gives all workflows access to secrets they shouldn't have, and it includes many suspicious URLs pointing to file sharing services. These findings are not just warnings about bad coding style but strong evidence that the code was likely written with malicious goals in mind. Because of these serious risks, you should not use this repository for any production work or even for testing without a very strict security review.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "swisskyrepo/PayloadsAllTheThings",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has been flagged as critical because it contains 151 specific security issues that could be exploited by attackers, with two separate scores indicating high severity: a vulnerability risk score of 465.0 and a malicious-pattern risk score of 151.0. The most serious problems involve command injection vulnerabilities where untrusted user input is used to run arbitrary shell commands, which allows an attacker to execute code on the server. Additionally, there are confirmed instances of reverse shells, credential harvesting attempts, and the use of dangerous tools like phpinfo that expose sensitive system information. While some findings appear to be standard insecure coding practices rather than intentional malicious behavior, the presence of these patterns suggests the codebase is not safe for production use without significant refactoring.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "cadence-workflow/cadence",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Low",
+      "summary": "This repository has two distinct security issues that need to be addressed before it can be considered safe for production use. The most critical finding is that the code contains 267 vulnerabilities, with the highest risk being missing mutex locks in several functions which could cause the application to crash unexpectedly if a lock is released twice. While these are standard coding errors rather than signs of malicious intent, they represent significant risks that must be fixed immediately. Additionally, there are multiple services running inside containers with writable root filesystems, which allows attackers to potentially modify files or download harmful payloads from the internet. The scan also identified one private key stored in code and several medium-risk findings related to environment variable exposure. To use this repository safely, you should first fix all the missing mutex unlock errors and ensure that no services are running with a writable root filesystem by changing their configuration settings.",
+      "failures": {
+        "format_sentence_count": 6
+      },
+      "seconds": 0.0
+    },
+    {
+      "repo": "stephengpope/thepopebot",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "This repository has two critical security issues that could be exploited by attackers if left unpatched. The code contains dangerous patterns like using child_process with user-supplied inputs, which can allow an attacker to run arbitrary commands on the server. Additionally, there are hardcoded secrets and tokens in the codebase that could be used to steal data or bypass security controls. While some of these issues might look like malicious intent, they appear to stem from common insecure coding practices rather than intentional attacks. The scan also found a missing authentication tag in a cryptographic function and several other potential vulnerabilities related to file access and network usage. Because the scores are high and multiple critical findings were identified, this repository should not be used until these security issues are fixed by the developer.",
+      "failures": {
+        "format_sentence_count": 6
+      },
+      "seconds": 0.0
+    },
+    {
+      "repo": "opnsense/core",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Low",
+      "summary": "This repository has two distinct security issues that require immediate attention before it can be used in production. The most serious problem is the high vulnerability risk score of 560, which indicates that the code contains dangerous patterns like untrusted input being passed directly to shell commands and SQL queries without proper protection. These findings are not signs of malicious intent but rather examples of common insecure coding practices that an attacker could exploit to compromise the system. While there are some lower-priority alerts about potential obfuscation or credential reading, they do not match the severity of the critical vulnerabilities found elsewhere in the codebase.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "cbcoutinho/nextcloud-mcp-server",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Medium",
+      "summary": "This repository has two major security issues that are critical to address before anyone can use it. The most serious problem is that the code contains insecure patterns, which means an attacker could exploit these flaws and steal sensitive information or break into the system. Additionally, there are several signs of malicious intent in the code, including suspicious typosquatting and workflows that leak secrets by default. While some findings appear to be ordinary mistakes like logging hardcoded passwords or missing version locks for dependencies, they still represent significant risks because they could lead to credential exposure or supply chain attacks if not fixed. The overall score indicates a high level of vulnerability that requires immediate attention from the developer team to ensure the code is safe and secure.",
+      "failures": {
+        "contradicts_risk": "Critical repo described as: ['is safe']"
+      },
+      "seconds": 0.0
+    },
+    {
+      "repo": "grafana/loki",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Medium",
+      "summary": "This repository has two major security issues that are serious enough to prevent safe use. The most critical problem is that the code contains severe insecure coding patterns, specifically missing mutex locks and unencrypted gRPC connections, which means attackers could easily crash the system or steal data without any encryption. While there are also signs of potential malicious intent, such as suspicious URLs and obfuscated strings, these do not appear to be intentional attacks but rather common mistakes found in vendor code. The scan reported a vulnerability risk score of 514.0, which indicates a high level of danger due to the critical security flaws present in the application logic.",
+      "failures": {},
+      "seconds": 0.0
+    },
+    {
+      "repo": "malwaredllc/byob",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "High",
+      "summary": "This repository shows clear signs of malicious intent rather than just poor coding practices. The most serious issue is that the code contains active cryptocurrency mining tools and reverse shells, which are designed to steal money or control other computers, not just cause temporary errors. While there are some standard security warnings about using insecure file permissions and FTP protocols, these are common mistakes in many projects and do not indicate that the entire system is unsafe. The presence of known malware evasion techniques like checking for debuggers before running code further confirms that this is a botnet or mining farm rather than a legitimate application. You should not use this repository as it poses a high risk of financial loss and data theft if accessed by an attacker.",
+      "failures": {},
+      "seconds": 0.0
+    }
+  ]
+}

@@ -1,0 +1,891 @@
+<title>MalDet — The Ledger</title>
+
+<!-- ============================================================
+  MalDet dashboard concept, built to the existing DESIGN.md system
+  ("The Appellation Seal" — cellarmaster's ledger). Icons below are
+  Font Awesome Free (solid + brands, CC BY 4.0) used only for small
+  functional glyphs — never as the brand mark, which is an authored
+  SVG wax-seal (see #seal-mark), per DESIGN.md's Navigation rule.
+============================================================= -->
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-magnifying-glass" viewBox="0 0 512 512"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></symbol>
+  <symbol id="i-code-branch" viewBox="0 0 448 512"><path d="M80 104a24 24 0 1 0 0-48 24 24 0 1 0 0 48zm80-24c0 32.8-19.7 61-48 73.3l0 87.8c18.8-10.9 40.7-17.1 64-17.1l96 0c35.3 0 64-28.7 64-64l0-6.7C307.7 141 288 112.8 288 80c0-44.2 35.8-80 80-80s80 35.8 80 80c0 32.8-19.7 61-48 73.3l0 6.7c0 70.7-57.3 128-128 128l-96 0c-35.3 0-64 28.7-64 64l0 6.7c28.3 12.3 48 40.5 48 73.3c0 44.2-35.8 80-80 80s-80-35.8-80-80c0-32.8 19.7-61 48-73.3l0-6.7 0-198.7C19.7 141 0 112.8 0 80C0 35.8 35.8 0 80 0s80 35.8 80 80zm232 0a24 24 0 1 0 -48 0 24 24 0 1 0 48 0zM80 456a24 24 0 1 0 0-48 24 24 0 1 0 0 48z"/></symbol>
+  <symbol id="i-triangle-exclamation" viewBox="0 0 512 512"><path d="M256 32c14.2 0 27.3 7.5 34.5 19.8l216 368c7.3 12.4 7.3 27.7 .2 40.1S486.3 480 472 480L40 480c-14.3 0-27.6-7.7-34.7-20.1s-7-27.8 .2-40.1l216-368C228.7 39.5 241.8 32 256 32zm0 128c-13.3 0-24 10.7-24 24l0 112c0 13.3 10.7 24 24 24s24-10.7 24-24l0-112c0-13.3-10.7-24-24-24zm32 224a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z"/></symbol>
+  <symbol id="i-bug" viewBox="0 0 512 512"><path d="M256 0c53 0 96 43 96 96l0 3.6c0 15.7-12.7 28.4-28.4 28.4l-135.1 0c-15.7 0-28.4-12.7-28.4-28.4l0-3.6c0-53 43-96 96-96zM41.4 105.4c12.5-12.5 32.8-12.5 45.3 0l64 64c.7 .7 1.3 1.4 1.9 2.1c14.2-7.3 30.4-11.4 47.5-11.4l112 0c17.1 0 33.2 4.1 47.5 11.4c.6-.7 1.2-1.4 1.9-2.1l64-64c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-64 64c-.7 .7-1.4 1.3-2.1 1.9c6.2 12 10.1 25.3 11.1 39.5l64.3 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c0 24.6-5.5 47.8-15.4 68.6c2.2 1.3 4.2 2.9 6 4.8l64 64c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0l-63.1-63.1c-24.5 21.8-55.8 36.2-90.3 39.6L272 240c0-8.8-7.2-16-16-16s-16 7.2-16 16l0 239.2c-34.5-3.4-65.8-17.8-90.3-39.6L86.6 502.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l64-64c1.9-1.9 3.9-3.4 6-4.8C101.5 367.8 96 344.6 96 320l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64.3 0c1.1-14.1 5-27.5 11.1-39.5c-.7-.6-1.4-1.2-2.1-1.9l-64-64c-12.5-12.5-12.5-32.8 0-45.3z"/></symbol>
+  <symbol id="i-code" viewBox="0 0 640 512"><path d="M392.8 1.2c-17-4.9-34.7 5-39.6 22l-128 448c-4.9 17 5 34.7 22 39.6s34.7-5 39.6-22l128-448c4.9-17-5-34.7-22-39.6zm80.6 120.1c-12.5 12.5-12.5 32.8 0 45.3L562.7 256l-89.4 89.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l112-112c12.5-12.5 12.5-32.8 0-45.3l-112-112c-12.5-12.5-32.8-12.5-45.3 0zm-306.7 0c-12.5-12.5-32.8-12.5-45.3 0l-112 112c-12.5 12.5-12.5 32.8 0 45.3l112 112c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256l89.4-89.4c12.5-12.5 12.5-32.8 0-45.3z"/></symbol>
+  <symbol id="i-fingerprint" viewBox="0 0 512 512"><path d="M48 256C48 141.1 141.1 48 256 48c63.1 0 119.6 28.1 157.8 72.5c8.6 10.1 23.8 11.2 33.8 2.6s11.2-23.8 2.6-33.8C403.3 34.6 333.7 0 256 0C114.6 0 0 114.6 0 256l0 40c0 13.3 10.7 24 24 24s24-10.7 24-24l0-40zm458.5-52.9c-2.7-13-15.5-21.3-28.4-18.5s-21.3 15.5-18.5 28.4c2.9 13.9 4.5 28.3 4.5 43.1l0 40c0 13.3 10.7 24 24 24s24-10.7 24-24l0-40c0-18.1-1.9-35.8-5.5-52.9zM256 80c-19 0-37.4 3-54.5 8.6c-15.2 5-18.7 23.7-8.3 35.9c7.1 8.3 18.8 10.8 29.4 7.9c10.6-2.9 21.8-4.4 33.4-4.4c70.7 0 128 57.3 128 128l0 24.9c0 25.2-1.5 50.3-4.4 75.3c-1.7 14.6 9.4 27.8 24.2 27.8c11.8 0 21.9-8.6 23.3-20.3c3.3-27.4 5-55 5-82.7l0-24.9c0-97.2-78.8-176-176-176zM150.7 148.7c-9.1-10.6-25.3-11.4-33.9-.4C93.7 178 80 215.4 80 256l0 24.9c0 24.2-2.6 48.4-7.8 71.9C68.8 368.4 80.1 384 96.1 384c10.5 0 19.9-7 22.2-17.3c6.4-28.1 9.7-56.8 9.7-85.8l0-24.9c0-27.2 8.5-52.4 22.9-73.1c7.2-10.4 8-24.6-.2-34.2zM256 160c-53 0-96 43-96 96l0 24.9c0 35.9-4.6 71.5-13.8 106.1c-3.8 14.3 6.7 29 21.5 29c9.5 0 17.9-6.2 20.4-15.4c10.5-39 15.9-79.2 15.9-119.7l0-24.9c0-28.7 23.3-52 52-52s52 23.3 52 52l0 24.9c0 36.3-3.5 72.4-10.4 107.9c-2.7 13.9 7.7 27.2 21.8 27.2c10.2 0 19-7 21-17c7.7-38.8 11.6-78.3 11.6-118.1l0-24.9c0-53-43-96-96-96zm24 96c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 24.9c0 59.9-11 119.3-32.5 175.2l-5.9 15.3c-4.8 12.4 1.4 26.3 13.8 31s26.3-1.4 31-13.8l5.9-15.3C267.9 411.9 280 346.7 280 280.9l0-24.9z"/></symbol>
+  <symbol id="i-shield-virus" viewBox="0 0 512 512"><path d="M269.4 2.9C265.2 1 260.7 0 256 0s-9.2 1-13.4 2.9L54.3 82.8c-22 9.3-38.4 31-38.3 57.2c.5 99.2 41.3 280.7 213.6 363.2c16.7 8 36.1 8 52.8 0C454.7 420.7 495.5 239.2 496 140c.1-26.2-16.3-47.9-38.3-57.2L269.4 2.9zM256 112c8.8 0 16 7.2 16 16c0 33 39.9 49.5 63.2 26.2c6.2-6.2 16.4-6.2 22.6 0s6.2 16.4 0 22.6C334.5 200.1 351 240 384 240c8.8 0 16 7.2 16 16s-7.2 16-16 16c-33 0-49.5 39.9-26.2 63.2c6.2 6.2 6.2 16.4 0 22.6s-16.4 6.2-22.6 0C311.9 334.5 272 351 272 384c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-33-39.9-49.5-63.2-26.2c-6.2 6.2-16.4 6.2-22.6 0s-6.2-16.4 0-22.6C177.5 311.9 161 272 128 272c-8.8 0-16-7.2-16-16s7.2-16 16-16c33 0 49.5-39.9 26.2-63.2c-6.2-6.2-6.2-16.4 0-22.6s16.4-6.2 22.6 0C200.1 177.5 240 161 240 128c0-8.8 7.2-16 16-16zM232 256a24 24 0 1 0 0-48 24 24 0 1 0 0 48zm72 32a16 16 0 1 0 -32 0 16 16 0 1 0 32 0z"/></symbol>
+  <symbol id="i-cubes" viewBox="0 0 576 512"><path d="M290.8 48.6l78.4 29.7L288 109.5 206.8 78.3l78.4-29.7c1.8-.7 3.8-.7 5.7 0zM136 92.5l0 112.2c-1.3 .4-2.6 .8-3.9 1.3l-96 36.4C14.4 250.6 0 271.5 0 294.7L0 413.9c0 22.2 13.1 42.3 33.5 51.3l96 42.2c14.4 6.3 30.7 6.3 45.1 0L288 457.5l113.5 49.9c14.4 6.3 30.7 6.3 45.1 0l96-42.2c20.3-8.9 33.5-29.1 33.5-51.3l0-119.1c0-23.3-14.4-44.1-36.1-52.4l-96-36.4c-1.3-.5-2.6-.9-3.9-1.3l0-112.2c0-23.3-14.4-44.1-36.1-52.4l-96-36.4c-12.8-4.8-26.9-4.8-39.7 0l-96 36.4C150.4 48.4 136 69.3 136 92.5zM392 210.6l-82.4 31.2 0-89.2L392 121l0 89.6zM154.8 250.9l78.4 29.7L152 311.7 70.8 280.6l78.4-29.7c1.8-.7 3.8-.7 5.7 0zm18.8 204.4l0-100.5L256 323.2l0 95.9-82.4 36.2zM421.2 250.9c1.8-.7 3.8-.7 5.7 0l78.4 29.7L424 311.7l-81.2-31.1 78.4-29.7zM523.2 421.2l-77.6 34.1 0-100.5L528 323.2l0 90.7c0 3.2-1.9 6-4.8 7.3z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 640 512"><path d="M579.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L422.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C206.5 251.2 213 330 263 380c56.5 56.5 148 56.5 204.5 0L579.8 267.7zM60.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C74 372 74 321 105.5 289.5L217.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C433.5 260.8 427 182 377 132c-56.5-56.5-148-56.5-204.5 0L60.2 244.3z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 448 512"><path d="M144 144l0 48 160 0 0-48c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192l0-48C80 64.5 144.5 0 224 0s144 64.5 144 144l0 48 16 0c35.3 0 64 28.7 64 64l0 192c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64l0-192c0-35.3 28.7-64 64-64l16 0z"/></symbol>
+  <symbol id="i-clock-rotate-left" viewBox="0 0 512 512"><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9L0 168c0 13.3 10.7 24 24 24l110.1 0c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24l0 104c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65 0-94.1c0-13.3-10.7-24-24-24z"/></symbol>
+  <symbol id="i-file-code" viewBox="0 0 384 512"><path d="M64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-288-128 0c-17.7 0-32-14.3-32-32L224 0 64 0zM256 0l0 128 128 0L256 0zM153 289l-31 31 31 31c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0L71 337c-9.4-9.4-9.4-24.6 0-33.9l48-48c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9zM265 255l48 48c9.4 9.4 9.4 24.6 0 33.9l-48 48c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l31-31-31-31c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0z"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 448 512"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></symbol>
+  <symbol id="i-circle-info" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336l24 0 0-64-24 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l48 0c13.3 0 24 10.7 24 24l0 88 8 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-80 0c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 512 512"><path d="M3.9 54.9C10.5 40.9 24.5 32 40 32l432 0c15.5 0 29.5 8.9 36.1 22.9s4.6 30.5-5.2 42.5L320 320.9 320 448c0 12.1-6.8 23.2-17.7 28.6s-23.8 4.3-33.5-3l-64-48c-8.1-6-12.8-15.5-12.8-25.6l0-79.1L9 97.3C-.7 85.4-2.8 68.8 3.9 54.9z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 512 512"><path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 242.7-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7 288 32zM64 352c-35.3 0-64 28.7-64 64l0 32c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-32c0-35.3-28.7-64-64-64l-101.5 0-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352 64 352zm368 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 576 512"><path d="M316.9 18C311.6 7 300.4 0 288.1 0s-23.4 7-28.8 18L195 150.3 51.4 171.5c-12 1.8-22 10.2-25.7 21.7s-.7 24.2 7.9 32.7L137.8 329 113.2 474.7c-2 12 3 24.2 12.9 31.3s23 8 33.8 2.3l128.3-68.5 128.3 68.5c10.8 5.7 23.9 4.9 33.8-2.3s14.9-19.3 12.9-31.3L438.5 329 542.7 225.9c8.6-8.5 11.7-21.2 7.9-32.7s-13.7-19.9-25.7-21.7L381.2 150.3 316.9 18z"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 512 512"><path d="M233.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 338.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 320 512"><path d="M310.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-192 192c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L242.7 256 73.4 86.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l192 192z"/></symbol>
+  <symbol id="i-bars" viewBox="0 0 448 512"><path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z"/></symbol>
+  <symbol id="i-external" viewBox="0 0 512 512"><path d="M320 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l82.7 0L201.4 265.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L448 109.3l0 82.7c0 17.7 14.3 32 32 32s32-14.3 32-32l0-160c0-17.7-14.3-32-32-32L320 0zM80 32C35.8 32 0 67.8 0 112L0 432c0 44.2 35.8 80 80 80l320 0c44.2 0 80-35.8 80-80l0-112c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 112c0 8.8-7.2 16-16 16L80 448c-8.8 0-16-7.2-16-16l0-320c0-8.8 7.2-16 16-16l112 0c17.7 0 32-14.3 32-32s-14.3-32-32-32L80 32z"/></symbol>
+  <symbol id="i-github" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></symbol>
+</svg>
+
+<style>
+  /* ==========================================================
+     TOKENS — pulled directly from DESIGN.md's frontmatter.
+     Single deliberate warm near-black world; no light variant
+     exists in the system, so it is painted explicitly and not
+     alternated by viewer color-scheme preference.
+  ========================================================== */
+  :root{
+    color-scheme: dark;
+    --cellar-ink:#1c1512;
+    --ledger-surface:#241c17;
+    --ledger-surface-raised:#2c2119;
+    --ink-dark-text:#120d0a;
+    --hairline:#4a3b2c;
+    --parchment:#e8ddc4;
+    --signal-text:#ede3d0;
+    --quiet-text:#a8987e;
+    --brass-foil:#c9a24a;
+    --brass-foil-hover:#d9b25a;
+
+    --cleared:#5c8a5c;
+    --minor:#6f93a8;
+    --flagged:#c99a3e;
+    --contested:#c2703c;
+    --rejected:#cf5f3f;
+
+    --radius-sm:.25rem;
+    --radius:.375rem;
+    --radius-pill:999px;
+
+    --font-body: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--cellar-ink); color:var(--signal-text);
+    font-family:var(--font-body); font-weight:400; font-size:15px; line-height:1.6;
+  }
+  h1,h2,h3,h4{margin:0; color:var(--signal-text); font-weight:500}
+  p{margin:0}
+  a{color:inherit; text-decoration:none}
+  code{font-family:var(--font-mono)}
+  ::selection{background:var(--brass-foil); color:var(--ink-dark-text)}
+  :focus-visible{outline:2px solid var(--brass-foil); outline-offset:2px; border-radius:var(--radius-sm)}
+  .icon{width:1em;height:1em;display:inline-block;fill:currentColor;flex-shrink:0}
+
+  /* Bootstrap-equivalent container: DESIGN.md specifies Bootstrap 5's
+     default grid; that framework can't be fetched in a self-contained
+     page, so its container widths are reproduced with plain CSS. */
+  .container{max-width:1140px; margin:0 auto; padding:0 24px}
+  @media (max-width:640px){ .container{padding:0 18px} }
+
+  /* Label typographic role: 600 weight, tracked uppercase, system sans */
+  .label-text{
+    font-family:var(--font-body); font-weight:600; font-size:.76rem;
+    letter-spacing:.07em; text-transform:uppercase;
+  }
+  /* Data typographic role: reserved for real scan output only */
+  .data-text{ font-family:var(--font-mono); font-weight:400 }
+
+  section{position:relative}
+  .eyebrow{ color:var(--brass-foil) }
+  .eyebrow .rule{display:inline-block; width:20px; height:1px; background:var(--brass-foil); opacity:.55; margin-right:8px; vertical-align:middle}
+  .section-head{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:26px; flex-wrap:wrap}
+  .section-title{font-size:clamp(20px,2.4vw,26px)}
+  .section-sub{color:var(--quiet-text); font-size:14px; max-width:560px; margin-top:8px}
+
+  .reveal{opacity:0; transform:translateY(10px); transition:opacity .5s ease, transform .5s ease}
+  .reveal.in{opacity:1; transform:translateY(0)}
+  @media (prefers-reduced-motion: reduce){ .reveal{opacity:1; transform:none; transition:none} }
+
+  /* ============ AUTHORED WAX-SEAL MARK (signature device) ============ */
+  #seal-mark{ display:block }
+  #seal-mark .disc{ fill:var(--brass-foil) }
+  #seal-mark .disc-edge{ fill:none; stroke:rgba(18,13,10,.28); stroke-width:1.5 }
+  #seal-mark .cask{ fill:var(--ink-dark-text) }
+  #seal-mark .hoop{ fill:var(--brass-foil) }
+
+  /* ============ NAVIGATION (.ledger-bar) ============ */
+  .ledger-bar{position:sticky; top:0; z-index:50; background:var(--ledger-surface); border-bottom:1px solid var(--hairline)}
+  .ledger-bar-inner{display:flex; align-items:center; justify-content:space-between; height:64px}
+  .brand{display:flex; align-items:center; gap:10px}
+  .brand-word{font-size:15.5px; font-weight:600; letter-spacing:.01em}
+  .brand-sub{ color:var(--quiet-text); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase}
+  .ledger-tabs{display:flex; gap:26px; align-items:center}
+  .ledger-tab{ color:var(--quiet-text); font-size:.78rem; padding:4px 0; border-bottom:2px solid transparent; transition:color .15s}
+  .ledger-tab:hover{color:var(--signal-text)}
+  .ledger-tab.active{color:var(--brass-foil); border-bottom-color:var(--brass-foil)}
+  .nav-right{display:flex; align-items:center; gap:14px}
+  .icon-link{color:var(--quiet-text); display:flex; transition:color .15s}
+  .icon-link:hover{color:var(--signal-text)}
+  .icon-link .icon{width:16px;height:16px}
+  .nav-toggle{display:none; background:none; border:1px solid var(--hairline); border-radius:var(--radius-sm); width:36px; height:36px; align-items:center; justify-content:center; color:var(--signal-text)}
+  @media (max-width:860px){
+    .ledger-tabs{display:none}
+    .nav-toggle{display:flex}
+  }
+  .ledger-tabs-mobile{display:none; flex-direction:column; background:var(--ledger-surface); border-bottom:1px solid var(--hairline); padding:6px 24px 14px}
+  .ledger-tabs-mobile.open{display:flex}
+  .ledger-tabs-mobile a{padding:10px 8px; color:var(--quiet-text); font-size:.78rem; border-radius:var(--radius-sm)}
+  .ledger-tabs-mobile a.active{background:var(--ledger-surface-raised); color:var(--signal-text)}
+
+  /* ============ BUTTONS ============ */
+  .btn-ribbon{
+    display:inline-flex; align-items:center; gap:9px; background:var(--brass-foil); color:var(--ink-dark-text);
+    font-weight:600; font-size:.76rem; letter-spacing:.06em; text-transform:uppercase;
+    padding:.6rem 1.1rem; border-radius:var(--radius); border:none; cursor:pointer; transition:background .15s;
+  }
+  .btn-ribbon:hover{background:var(--brass-foil-hover)}
+  .btn-ribbon .icon{width:12px;height:12px}
+  .btn-outline-parchment{
+    display:inline-flex; align-items:center; gap:8px; background:transparent; color:var(--parchment);
+    font-weight:600; font-size:.74rem; letter-spacing:.05em; text-transform:uppercase;
+    padding:.55rem 1rem; border-radius:var(--radius); border:1px solid var(--hairline); cursor:pointer; transition:border-color .15s, background .15s;
+  }
+  .btn-outline-parchment:hover{border-color:var(--parchment); background:var(--ledger-surface-raised)}
+  .btn-outline-parchment .icon{width:11px;height:11px}
+  .btn-block{width:100%; justify-content:center}
+
+  /* ============ HERO ============ */
+  .hero{padding:60px 0 56px}
+  .hero-grid{display:grid; grid-template-columns:1.15fr .85fr; gap:52px; align-items:center}
+  @media (max-width:900px){ .hero-grid{grid-template-columns:1fr; gap:40px} }
+  .hero h1{font-size:clamp(28px,4vw,42px); line-height:1.14; letter-spacing:-.01em; font-weight:500}
+  .hero-sub{color:var(--quiet-text); font-size:15px; max-width:520px; margin:18px 0 30px; line-height:1.65}
+  .hero-sub code{background:var(--ledger-surface-raised); padding:2px 6px; border-radius:var(--radius-sm); font-size:13.5px; color:var(--signal-text)}
+
+  .scan-panel{background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius); padding:5px}
+  .scan-row{display:flex; align-items:center; gap:10px; background:var(--cellar-ink); border-radius:var(--radius-sm); padding:13px 14px; border:1px solid var(--hairline)}
+  .scan-row .icon{width:14px;height:14px; color:var(--quiet-text); flex-shrink:0}
+  .scan-input{flex:1; border:none; background:none; outline:none; font-family:var(--font-mono); font-size:13.5px; color:var(--signal-text); min-width:0}
+  .scan-input::placeholder{color:var(--quiet-text)}
+  .scan-cta{display:flex; margin-top:6px}
+  .scan-cta .btn-ribbon{flex:1; padding:.75rem 1.1rem; font-size:.78rem}
+  .trust-row{display:flex; flex-wrap:wrap; gap:10px 22px; margin-top:20px}
+  .trust-item{ color:var(--quiet-text); font-size:11.5px; letter-spacing:.03em}
+
+  .hero-seal-wrap{display:flex; align-items:center; justify-content:center; position:relative}
+  .hero-seal-wrap #seal-mark{width:min(280px,80%); height:auto}
+  .hero-seal-caption{position:absolute; bottom:6%; left:50%; transform:translateX(-50%); text-align:center; color:var(--quiet-text); font-size:11px; letter-spacing:.05em; text-transform:uppercase; white-space:nowrap}
+
+  /* ============ LEDGER STRIP (signature summary component) ============ */
+  .ledger-strip{display:grid; grid-template-columns:repeat(5,1fr); background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius); overflow:hidden}
+  @media (max-width:768px){ .ledger-strip{grid-template-columns:repeat(2,1fr)} }
+  .ledger-cell{padding:1rem 1.25rem; border-right:1px solid var(--hairline)}
+  .ledger-cell:last-child{border-right:none}
+  @media (max-width:768px){
+    .ledger-cell:nth-child(2n){border-right:none}
+    .ledger-cell:nth-child(-n+4){border-bottom:1px solid var(--hairline)}
+  }
+  .tally-label{ color:var(--quiet-text); font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; font-weight:600; display:flex; align-items:center; gap:7px}
+  .tally-label::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--quiet-text); flex-shrink:0}
+  .tally-label.cleared::before{background:var(--cleared)}
+  .tally-label.flagged::before{background:var(--flagged)}
+  .tally-label.contested::before{background:var(--contested)}
+  .tally-label.rejected::before{background:var(--rejected)}
+  .tally-value{font-family:var(--font-mono); font-size:1.7rem; margin-top:8px; color:var(--signal-text)}
+  .tally-value.cleared{color:var(--cleared)}
+  .tally-value.flagged{color:var(--flagged)}
+  .tally-value.contested{color:var(--contested)}
+  .tally-value.rejected{color:var(--rejected)}
+  .tally-sub{color:var(--quiet-text); font-size:10.5px; margin-top:4px}
+
+  /* ============ PANELS (flat, tonal — chart cards, criteria, supply) ============ */
+  .panel{background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius)}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 2px}
+  .panel-title{display:flex; align-items:center; gap:9px; font-weight:600; font-size:.8rem; letter-spacing:.03em}
+  .panel-title .icon{width:13px;height:13px; color:var(--brass-foil)}
+  .panel-title-sub{color:var(--quiet-text); font-size:11px; margin-top:2px}
+  .panel-body{padding:6px 20px 20px}
+  .pill-select{ color:var(--quiet-text); font-size:.7rem; font-weight:600; letter-spacing:.04em; text-transform:uppercase; border:1px solid var(--hairline); background:var(--cellar-ink); padding:6px 10px; border-radius:var(--radius-sm); display:flex; align-items:center; gap:6px; cursor:pointer}
+  .pill-select .icon{width:9px;height:9px}
+
+  .charts-grid{display:grid; grid-template-columns:1.35fr 1fr; gap:16px}
+  @media (max-width:940px){ .charts-grid{grid-template-columns:1fr} }
+
+  .chart-svg{width:100%; height:auto; display:block; overflow:visible}
+  .grid-line{stroke:var(--hairline); stroke-width:1}
+  .axis-label{font-family:var(--font-mono); font-size:9.5px; fill:var(--quiet-text)}
+  .trend-area{fill:var(--signal-text); fill-opacity:.05}
+  .trend-line{fill:none; stroke:var(--parchment); stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  .trend-dot{fill:var(--ledger-surface); stroke:var(--parchment); stroke-width:2}
+  .trend-dot-last{fill:var(--brass-foil); stroke:var(--brass-foil)}
+  .trend-dot.hit{fill:transparent; stroke:none; cursor:pointer}
+
+  .sev-row{display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--hairline)}
+  .sev-row:last-child{border-bottom:none}
+  .sev-dot{width:8px;height:8px;border-radius:50%; flex-shrink:0}
+  .sev-dot.rejected{background:var(--rejected)}
+  .sev-dot.contested{background:var(--contested)}
+  .sev-dot.flagged{background:var(--flagged)}
+  .sev-dot.cleared{background:var(--cleared)}
+  .sev-label{font-size:.72rem; font-weight:600; letter-spacing:.04em; text-transform:uppercase; width:58px; flex-shrink:0; color:var(--signal-text)}
+  .sev-bar-track{flex:1; height:8px; background:var(--ledger-surface-raised); border-radius:var(--radius-sm); overflow:hidden; cursor:pointer}
+  .sev-bar-fill{height:100%; border-radius:var(--radius-sm)}
+  .sev-bar-fill.rejected{background:var(--rejected)}
+  .sev-bar-fill.contested{background:var(--contested)}
+  .sev-bar-fill.flagged{background:var(--flagged)}
+  .sev-bar-fill.cleared{background:var(--cleared)}
+  .sev-count{font-family:var(--font-mono); font-size:13px; width:30px; text-align:right; flex-shrink:0}
+
+  #tooltip{position:fixed; pointer-events:none; z-index:200; background:var(--parchment); color:var(--ink-dark-text); font-family:var(--font-mono); font-size:11px; font-weight:600; padding:6px 9px; border-radius:var(--radius-sm); opacity:0; transform:translate(-50%,-130%); transition:opacity .12s; white-space:nowrap}
+  #tooltip.show{opacity:1}
+  #tooltip .sub{display:block; font-weight:500; opacity:.7; font-size:9.5px; margin-top:1px}
+
+  /* ============ CRITERIA (five engines) ============ */
+  .criteria-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:1px; background:var(--hairline); border:1px solid var(--hairline); border-radius:var(--radius); overflow:hidden}
+  @media (max-width:1040px){ .criteria-grid{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:640px){ .criteria-grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:420px){ .criteria-grid{grid-template-columns:1fr} }
+  .criterion{background:var(--ledger-surface); padding:20px}
+  .criterion-mark{ color:var(--quiet-text); margin-bottom:14px}
+  .criterion-mark .icon{width:16px;height:16px}
+  .criterion-num{ color:var(--quiet-text); font-family:var(--font-mono); font-size:11px; margin-bottom:6px}
+  .criterion-name{font-weight:600; font-size:.86rem}
+  .criterion-desc{color:var(--quiet-text); font-size:12px; margin-top:7px; line-height:1.55}
+  .criterion-status{display:flex; align-items:center; gap:6px; margin-top:14px; font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--cleared)}
+  .criterion-status .dot{width:6px;height:6px;border-radius:50%; background:var(--cleared)}
+
+  /* ============ LEDGER BOOK / TABLE ============ */
+  .ledger-book{background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius); overflow:hidden}
+  .table-toolbar{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--hairline); flex-wrap:wrap; gap:12px}
+  .table-scroll{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; min-width:760px}
+  thead th{text-align:left; font-size:.68rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--quiet-text); padding:12px 20px; border-bottom:1px solid var(--hairline)}
+  tbody td{padding:14px 20px; border-bottom:1px solid var(--hairline); font-size:13px; vertical-align:middle}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:var(--ledger-surface-raised)}
+
+  /* Wax-seal disposition badge — the system's one radius exception */
+  .seal-badge{
+    display:inline-flex; align-items:center; padding:.28rem .75rem; border-radius:var(--radius-pill);
+    font-size:.68rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dark-text);
+    box-shadow: inset 0 0 0 1px rgba(18,13,10,.25);
+  }
+  .seal-badge.rejected{background:var(--rejected)}
+  .seal-badge.contested{background:var(--contested)}
+  .seal-badge.flagged{background:var(--flagged)}
+  .seal-badge.minor{background:var(--minor)}
+  .seal-badge.cleared{background:var(--cleared)}
+
+  .cell-location{font-family:var(--font-mono); font-size:12px; color:var(--quiet-text); display:flex; align-items:center; gap:7px}
+  .cell-location .icon{width:11px;height:11px; color:var(--quiet-text); flex-shrink:0}
+  .cell-tool{font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--quiet-text); background:var(--ledger-surface-raised); padding:4px 9px; border-radius:var(--radius-sm); display:inline-block}
+  .cell-repo-name{font-weight:600; font-size:13px}
+  .cell-repo-owner{color:var(--quiet-text); font-size:11px}
+  .row-action{color:var(--quiet-text); display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:var(--radius-sm)}
+  .row-action:hover{color:var(--brass-foil); background:var(--ledger-surface-raised)}
+  .row-action .icon{width:11px;height:11px}
+  @media (max-width:640px){ .row-action{width:44px; height:44px} }
+
+  /* ============ SUPPLY-CHAIN WATCH ============ */
+  .supply-strip{display:grid; grid-template-columns:repeat(3,1fr); background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius); overflow:hidden}
+  @media (max-width:860px){ .supply-strip{grid-template-columns:1fr} }
+  .supply-cell{padding:22px 24px; border-right:1px solid var(--hairline)}
+  .supply-cell:last-child{border-right:none}
+  @media (max-width:860px){ .supply-cell{border-right:none; border-bottom:1px solid var(--hairline)} .supply-cell:last-child{border-bottom:none} }
+  .supply-cell .icon-top{color:var(--brass-foil); margin-bottom:12px}
+  .supply-cell .icon-top .icon{width:15px;height:15px}
+  .supply-cell h4{font-size:.86rem; font-weight:600}
+  .supply-cell p{color:var(--quiet-text); font-size:12px; margin-top:7px; line-height:1.6}
+  .supply-example{margin-top:12px; font-family:var(--font-mono); font-size:11px; background:var(--cellar-ink); border:1px solid var(--hairline); border-radius:var(--radius-sm); padding:8px 10px; color:var(--quiet-text)}
+  .supply-example b{color:var(--rejected); font-weight:600}
+
+  /* ============ RECENTLY INSPECTED (bound strip of rows) ============ */
+  .inspected-list{background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius); overflow:hidden}
+  .inspected-row{display:flex; align-items:center; gap:16px; padding:16px 20px; border-bottom:1px solid var(--hairline)}
+  .inspected-row:last-child{border-bottom:none}
+  .inspected-row:hover{background:var(--ledger-surface-raised)}
+  .inspected-id{flex:1; min-width:0}
+  .inspected-id .name{font-weight:600; font-size:13.5px; display:flex; align-items:center; gap:7px}
+  .inspected-id .name .icon{width:11px;height:11px; color:var(--quiet-text)}
+  .inspected-id .owner{color:var(--quiet-text); font-size:11.5px; margin-top:2px}
+  .inspected-meta{display:flex; align-items:center; gap:18px; color:var(--quiet-text); font-size:11.5px; flex-shrink:0}
+  .inspected-meta span{display:flex; align-items:center; gap:5px}
+  .inspected-meta .icon{width:10px;height:10px}
+  @media (max-width:700px){ .inspected-meta{display:none} }
+
+  /* ============ EMPTY STATE (closing CTA) ============ */
+  .empty-state{padding:4rem 1.5rem; text-align:center; background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius)}
+  .empty-state #seal-mark{width:64px; height:64px; margin:0 auto 22px}
+  .empty-state h3{font-size:clamp(19px,2.4vw,24px); max-width:480px; margin:0 auto}
+  .empty-state p{color:var(--quiet-text); font-size:13.5px; max-width:440px; margin:12px auto 26px; line-height:1.6}
+
+  /* ============ FOOTER ============ */
+  footer{border-top:1px solid var(--hairline); padding:44px 0 28px; margin-top:20px}
+  .footer-grid{display:flex; justify-content:space-between; gap:32px; flex-wrap:wrap}
+  .footer-brand{max-width:300px}
+  .footer-brand p{color:var(--quiet-text); font-size:12px; margin-top:12px; line-height:1.65}
+  .stack-row{display:flex; flex-wrap:wrap; gap:7px; margin-top:14px}
+  .stack-chip{font-family:var(--font-mono); font-size:10.5px; color:var(--quiet-text); background:var(--ledger-surface); border:1px solid var(--hairline); padding:4px 9px; border-radius:var(--radius-sm)}
+  .footer-cols{display:flex; gap:56px; flex-wrap:wrap}
+  .footer-col h5{ color:var(--quiet-text); font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; font-weight:600; margin-bottom:12px}
+  .footer-col a{display:block; font-size:12.5px; color:var(--quiet-text); padding:5px 0}
+  .footer-col a:hover{color:var(--brass-foil)}
+  .disclaimer{font-size:11.5px; color:var(--quiet-text); max-width:660px; line-height:1.65; margin-top:24px; padding:14px 16px; background:var(--ledger-surface); border:1px solid var(--hairline); border-radius:var(--radius)}
+  .disclaimer .icon{width:11px;height:11px; color:var(--quiet-text); margin-right:6px}
+  .footer-bottom{display:flex; justify-content:space-between; align-items:center; margin-top:32px; padding-top:18px; border-top:1px solid var(--hairline); flex-wrap:wrap; gap:10px}
+  .footer-bottom p{font-size:11px; color:var(--quiet-text)}
+</style>
+
+<!-- ============ NAV ============ -->
+<nav class="ledger-bar">
+  <div class="container ledger-bar-inner">
+    <a class="brand" href="#top">
+      <svg id="seal-mark" viewBox="0 0 64 64" style="width:30px;height:30px" aria-hidden="true">
+        <circle class="disc" cx="32" cy="32" r="30"/>
+        <circle class="disc-edge" cx="32" cy="32" r="29.2"/>
+        <path class="cask" d="M24 15 C21.5 15 20.4 18.4 20.2 22 L20 26 C19 29.4 19 34.6 20 38 L20.2 42 C20.4 45.6 21.5 49 24 49 L40 49 C42.5 49 43.6 45.6 43.8 42 L44 38 C45 34.6 45 29.4 44 26 L43.8 22 C43.6 18.4 42.5 15 40 15 Z"/>
+        <rect class="hoop" x="20.5" y="21.4" width="23" height="2.3"/>
+        <rect class="hoop" x="20.5" y="40.3" width="23" height="2.3"/>
+      </svg>
+      <div>
+        <div class="brand-word">MalDet</div>
+        <div class="brand-sub">The Ledger · FYP</div>
+      </div>
+    </a>
+    <div class="ledger-tabs">
+      <a class="ledger-tab active" href="#overview">Overview</a>
+      <a class="ledger-tab" href="#criteria">Criteria</a>
+      <a class="ledger-tab" href="#findings">Findings</a>
+      <a class="ledger-tab" href="#dependencies">Dependencies</a>
+      <a class="ledger-tab" href="#inspected">History</a>
+    </div>
+    <div class="nav-right">
+      <a class="icon-link" href="#" aria-label="View source on GitHub"><svg class="icon"><use href="#i-github"/></svg></a>
+      <a class="btn-ribbon" href="#hero-scan"><svg class="icon"><use href="#i-magnifying-glass"/></svg>New Scan</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Menu"><svg class="icon" style="width:14px;height:14px"><use href="#i-bars"/></svg></button>
+    </div>
+  </div>
+  <div class="ledger-tabs-mobile" id="mobileMenu">
+    <a class="active" href="#overview">Overview</a>
+    <a href="#criteria">Criteria</a>
+    <a href="#findings">Findings</a>
+    <a href="#dependencies">Dependencies</a>
+    <a href="#inspected">History</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="hero" id="top hero-scan">
+  <div class="container hero-grid">
+    <div class="reveal in">
+      <div class="eyebrow label-text" style="margin-bottom:12px"><span class="rule"></span>Final Year Project — Diploma in Information Security</div>
+      <h1 id="hero-scan">Every repository stands<br>for inspection before it's<br>allowed onto the shelf.</h1>
+      <p class="hero-sub">MalDet examines a public GitHub repository's source, its declared dependencies, and any packed archives inside it — weighing the result against five separate criteria before you <code>git clone</code> it onto your machine.</p>
+
+      <div class="scan-panel">
+        <div class="scan-row">
+          <svg class="icon"><use href="#i-magnifying-glass"/></svg>
+          <input class="scan-input" type="text" placeholder="github.com/owner/repository" aria-label="Repository URL">
+        </div>
+        <div class="scan-cta">
+          <button class="btn-ribbon btn-block">Submit for Inspection<svg class="icon" style="margin-left:auto"><use href="#i-arrow-right"/></svg></button>
+        </div>
+      </div>
+      <div class="trust-row">
+        <span class="trust-item">Five detection criteria</span>
+        <span class="trust-item">CVE &amp; typosquat checks</span>
+        <span class="trust-item">YARA malware signatures</span>
+        <span class="trust-item">results in ~90s</span>
+      </div>
+    </div>
+
+    <div class="reveal in hero-seal-wrap" style="transition-delay:.08s">
+      <svg id="seal-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <circle class="disc" cx="32" cy="32" r="30"/>
+        <circle class="disc-edge" cx="32" cy="32" r="29.2"/>
+        <path class="cask" d="M24 15 C21.5 15 20.4 18.4 20.2 22 L20 26 C19 29.4 19 34.6 20 38 L20.2 42 C20.4 45.6 21.5 49 24 49 L40 49 C42.5 49 43.6 45.6 43.8 42 L44 38 C45 34.6 45 29.4 44 26 L43.8 22 C43.6 18.4 42.5 15 40 15 Z"/>
+        <rect class="hoop" x="20.5" y="21.4" width="23" height="2.3"/>
+        <rect class="hoop" x="20.5" y="40.3" width="23" height="2.3"/>
+      </svg>
+      <div class="hero-seal-caption">Every scan, a stamped verdict</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LEDGER STRIP ============ -->
+<section id="overview">
+  <div class="container reveal">
+    <div class="ledger-strip">
+      <div class="ledger-cell">
+        <div class="tally-label">Total Inspected</div>
+        <div class="tally-value">1,248</div>
+        <div class="tally-sub">+86 this week</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="tally-label cleared">Cleared</div>
+        <div class="tally-value cleared">981</div>
+        <div class="tally-sub">Safe to vendor</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="tally-label flagged">Flagged</div>
+        <div class="tally-value flagged">211</div>
+        <div class="tally-sub">Medium-severity notes</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="tally-label contested">Contested</div>
+        <div class="tally-value contested">49</div>
+        <div class="tally-sub">High-severity, review needed</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="tally-label rejected">Rejected</div>
+        <div class="tally-value rejected">7</div>
+        <div class="tally-sub">Critical, do not vendor</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHARTS ============ -->
+<section style="margin-top:16px">
+  <div class="container reveal">
+    <div class="charts-grid">
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Average risk score, last 8 inspections</div>
+            <div class="panel-title-sub">Fleet-wide, weekly</div>
+          </div>
+          <div class="pill-select">8 weeks<svg class="icon"><use href="#i-chevron-down"/></svg></div>
+        </div>
+        <div class="panel-body">
+          <svg class="chart-svg" viewBox="0 0 620 230">
+            <line class="grid-line" x1="40" y1="16" x2="40" y2="176"/>
+            <line class="grid-line" x1="40" y1="176" x2="600" y2="176"/>
+            <line class="grid-line" x1="40" y1="136" x2="600" y2="136" stroke-dasharray="2 4"/>
+            <line class="grid-line" x1="40" y1="96" x2="600" y2="96" stroke-dasharray="2 4"/>
+            <line class="grid-line" x1="40" y1="56" x2="600" y2="56" stroke-dasharray="2 4"/>
+            <text class="axis-label" x="8" y="180">0</text>
+            <text class="axis-label" x="4" y="140">40</text>
+            <text class="axis-label" x="4" y="100">70</text>
+            <text class="axis-label" x="4" y="60">100</text>
+
+            <text class="axis-label" x="60" y="198">W1</text>
+            <text class="axis-label" x="132" y="198">W2</text>
+            <text class="axis-label" x="204" y="198">W3</text>
+            <text class="axis-label" x="276" y="198">W4</text>
+            <text class="axis-label" x="348" y="198">W5</text>
+            <text class="axis-label" x="420" y="198">W6</text>
+            <text class="axis-label" x="492" y="198">W7</text>
+            <text class="axis-label" x="552" y="198">W8 · now</text>
+
+            <path class="trend-area" d="M60,106.4 L132,117.6 L204,98 L276,140.4 L348,156 L420,149.6 L492,168 L564,173.2 L564,176 L60,176 Z"/>
+            <path class="trend-line" d="M60,106.4 L132,117.6 L204,98 L276,140.4 L348,156 L420,149.6 L492,168 L564,173.2"/>
+
+            <g>
+              <circle class="trend-dot" cx="60" cy="106.4" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W1" data-val="58" cx="60" cy="106.4" r="11"/>
+              <circle class="trend-dot" cx="132" cy="117.6" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W2" data-val="52" cx="132" cy="117.6" r="11"/>
+              <circle class="trend-dot" cx="204" cy="98" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W3" data-val="61" cx="204" cy="98" r="11"/>
+              <circle class="trend-dot" cx="276" cy="140.4" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W4" data-val="45" cx="276" cy="140.4" r="11"/>
+              <circle class="trend-dot" cx="348" cy="156" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W5" data-val="38" cx="348" cy="156" r="11"/>
+              <circle class="trend-dot" cx="420" cy="149.6" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W6" data-val="41" cx="420" cy="149.6" r="11"/>
+              <circle class="trend-dot" cx="492" cy="168" r="3.2"/>
+              <circle class="trend-dot hit" data-tip="W7" data-val="32" cx="492" cy="168" r="11"/>
+              <circle class="trend-dot trend-dot-last" cx="564" cy="173.2" r="4.5"/>
+              <circle class="trend-dot hit" data-tip="W8 · now" data-val="29" cx="564" cy="173.2" r="11"/>
+            </g>
+            <text x="564" y="161" text-anchor="middle" class="axis-label" font-weight="700" fill="var(--brass-foil)" font-size="11">29</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Findings by tier</div>
+            <div class="panel-title-sub">210 open findings, fleet-wide</div>
+          </div>
+        </div>
+        <div class="panel-body" style="padding-top:12px">
+          <div class="sev-row" data-tip="Critical" data-val="7 · 3% of total">
+            <div class="sev-dot rejected"></div>
+            <div class="sev-label">Critical</div>
+            <div class="sev-bar-track"><div class="sev-bar-fill rejected" style="width:6%"></div></div>
+            <div class="sev-count">7</div>
+          </div>
+          <div class="sev-row" data-tip="High" data-val="24 · 11% of total">
+            <div class="sev-dot contested"></div>
+            <div class="sev-label">High</div>
+            <div class="sev-bar-track"><div class="sev-bar-fill contested" style="width:20%"></div></div>
+            <div class="sev-count">24</div>
+          </div>
+          <div class="sev-row" data-tip="Medium" data-val="61 · 29% of total">
+            <div class="sev-dot flagged"></div>
+            <div class="sev-label">Medium</div>
+            <div class="sev-bar-track"><div class="sev-bar-fill flagged" style="width:52%"></div></div>
+            <div class="sev-count">61</div>
+          </div>
+          <div class="sev-row" data-tip="Low" data-val="118 · 56% of total">
+            <div class="sev-dot cleared"></div>
+            <div class="sev-label">Low</div>
+            <div class="sev-bar-track"><div class="sev-bar-fill cleared" style="width:100%"></div></div>
+            <div class="sev-count">118</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ FIVE CRITERIA ============ -->
+<section id="criteria" style="margin-top:72px">
+  <div class="container reveal">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow label-text"><span class="rule"></span>Detection pipeline</div>
+        <h2 class="section-title">Five criteria, one verdict</h2>
+        <p class="section-sub">A disposition is earned across five separate marks of inspection, run in sequence, before the results are merged and scored.</p>
+      </div>
+    </div>
+    <div class="criteria-grid">
+      <div class="criterion">
+        <div class="criterion-num">01</div>
+        <div class="criterion-mark"><svg class="icon"><use href="#i-bug"/></svg></div>
+        <div class="criterion-name">Bandit</div>
+        <p class="criterion-desc">Python static analysis — hardcoded secrets, unsafe <code>eval</code>, weak crypto, shell injection.</p>
+        <div class="criterion-status"><span class="dot"></span>Operational</div>
+      </div>
+      <div class="criterion">
+        <div class="criterion-num">02</div>
+        <div class="criterion-mark"><svg class="icon"><use href="#i-code"/></svg></div>
+        <div class="criterion-name">Semgrep</div>
+        <p class="criterion-desc">Cross-language pattern matching against community and custom rule sets.</p>
+        <div class="criterion-status"><span class="dot"></span>Operational</div>
+      </div>
+      <div class="criterion">
+        <div class="criterion-num">03</div>
+        <div class="criterion-mark"><svg class="icon"><use href="#i-fingerprint"/></svg></div>
+        <div class="criterion-name">YARA</div>
+        <p class="criterion-desc">Byte and string signatures matched against known malware families.</p>
+        <div class="criterion-status"><span class="dot"></span>Operational</div>
+      </div>
+      <div class="criterion">
+        <div class="criterion-num">04</div>
+        <div class="criterion-mark"><svg class="icon"><use href="#i-shield-virus"/></svg></div>
+        <div class="criterion-name">ClamAV</div>
+        <p class="criterion-desc">Signature-based antivirus sweep across the clone and every extracted archive.</p>
+        <div class="criterion-status"><span class="dot"></span>Operational</div>
+      </div>
+      <div class="criterion">
+        <div class="criterion-num">05</div>
+        <div class="criterion-mark"><svg class="icon"><use href="#i-cubes"/></svg></div>
+        <div class="criterion-name">Dependency Checker</div>
+        <p class="criterion-desc">CVE lookups via <code>pip-audit</code>, typosquat detection, unpinned &amp; loose version flags.</p>
+        <div class="criterion-status"><span class="dot"></span>Operational</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINDINGS — LEDGER BOOK ============ -->
+<section id="findings" style="margin-top:72px">
+  <div class="container reveal">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow label-text"><span class="rule"></span>Latest entries</div>
+        <h2 class="section-title">Recent findings</h2>
+        <p class="section-sub">Merged output from all five criteria, ranked by severity after noise filtering.</p>
+      </div>
+    </div>
+    <div class="ledger-book">
+      <div class="table-toolbar">
+        <div class="pill-select"><svg class="icon"><use href="#i-filter"/></svg>All severities<svg class="icon"><use href="#i-chevron-down"/></svg></div>
+        <button class="btn-outline-parchment"><svg class="icon"><use href="#i-download"/></svg>Export ledger</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Disposition</th><th>Criterion</th><th>Repository</th><th>Location</th><th>Note</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="seal-badge rejected">Critical</span></td>
+              <td><span class="cell-tool">ClamAV</span></td>
+              <td><span class="cell-repo-name">acme/data-pipeline</span></td>
+              <td><span class="cell-location"><svg class="icon"><use href="#i-file-code"/></svg>payloads/loader.exe</span></td>
+              <td>Win.Trojan.Generic signature match inside extracted archive</td>
+              <td><a class="row-action" href="#"><svg class="icon"><use href="#i-chevron-right"/></svg></a></td>
+            </tr>
+            <tr>
+              <td><span class="seal-badge rejected">Critical</span></td>
+              <td><span class="cell-tool">YARA</span></td>
+              <td><span class="cell-repo-name">oss/image-utils</span></td>
+              <td><span class="cell-location"><svg class="icon"><use href="#i-file-code"/></svg>vendor/patch.bin</span></td>
+              <td>Matches rule <code>susp_base64_powershell</code> — obfuscated payload</td>
+              <td><a class="row-action" href="#"><svg class="icon"><use href="#i-chevron-right"/></svg></a></td>
+            </tr>
+            <tr>
+              <td><span class="seal-badge contested">High</span></td>
+              <td><span class="cell-tool">Bandit</span></td>
+              <td><span class="cell-repo-name">acme/api-gateway</span></td>
+              <td><span class="cell-location"><svg class="icon"><use href="#i-file-code"/></svg>auth/tokens.py:47</span></td>
+              <td>Hardcoded secret assigned to <code>AWS_SECRET_ACCESS_KEY</code></td>
+              <td><a class="row-action" href="#"><svg class="icon"><use href="#i-chevron-right"/></svg></a></td>
+            </tr>
+            <tr>
+              <td><span class="seal-badge contested">High</span></td>
+              <td><span class="cell-tool">Dep. Checker</span></td>
+              <td><span class="cell-repo-name">oss/image-utils</span></td>
+              <td><span class="cell-location"><svg class="icon"><use href="#i-file-code"/></svg>requirements.txt:12</span></td>
+              <td>Typosquat: <code>reqeusts</code> — 92% match to <code>requests</code></td>
+              <td><a class="row-action" href="#"><svg class="icon"><use href="#i-chevron-right"/></svg></a></td>
+            </tr>
+            <tr>
+              <td><span class="seal-badge flagged">Medium</span></td>
+              <td><span class="cell-tool">Semgrep</span></td>
+              <td><span class="cell-repo-name">acme/api-gateway</span></td>
+              <td><span class="cell-location"><svg class="icon"><use href="#i-file-code"/></svg>app/db.py:88</span></td>
+              <td>SQL query built via string concatenation — injection risk</td>
+              <td><a class="row-action" href="#"><svg class="icon"><use href="#i-chevron-right"/></svg></a></td>
+            </tr>
+            <tr>
+              <td><span class="seal-badge flagged">Medium</span></td>
+              <td><span class="cell-tool">Dep. Checker</span></td>
+              <td><span class="cell-repo-name">acme/data-pipeline</span></td>
+              <td><span class="cell-location"><svg class="icon"><use href="#i-file-code"/></svg>package.json:5</span></td>
+              <td>Unpinned dependency <code>lodash@*</code> — supply-chain drift risk</td>
+              <td><a class="row-action" href="#"><svg class="icon"><use href="#i-chevron-right"/></svg></a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SUPPLY-CHAIN WATCH ============ -->
+<section id="dependencies" style="margin-top:72px">
+  <div class="container reveal">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow label-text"><span class="rule"></span>Supply-chain watch</div>
+        <h2 class="section-title">Your dependency tree is under review too</h2>
+        <p class="section-sub">The dependency checker parses <code>requirements.txt</code> and <code>package.json</code> before a single line of source is read.</p>
+      </div>
+    </div>
+    <div class="supply-strip">
+      <div class="supply-cell">
+        <div class="icon-top"><svg class="icon"><use href="#i-fingerprint"/></svg></div>
+        <h4>Typosquat detection</h4>
+        <p>Package names compared against known libraries by sequence similarity — catches near-identical impostors before install.</p>
+        <div class="supply-example"><b>reqeusts</b> → 92% match to requests</div>
+      </div>
+      <div class="supply-cell">
+        <div class="icon-top"><svg class="icon"><use href="#i-link"/></svg></div>
+        <h4>Direct URL &amp; git+ installs</h4>
+        <p>Dependencies pulled straight from a URL or Git ref bypass registry review, and are flagged for manual inspection every time.</p>
+        <div class="supply-example"><b>git+https://…</b> flagged, no registry provenance</div>
+      </div>
+      <div class="supply-cell">
+        <div class="icon-top"><svg class="icon"><use href="#i-lock"/></svg></div>
+        <h4>Unpinned &amp; loose versions</h4>
+        <p>Constraints like <code>&gt;=</code> or <code>^</code> let a compromised future release slip straight into your build.</p>
+        <div class="supply-example"><b>lodash@*</b> — no upper bound set</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECENTLY INSPECTED ============ -->
+<section id="inspected" style="margin-top:72px">
+  <div class="container reveal">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow label-text"><span class="rule"></span>Scan history</div>
+        <h2 class="section-title">Recently inspected repositories</h2>
+      </div>
+      <a class="btn-outline-parchment" href="#"><svg class="icon"><use href="#i-clock-rotate-left"/></svg>Full history</a>
+    </div>
+    <div class="inspected-list">
+      <div class="inspected-row">
+        <div class="inspected-id">
+          <div class="name"><svg class="icon"><use href="#i-code-branch"/></svg>acme/api-gateway</div>
+          <div class="owner">main · 1.2k stars</div>
+        </div>
+        <div class="inspected-meta">
+          <span><svg class="icon"><use href="#i-star"/></svg>1.2k</span>
+          <span><svg class="icon"><use href="#i-clock-rotate-left"/></svg>12 min ago</span>
+        </div>
+        <span class="seal-badge rejected">Critical</span>
+        <a class="row-action" href="#"><svg class="icon"><use href="#i-arrow-right"/></svg></a>
+      </div>
+      <div class="inspected-row">
+        <div class="inspected-id">
+          <div class="name"><svg class="icon"><use href="#i-code-branch"/></svg>oss/image-utils</div>
+          <div class="owner">main · 340 stars</div>
+        </div>
+        <div class="inspected-meta">
+          <span><svg class="icon"><use href="#i-star"/></svg>340</span>
+          <span><svg class="icon"><use href="#i-clock-rotate-left"/></svg>47 min ago</span>
+        </div>
+        <span class="seal-badge contested">High</span>
+        <a class="row-action" href="#"><svg class="icon"><use href="#i-arrow-right"/></svg></a>
+      </div>
+      <div class="inspected-row">
+        <div class="inspected-id">
+          <div class="name"><svg class="icon"><use href="#i-code-branch"/></svg>devtools/cli-kit</div>
+          <div class="owner">main · 89 stars</div>
+        </div>
+        <div class="inspected-meta">
+          <span><svg class="icon"><use href="#i-star"/></svg>89</span>
+          <span><svg class="icon"><use href="#i-clock-rotate-left"/></svg>2 hr ago</span>
+        </div>
+        <span class="seal-badge cleared">Low</span>
+        <a class="row-action" href="#"><svg class="icon"><use href="#i-arrow-right"/></svg></a>
+      </div>
+      <div class="inspected-row">
+        <div class="inspected-id">
+          <div class="name"><svg class="icon"><use href="#i-code-branch"/></svg>acme/data-pipeline</div>
+          <div class="owner">main · 512 stars</div>
+        </div>
+        <div class="inspected-meta">
+          <span><svg class="icon"><use href="#i-star"/></svg>512</span>
+          <span><svg class="icon"><use href="#i-clock-rotate-left"/></svg>3 hr ago</span>
+        </div>
+        <span class="seal-badge rejected">Critical</span>
+        <a class="row-action" href="#"><svg class="icon"><use href="#i-arrow-right"/></svg></a>
+      </div>
+      <div class="inspected-row">
+        <div class="inspected-id">
+          <div class="name"><svg class="icon"><use href="#i-code-branch"/></svg>research/ml-notebooks</div>
+          <div class="owner">main · 27 stars</div>
+        </div>
+        <div class="inspected-meta">
+          <span><svg class="icon"><use href="#i-star"/></svg>27</span>
+          <span><svg class="icon"><use href="#i-clock-rotate-left"/></svg>5 hr ago</span>
+        </div>
+        <span class="seal-badge cleared">Safe</span>
+        <a class="row-action" href="#"><svg class="icon"><use href="#i-arrow-right"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EMPTY-STATE CLOSING CTA ============ -->
+<section style="margin-top:72px">
+  <div class="container reveal">
+    <div class="empty-state">
+      <svg id="seal-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <circle class="disc" cx="32" cy="32" r="30"/>
+        <circle class="disc-edge" cx="32" cy="32" r="29.2"/>
+        <path class="cask" d="M24 15 C21.5 15 20.4 18.4 20.2 22 L20 26 C19 29.4 19 34.6 20 38 L20.2 42 C20.4 45.6 21.5 49 24 49 L40 49 C42.5 49 43.6 45.6 43.8 42 L44 38 C45 34.6 45 29.4 44 26 L43.8 22 C43.6 18.4 42.5 15 40 15 Z"/>
+        <rect class="hoop" x="20.5" y="21.4" width="23" height="2.3"/>
+        <rect class="hoop" x="20.5" y="40.3" width="23" height="2.3"/>
+      </svg>
+      <h3>Add MalDet to your pre-merge checklist.</h3>
+      <p>Run it against a fork before you vendor a dependency, review a pull request, or bring a new open-source tool into your stack.</p>
+      <button class="btn-ribbon"><svg class="icon"><use href="#i-magnifying-glass"/></svg>Submit a Repository</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="brand">
+          <svg id="seal-mark" viewBox="0 0 64 64" style="width:26px;height:26px" aria-hidden="true">
+            <circle class="disc" cx="32" cy="32" r="30"/>
+            <circle class="disc-edge" cx="32" cy="32" r="29.2"/>
+            <path class="cask" d="M24 15 C21.5 15 20.4 18.4 20.2 22 L20 26 C19 29.4 19 34.6 20 38 L20.2 42 C20.4 45.6 21.5 49 24 49 L40 49 C42.5 49 43.6 45.6 43.8 42 L44 38 C45 34.6 45 29.4 44 26 L43.8 22 C43.6 18.4 42.5 15 40 15 Z"/>
+            <rect class="hoop" x="20.5" y="21.4" width="23" height="2.3"/>
+            <rect class="hoop" x="20.5" y="40.3" width="23" height="2.3"/>
+          </svg>
+          <span class="brand-word">MalDet</span>
+        </div>
+        <p>A static analysis tool for public GitHub repositories, combining five detection criteria with a risk classifier. Built as a Final Year Project for a Diploma in Information Security.</p>
+        <div class="stack-row">
+          <span class="stack-chip">Flask</span>
+          <span class="stack-chip">MySQL</span>
+          <span class="stack-chip">Bandit</span>
+          <span class="stack-chip">Semgrep</span>
+          <span class="stack-chip">YARA</span>
+          <span class="stack-chip">ClamAV</span>
+        </div>
+      </div>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h5>Product</h5>
+          <a href="#overview">Overview</a>
+          <a href="#criteria">Detection criteria</a>
+          <a href="#findings">Findings</a>
+          <a href="#dependencies">Dependencies</a>
+        </div>
+        <div class="footer-col">
+          <h5>Project</h5>
+          <a href="#">Methodology</a>
+          <a href="#">Risk scoring model</a>
+        </div>
+        <div class="footer-col">
+          <h5>Repository</h5>
+          <a href="#"><span style="display:inline-flex;align-items:center;gap:6px"><svg class="icon" style="width:11px;height:11px"><use href="#i-github"/></svg>GitHub</span></a>
+          <a href="#"><span style="display:inline-flex;align-items:center;gap:6px"><svg class="icon" style="width:11px;height:11px"><use href="#i-external"/></svg>Issue tracker</span></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="disclaimer"><svg class="icon"><use href="#i-circle-info"/></svg>MalDet is a static-analysis aid built for academic research — it does not guarantee a repository is safe. Always review findings manually before trusting third-party code.</div>
+
+    <div class="footer-bottom">
+      <p>© 2026 MalDet — Final Year Project. Icons by Font Awesome Free (CC BY 4.0).</p>
+      <p>Diploma in Information Security</p>
+    </div>
+  </div>
+</footer>
+
+<div id="tooltip"></div>
+
+<script>
+  (function(){
+    const els = document.querySelectorAll('.reveal');
+    if(!('IntersectionObserver' in window)){ els.forEach(e=>e.classList.add('in')); return; }
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(en => { if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { threshold: .12 });
+    els.forEach(e => io.observe(e));
+  })();
+
+  (function(){
+    const tip = document.getElementById('tooltip');
+    let active = null;
+    function show(el, e){
+      const label = el.getAttribute('data-tip');
+      const val = el.getAttribute('data-val');
+      tip.innerHTML = label + (val ? `<span class="sub">${val}</span>` : '');
+      tip.classList.add('show'); active = el; move(e);
+    }
+    function move(e){ if(!active) return; tip.style.left = e.clientX + 'px'; tip.style.top = e.clientY + 'px'; }
+    function hide(){ tip.classList.remove('show'); active = null; }
+    document.querySelectorAll('[data-tip]').forEach(el => {
+      el.addEventListener('mouseenter', (e)=>show(el,e));
+      el.addEventListener('mousemove', move);
+      el.addEventListener('mouseleave', hide);
+    });
+  })();
+
+  (function(){
+    const btn = document.getElementById('navToggle');
+    const menu = document.getElementById('mobileMenu');
+    if(!btn) return;
+    btn.addEventListener('click', ()=> menu.classList.toggle('open'));
+  })();
+</script>

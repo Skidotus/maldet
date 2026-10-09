@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}New Scan{% endblock %}
+{% block title %}New scan{% endblock %}
 
 {% block content %}
 
+  {# The scan form normally lives on the home page (#scan). This page is
+     what the server renders when it rejects a submitted URL, so the error
+     sits next to a form the visitor can correct straight away. #}
   <div class="mb-4">
-    <h1 class="h3 mb-1">New Scan</h1>
+    <h1 class="mb-1">New scan</h1>
     <p class="text-muted mb-0">Submit a public GitHub repository for inspection.</p>
   </div>
 
@@ -14,32 +17,30 @@
   {% endif %}
 
   <div class="ledger-book" style="max-width: 640px;">
-    <div class="ledger-book__header">
-      <h2 class="h6 mb-0">Submit Repository</h2>
-    </div>
     <form method="POST" action="{{ url_for('scan') }}" class="p-4" id="scanForm">
       <div class="mb-3">
         <label for="repo_url" class="form-label-ledger">Repository URL</label>
-        <input type="text" class="form-control form-control-ledger" id="repo_url" name="repo_url"
-               placeholder="https://github.com/owner/repo" required autofocus>
-        <div class="form-text">Public repos only — accepts a full GitHub URL or <code>owner/repo</code>.</div>
+        <input type="text" class="form-control form-control-ledger font-monospace" id="repo_url" name="repo_url"
+               placeholder="https://github.com/owner/repo" required autofocus
+               {% if error %}aria-invalid="true"{% endif %} aria-describedby="repoUrlHelp">
+        <div class="form-text" id="repoUrlHelp">Public repositories only. A full GitHub URL or <code>owner/repo</code>.</div>
       </div>
 
       <div class="mb-4">
         <label for="archive_password" class="form-label-ledger">
-          Archive Password <span class="text-muted text-normal">(optional)</span>
+          Archive password <span class="text-muted text-normal">(optional)</span>
         </label>
         <input type="text" class="form-control form-control-ledger" id="archive_password" name="archive_password"
-               placeholder="infected" value="infected">
-        <div class="form-text">Used to extract password-protected .zip/.7z/.rar archives found in the repo.</div>
+               value="infected" aria-describedby="archiveHelp">
+        <div class="form-text" id="archiveHelp">Used to extract password-protected .zip, .7z and .rar archives found in the repository.</div>
       </div>
 
-      <button type="submit" class="btn btn-ribbon" id="scanSubmitBtn">
-        <i class="bi bi-search me-1" aria-hidden="true"></i>Run Scan
+      <button type="submit" class="btn btn-ribbon btn-pill" id="scanSubmitBtn">
+        <i class="bi bi-search me-1" aria-hidden="true"></i>Run scan
       </button>
       <p class="form-text mt-3 mb-0">
-        Scans run synchronously and can take several minutes — the page will wait for the full pipeline
-        (Bandit, Semgrep, YARA, ClamAV, dependency checks) before redirecting to the results.
+        Scans are queued and run one at a time. You will be taken to a progress page,
+        and it is safe to refresh it or come back later.
       </p>
     </form>
   </div>

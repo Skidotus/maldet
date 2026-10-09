@@ -5,7 +5,7 @@
 {% block content %}
 
   <div class="mb-4">
-    <h1 class="h3 mb-1">Scanning</h1>
+    <h1 class="mb-1">Scanning</h1>
     <p class="text-muted mb-0">Safe to refresh or reopen this tab — the scan keeps running on the server.</p>
   </div>
 
@@ -17,7 +17,7 @@
 
       {% if job.status == 'error' %}
         <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorText">{{ job.error }}</div>
-        <a href="{{ url_for('scan') }}" class="btn btn-ribbon">Back to New Scan</a>
+        <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
 
       {% elif job.status == 'done' %}
         <p class="mb-0">Scan complete — redirecting to results…</p>
@@ -41,7 +41,7 @@
         </div>
         <div id="scanError" style="display: none;">
           <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorTextLive"></div>
-          <a href="{{ url_for('scan') }}" class="btn btn-ribbon">Back to New Scan</a>
+          <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
         </div>
       {% endif %}
 

@@ -173,10 +173,19 @@ this before changing a template: two pages have state that only makes sense
 with the backend behaviour behind it, and both are easy to break by
 "simplifying" a branch that looks redundant.
 
-**`index.html`** — `repos` (top 10 by score), `total`, and the per-level
-counts `safe`/`low`/`medium`/`high`/`critical`.
+**`index.html`** — the one-page landing site (welcome, tools, scan form,
+recent scans, about). Given `repos` (10 most recent), `total`, the per-level
+counts `safe`/`low`/`medium`/`high`/`critical`, `total_findings` (a
+`COUNT(*)` over `scan_results`) and `active_job_id` (the visitor's queued or
+running job, or None — shown as a "scan in progress" link above the form,
+since submitting again would only bounce back to it). The hero card shows
+`repos[0]`, a real record; scores are unbounded, so it shows the level on a
+five-step scale rather than a percentage bar. About-us names live in the
+`team` / `institution` set at the top of the template and are placeholders.
 
-**`scan.html`** — nothing, or `error` on a bad URL.
+**`scan.html`** — nothing, or `error` on a bad URL. The form normally lives
+in `index.html#scan`; this page is what the server renders on a rejected
+URL, so the error sits next to a form that can be corrected.
 
 **`scan_status.html`** — `job` and `job_id`. `job` is shaped by
 `app.py:_job_payload()`, not the raw `scan_jobs` row: `status`, `stage`,
@@ -189,8 +198,13 @@ every 2s and must keep polling while `status` is `queued` *or* `running`; a
 queued job that is not polled looks frozen forever.
 
 **`detail.html`** — `repo`, `risk`, `findings`, `tools`, `tool_totals`,
-`findings_summary` (the rule-based text), `history_dates`/`history_scores`
-(JSON for the chart), plus the two below.
+`findings_summary` (the rule-based text), `finding_counts` (`total` /
+`likely_real` / `likely_noise` over *all* findings, not the capped list),
+`history_dates`/`history_scores` (JSON for the chart), plus the two below.
+Laid out as a dark security console (`body.console-page` re-points the
+colour tokens): verdict panels, summary / engine / trend row, then a
+findings log filtered client-side and paged 50 at a time. `findings` is
+capped at 200 per engine, so the log says so when it is truncated.
 
 - `llm_summary` / `llm_pending` — three display states, not two. A summary is
   written *after* the scan finishes (20-60s of CPU), so arriving with none is
@@ -213,8 +227,9 @@ queued job that is not polled looks frozen forever.
   screen. A NULL `llm_summary_status` (a row predating the column) reports as
   `unavailable`.
 
-Styling lives in `static/css/style.css` against a custom parchment/ink theme
-over Bootstrap. There is no build step and no framework: templates are Jinja,
+Styling lives in `static/css/style.css`: a forest-green / off-white "paper"
+theme over Bootstrap, with tokens on `:root`. Below 768px, tables marked
+`table-stack` turn each row into a card so both verdicts stay visible. There is no build step and no framework: templates are Jinja,
 scripts are inline vanilla JS in each template's `{% block scripts %}`.
 
 ## Branching
