@@ -136,12 +136,86 @@ the OOM killer. Tune via `MALDET_OLLAMA_MODEL` / `MALDET_OLLAMA_HOST` /
 findings in the standard dict shape, call it inside `scan_repo()` and append its
 output to `findings` before `filter_noise()` runs.
 
+**`db_connect.py`** — the one place that knows where MySQL is. Resolves the
+port from `DB_PORT` in the environment, else `DB_PORT` in `config.py`, else
+3306, and all fifteen `pymysql.connect()` calls pass it. Exists for the SSH
+tunnel case (`ssh -L 3307:127.0.0.1:3306`), because without a configurable
+port every script silently connects to the *local* database instead — same
+tables, plausible results, wrong data, no error.
+
+**`backfill_summaries.py`** — generates `risk_scores.llm_summary` for repos
+that lack one, from stored findings, without rescanning. Groups the findings
+in SQL (one repo has 157k findings but 557 groups) so it is cheap over a slow
+link, and shares `summarize_one()` with `worker.py` so scan-time and
+after-the-fact summaries cannot drift. Survives Ollama being killed mid-batch
+by waiting for the service to restart rather than marking every remaining
+repo unavailable.
+
+**`evaluate_summaries.py`** — scores summaries against eight mechanical
+checks (fabricated numbers/files/advisory-ids/tools, invented score scales,
+risk-level contradiction, and four format rules). `--generate` for a fresh
+sample, `--stored` to score what is in the database, `--rescore` to re-judge
+a saved run after fixing a check. Last run: 17 of 19 clean.
+
 **Database**: MySQL, `pymysql` with `DictCursor`. Tables (defined in `schema.sql`):
 `repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`.
+`repositories.source_status` and `risk_scores.llm_summary_status` both drive
+UI state — see the frontend contract below.
 Update `schema.sql` whenever the schema changes — it's the source of truth for a
 fresh DB setup. `scan_jobs.queued_at` is `DATETIME(6)`: whole-second precision
 made jobs submitted in the same second compare as simultaneous, so everyone was
 told they were first in the queue.
+
+## Frontend contract
+
+What each template is given, and the two JSON endpoints the pages poll. Read
+this before changing a template: two pages have state that only makes sense
+with the backend behaviour behind it, and both are easy to break by
+"simplifying" a branch that looks redundant.
+
+**`index.html`** — `repos` (top 10 by score), `total`, and the per-level
+counts `safe`/`low`/`medium`/`high`/`critical`.
+
+**`scan.html`** — nothing, or `error` on a bad URL.
+
+**`scan_status.html`** — `job` and `job_id`. `job` is shaped by
+`app.py:_job_payload()`, not the raw `scan_jobs` row: `status`, `stage`,
+`repo`, `repo_id`, `error`, `started_at` (falls back to `queued_at`, since a
+queued job has not started) and `position`. **`position` is how many scans
+are ahead of this one** — scans run strictly one at a time, so a visitor can
+genuinely be waiting behind someone else and the page says so rather than
+showing an unexplained spinner. The page polls `/api/scan-status/<job_id>`
+every 2s and must keep polling while `status` is `queued` *or* `running`; a
+queued job that is not polled looks frozen forever.
+
+**`detail.html`** — `repo`, `risk`, `findings`, `tools`, `tool_totals`,
+`findings_summary` (the rule-based text), `history_dates`/`history_scores`
+(JSON for the chart), plus the two below.
+
+- `llm_summary` / `llm_pending` — three display states, not two. A summary is
+  written *after* the scan finishes (20-60s of CPU), so arriving with none is
+  normal. `llm_summary` set → show it. `llm_pending` true → show the
+  placeholder, poll `/api/summary/<repo_id>` every 3s, and give up after 4
+  minutes. Neither → show `findings_summary`. The placeholder deliberately
+  shows the rule-based summary underneath itself, dimmed, so a visitor who
+  will not wait has still been told what was found.
+- `repo.source_status` — `gone`, `renamed`, or NULL. A scan is a snapshot and
+  the repository can disappear afterwards: on `gone` the page says the
+  findings cannot be refreshed and disables Rescan (it could only fail), on
+  `renamed` it says these are the superseded original. Without this the page
+  presents unverifiable months-old findings as current.
+
+**JSON endpoints** (both exist because their work outlives a request):
+- `GET /api/scan-status/<job_id>` → the `_job_payload()` fields above.
+- `GET /api/summary/<repo_id>` → `{status, summary}` where status is
+  `pending` / `done` / `unavailable`. `unavailable` is a normal outcome, not
+  an error — it means stop polling and keep the rule-based summary already on
+  screen. A NULL `llm_summary_status` (a row predating the column) reports as
+  `unavailable`.
+
+Styling lives in `static/css/style.css` against a custom parchment/ink theme
+over Bootstrap. There is no build step and no framework: templates are Jinja,
+scripts are inline vanilla JS in each template's `{% block scripts %}`.
 
 ## Branching
 
