@@ -49,6 +49,17 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# GuardDog gets its own virtualenv rather than a line in requirements.txt:
+# it requires click >=8.4.1 while semgrep pins click ~=8.1.8, so installing
+# both into one environment breaks semgrep. scanner.py looks for `guarddog`
+# on PATH first, which the symlink satisfies. Verified immediately for the
+# same reason as the system tools above — run_guarddog() skips silently when
+# the binary is absent, so a failed install would look like a clean scan.
+RUN python -m venv /opt/guarddog \
+    && /opt/guarddog/bin/pip install --no-cache-dir guarddog \
+    && ln -sf /opt/guarddog/bin/guarddog /usr/local/bin/guarddog \
+    && guarddog --version
+
 COPY . .
 
 # Run as a non-root user — this is a security tool, and it executes scanners

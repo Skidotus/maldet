@@ -10,9 +10,10 @@ combined with machine learning (ML) risk classification.
 
 ## Features
 
-- Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV)
-- Supply chain attack detection (OSV + custom dependency checker)
+- Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV, GuardDog)
+- Supply chain attack detection (OSV CVE lookups across requirements.txt, poetry.lock, pyproject.toml and Pipfile, plus a custom dependency checker)
 - ML risk classification (Random Forest)
+- Plain-English findings summary written by a local LLM (Ollama, optional)
 - Scan history and risk trend tracking
 - Web dashboard with charts
 - Chrome extension support
@@ -25,7 +26,7 @@ combined with machine learning (ML) risk classification.
 |-------|-----------|
 | Backend | Python 3.12, Flask |
 | Database | MySQL 8.0 |
-| Static Analysis | Bandit, Semgrep, YARA, ClamAV |
+| Static Analysis | Bandit, Semgrep, YARA, ClamAV, GuardDog |
 | Supply Chain | OSV Scanner, Custom dependency checker |
 | Machine Learning | scikit-learn (Random Forest) |
 | Frontend | HTML, CSS, JavaScript |
@@ -37,7 +38,7 @@ combined with machine learning (ML) risk classification.
 
 If you just want MalDet running, use this. It needs **Docker** and **git**,
 and nothing else — no Python, no virtualenv, no MySQL setup, no installing
-`yara`/`clamav`/`7z`, no `semgrep login`.
+`yara`/`clamav`/`7z`/`guarddog`, no `semgrep login`.
 
 ### Installing Docker
 
@@ -215,6 +216,46 @@ You should see `(venv)` at the start of your terminal line.
 pip install -r requirements.txt
 ```
 
+### 6a. Install GuardDog (separate virtualenv — do not skip the reason)
+
+GuardDog detects supply-chain malware: obfuscated payloads, install-time
+network calls, credential access, reverse shells. It needs its **own**
+virtualenv because it requires click >=8.4.1 while Semgrep pins click
+~=8.1.8 — putting both in `venv/` silently upgrades click and breaks Semgrep.
+
+```bash
+python3 -m venv .venv-guarddog
+.venv-guarddog/bin/pip install guarddog
+.venv-guarddog/bin/guarddog --version
+```
+
+Nothing else to configure — the scanner finds it automatically. If you skip
+this step scans still run, just without GuardDog's findings.
+
+### 6b. Install Ollama (optional — plain-English summaries)
+
+Writes a short plain-English paragraph explaining each scan's findings. It
+runs locally, needs no API key or account, and works offline.
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen3.5:2b
+```
+
+Pull exactly this model, or set `MALDET_OLLAMA_MODEL` to whatever you did
+pull — the scanner looks for `qwen3.5:2b` and silently falls back to the
+rule-based summary if it is missing, so a wrong model looks like the feature
+doing nothing.
+
+**Skip this if you're short on RAM.** The model needs roughly 3GB resident
+and generation is CPU-only without a GPU, taking 20-60 seconds per scan. On
+a 4GB machine it does not fit alongside Semgrep (which peaks near 2GB) — set
+`MALDET_OLLAMA_DISABLE=1` there instead. Without Ollama, scans run exactly
+as before and the detail page shows the rule-based summary — nothing breaks.
+
+Set `MALDET_OLLAMA_DISABLE=1` to turn it off without uninstalling, or
+`MALDET_OLLAMA_MODEL` to use a different model.
+
 ### 6. Login to Semgrep (required before first scan)
 
 ```bash
@@ -277,6 +318,7 @@ bandit --version
 semgrep --version
 yara --version
 clamscan --version
+.venv-guarddog/bin/guarddog --version
 mysql --version
 mysql -u fypuser -p fyp_scanner -e "SHOW TABLES;"
 ```
@@ -313,29 +355,80 @@ http://localhost:5000
 
 ```text
 maldet/
-├── app.py                  # Flask web app (routes)
-├── scanner.py              # Core scan engine
-├── dep_checker.py          # Dependency/supply chain checker
+├── app.py                  # Flask web app (routes) + inline scan worker for local dev
+├── worker.py               # Scan worker — the only process that runs scans
+├── job_queue.py            # Persistent scan queue (scan_jobs table)
+├── scanner.py              # Core scan engine — orchestrates all six detectors
+├── dep_checker.py          # Dependency / supply chain checker
+├── llm_summary.py          # Plain-English scan summary via local Ollama
+├── rules.yar               # YARA detection rules
+├── schema.sql              # Database schema — source of truth for a fresh DB
 ├── config.py               # Your credentials (gitignored)
 ├── config.example.py       # Credentials template
-├── rules.yar               # YARA detection rules
-├── schema.sql              # Database schema
 ├── requirements.txt        # Python dependencies
+├── malware_repos.txt       # Known-malicious repo list (classifier training input)
+├── eval_sample.json        # Hand-labeled evaluation set (ground truth)
 ├── model/
-│   └── risk_classifier.pkl # Trained ML model
-├── templates/
-│   ├── index.html          # Dashboard
-│   ├── scan.html           # Scan input + live progress
-│   ├── detail.html         # Results
-│   └── history.html        # Scan history
-├── static/
-│   ├── css/
-│   ├── js/
-│   └── img/
-├── extension/              # Chrome extension
-├── .gitignore
+│   └── risk_classifier.pkl # Trained Random Forest
+├── templates/              # index, scan, scan_status, detail, history, base
+├── static/                 # css, js
+├── docker/                 # entrypoint.sh
+├── db/                     # export_seed.py, seed_data.sql.gz
+├── Dockerfile
+├── docker-compose.yml      # db + app (gunicorn) + worker
 └── README.md
 ```
+
+A Chrome extension is planned but not built; there is no `extension/` directory yet.
+
+---
+
+## Utility scripts
+
+These are one-off tools, not part of the running system. Nothing imports most of
+them, which makes them look deletable — but several are the **audit trail for
+numbers that appear in the report**, so check this table before removing any.
+
+### Classifier & evaluation
+
+| Script | What it does | Still needed? |
+|---|---|---|
+| `train_classifier.py` | Trains the Random Forest that scores each finding with P(real issue). Produces `model/risk_classifier.pkl`. | **Yes** — rerun to retrain |
+| `build_eval_sample.py` | Builds a stratified random sample of real findings into `eval_sample.json` for hand labeling. | **Yes** — rerun to resample |
+| `review_labels.py` | Terminal tool for hand-labeling `eval_sample.json` (fills `human_label`). | **Yes** — labels still incomplete |
+| `evaluate_classifier.py` | Computes real precision / recall / F1 against the hand-checked labels. Source of the 0.52 / 0.62 figures. | **Yes** — rerun after labeling |
+| `inspect_classifier.py` | Ad-hoc debugging: prints one repo's high-severity findings ranked by model confidence. Hardcodes `repo_id=9`. | No — throwaway, kept in git history |
+| `inspect_classifier2.py` | Near-duplicate of the above, one day later. | No — throwaway |
+
+### Threshold calibration — keep these
+
+| Script | What it does | Still needed? |
+|---|---|---|
+| `calibrate_thresholds.py` | Derives the overall `Safe/Low/Medium/High/Critical` cutoffs from the real corpus. **`scanner.py` cites it in a comment as the source of those numbers.** | **Yes** — this is where 20/80/300 came from |
+| `calibrate_category_thresholds.py` | Same, per axis. The two axes have very different score scales, so one threshold set for both would make malware always look mild. | **Yes** — justifies the per-axis split |
+
+### Corpus maintenance
+
+| Script | What it does | Still needed? |
+|---|---|---|
+| `batch_scan.py` | Runs the full pipeline over many repos unattended. Writes `batch_scan.log`. | **Yes** — for the outstanding rescan |
+| `recompute_scores.py` | Recomputes `risk_scores` and backfills `scan_results.confidence` without rescanning. | Occasionally — after a scoring change |
+| `recompute_category_scores.py` | Same, for the two per-axis scores. | Occasionally |
+| `rescan_yara_dep.py` | Re-runs **only** YARA + dep_checker against stored repos. Cannot fix Bandit/Semgrep data. | Occasionally |
+| `mark_rescanned.py` | Bumps `scanned_at` and appends a `scan_history` row after a targeted rescan. | Occasionally |
+| `dedupe_repositories.py` | Consolidates duplicate `(owner, repo_name)` rows, keeping the newest. | Rarely — a past cleanup |
+
+### Deployment
+
+| Script | What it does | Still needed? |
+|---|---|---|
+| `db/export_seed.py` | Exports a slice of the live DB as `db/seed_data.sql.gz`, which Docker loads into a fresh MySQL container. | **Yes** — rerun when the seed goes stale |
+
+### Generated / disposable
+
+`__pycache__/` (bytecode, regenerates), `batch_scan.log` (scan run history, gitignored),
+`guided_review.json` (**in-progress** label review — not junk), `design/` (an early
+dashboard mockup, superseded by `templates/`).
 
 ---
 

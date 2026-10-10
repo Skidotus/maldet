@@ -16,3 +16,9 @@ __pycache__/
 
 # timestamped safety copies from `build_eval_sample.py --force`
 *.bak
+
+# GuardDog's own virtualenv. It can't live in venv/ or requirements.txt:
+# guarddog requires click >=8.4.1 and semgrep pins click ~=8.1.8, so sharing
+# an environment silently upgrades click out from under semgrep. Created with
+#   python3 -m venv .venv-guarddog && .venv-guarddog/bin/pip install guarddog
+.venv-guarddog/

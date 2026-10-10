@@ -5,7 +5,7 @@
 {% block content %}
 
   <div class="mb-4">
-    <h1 class="h3 mb-1">Scanning</h1>
+    <h1 class="mb-1">Scanning</h1>
     <p class="text-muted mb-0">Safe to refresh or reopen this tab — the scan keeps running on the server.</p>
   </div>
 
@@ -17,7 +17,7 @@
 
       {% if job.status == 'error' %}
         <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorText">{{ job.error }}</div>
-        <a href="{{ url_for('scan') }}" class="btn btn-ribbon">Back to New Scan</a>
+        <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
 
       {% elif job.status == 'done' %}
         <p class="mb-0">Scan complete — redirecting to results…</p>
@@ -28,14 +28,20 @@
             <span class="spinner-border spinner-border-sm text-accent" role="status" aria-hidden="true"></span>
             <span id="scanStage" class="fw-semibold">{{ job.stage }}</span>
           </div>
+          {# Scans run one at a time so a large repo cannot starve the box of
+             memory, which means a visitor may genuinely be waiting behind
+             someone else. Saying so beats an unexplained spinner. #}
+          <p id="scanQueue" class="form-text mb-1"{% if not job.position %} style="display: none;"{% endif %}>
+            Waiting behind <span id="scanQueuePos">{{ job.position }}</span> other scan(s) — scans run one at a time.
+          </p>
           <p class="form-text mb-0">
-            Started {{ job.started_at.strftime('%d %b %Y, %H:%M:%S') }}. Scans run Bandit, Semgrep, YARA,
+            Submitted {{ job.started_at.strftime('%d %b %Y, %H:%M:%S') }}. Scans run Bandit, Semgrep, YARA,
             ClamAV, and dependency checks in sequence and can take several minutes.
           </p>
         </div>
         <div id="scanError" style="display: none;">
           <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorTextLive"></div>
-          <a href="{{ url_for('scan') }}" class="btn btn-ribbon">Back to New Scan</a>
+          <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
         </div>
       {% endif %}
 
@@ -48,13 +54,15 @@
 <script>
   {% if job.status == 'done' %}
     window.location.href = {{ url_for('detail', repo_id=job.repo_id) | tojson }};
-  {% elif job.status == 'running' %}
+  {% elif job.status in ('running', 'queued') %}
     (function () {
       var jobId       = {{ job_id | tojson }};
       var runningEl   = document.getElementById('scanRunning');
       var errorEl     = document.getElementById('scanError');
       var errorText   = document.getElementById('scanErrorTextLive');
       var stageEl     = document.getElementById('scanStage');
+      var queueEl     = document.getElementById('scanQueue');
+      var queuePosEl  = document.getElementById('scanQueuePos');
 
       function poll() {
         fetch('/api/scan-status/' + jobId)
@@ -68,6 +76,14 @@
               errorText.textContent = data.error;
             } else {
               stageEl.textContent = data.stage;
+              // Hide the queue line the moment this job starts, so the page
+              // does not keep claiming a wait that is over.
+              if (data.position > 0) {
+                queuePosEl.textContent = data.position;
+                queueEl.style.display = '';
+              } else {
+                queueEl.style.display = 'none';
+              }
               setTimeout(poll, 2000);
             }
           })

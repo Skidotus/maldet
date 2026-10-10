@@ -11,13 +11,14 @@ show up as recently scanned anywhere in the app. Run standalone.
 import sys
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 
 REPO_IDS = [int(x) for x in sys.argv[1:]]
 if not REPO_IDS:
     print("Usage: python3 mark_rescanned.py <repo_id> [repo_id ...]")
     sys.exit(1)
 
-conn = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+conn = pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
                         cursorclass=pymysql.cursors.DictCursor)
 
 with conn.cursor() as cur:

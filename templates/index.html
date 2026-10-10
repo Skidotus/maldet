@@ -1,119 +1,438 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}Scan GitHub repositories for malware{% endblock %}
+{% block body_class %}landing-page{% endblock %}
 
-{% block content %}
+{# ---------------------------------------------------------------
+   About-us content. PLACEHOLDERS — replace the bracketed values with
+   the real names, roles and institution before submission.
+   --------------------------------------------------------------- #}
+{% set team = [
+  {"name": "Haikal",                 "role": "Developer & researcher",
+   "blurb": "Designed and built MalDet: the scan pipeline, scoring, classifier and this web interface.",
+   "initials": "H", "link": "https://github.com/Skidotus", "link_label": "GitHub"},
+  {"name": "[Supervisor name]",      "role": "Project supervisor",
+   "blurb": "[One line on the supervisor's role, e.g. guidance on scope, evaluation and the written report.]",
+   "initials": "S", "link": none, "link_label": none},
+] %}
+{% set institution = "[Institution name]" %}
 
-  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
-    <h1 class="h3 mb-0">Dashboard</h1>
-    <a href="{{ url_for('scan') }}" class="btn btn-ribbon">
-      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Scan
-    </a>
-  </div>
+{% set level_steps = ["Safe", "Low", "Medium", "High", "Critical"] %}
 
-  {% if total and total > 0 %}
+{% macro level_scale(level) -%}
+  <span class="level-scale" role="img" aria-label="Level: {{ level }}">
+    {%- for step in level_steps %}
+      <span class="level-scale__step level-scale__step--{{ step | lower }}{{ ' is-on' if step == level else '' }}"></span>
+    {%- endfor %}
+  </span>
+{%- endmacro %}
 
-    {# ---------------------------------------------------------
-       Ledger tally strip — one bound strip, five divided cells,
-       never five separate same-size cards.
-       --------------------------------------------------------- #}
-    <div class="ledger-strip mb-4">
-      <div class="ledger-cell ledger-cell--total">
-        <div class="tally-label">Total</div>
-        <div class="tally-value">{{ total }}</div>
-      </div>
-      <div class="ledger-cell ledger-cell--cleared">
-        <div class="tally-label">Safe</div>
-        <div class="tally-value">{{ safe }}</div>
-      </div>
-      <div class="ledger-cell ledger-cell--flagged">
-        <div class="tally-label">Low / Medium</div>
-        <div class="tally-value">{{ low + medium }}</div>
-      </div>
-      <div class="ledger-cell ledger-cell--contested">
-        <div class="tally-label">High</div>
-        <div class="tally-value">{{ high }}</div>
-      </div>
-      <div class="ledger-cell ledger-cell--rejected">
-        <div class="tally-label">Critical</div>
-        <div class="tally-value">{{ critical }}</div>
-      </div>
-    </div>
-    <p class="text-muted small mb-4">
-      Tally shows the worse of each repo's two scores — see the table below for the full
-      vulnerability / malicious-pattern breakdown per repo.
-    </p>
+{% block main %}
+<main id="main">
 
-    {# ---------------------------------------------------------
-       Register table
-       --------------------------------------------------------- #}
-    <div class="ledger-book">
-      <div class="ledger-book__header">
-        <h2 class="h6 mb-0">Recent Entries</h2>
-        <a href="{{ url_for('history') }}" class="text-decoration-none">Open register ({{ total }}) &rarr;</a>
+  {# =============================================================
+     1. Welcome
+     ============================================================= #}
+  <section class="hero" id="overview" aria-labelledby="heroTitle">
+    <div class="site-container">
+      <div class="hero__copy">
+        <p class="eyebrow eyebrow--on-dark">Final Year Project &middot; Diploma in Information Security</p>
+        <h1 class="hero__title" id="heroTitle">
+          Know what a repository hides <em>before you run&nbsp;it.</em>
+        </h1>
+        <p class="hero__lede">
+          MalDet scans a public GitHub repository with six detection engines,
+          sorts real issues from noise with a machine-learning classifier, and
+          gives you two clear verdicts: is the code <strong>vulnerable</strong>,
+          and does it look <strong>malicious</strong>?
+        </p>
+        <div class="hero__actions">
+          <a href="#scan" class="btn btn-ribbon btn-pill btn-lg-pill">Scan a repository</a>
+          <a href="#tools" class="btn btn-ghost-light btn-pill btn-lg-pill">How it works</a>
+        </div>
       </div>
-      <div class="table-responsive">
-        <table class="table table-ledger align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Repo Name</th>
-              <th>Owner</th>
-              <th>Language</th>
-              <th>Stars</th>
-              <th>Vulnerability</th>
-              <th>Malicious Pattern</th>
-              <th>Scanned</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for repo in repos %}
-              <tr>
-                <td class="repo-name">{{ repo.repo_name }}</td>
-                <td class="repo-owner">{{ repo.owner }}</td>
-                <td>
-                  {% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
-                </td>
-                <td><i class="bi bi-star-fill text-muted me-1" aria-hidden="true"></i>{{ repo.stars }}</td>
-                <td><span class="axis-cell">
-                  <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
-                  <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | round | int }}</span>
-                </span></td>
-                <td><span class="axis-cell">
-                  <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
-                  <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | round | int }}</span>
-                </span></td>
-                <td class="text-muted">{{ repo.scanned_at.strftime('%d %b %Y, %H:%M') if repo.scanned_at else '—' }}</td>
-                <td class="text-end">
-                  <a href="{{ url_for('detail', repo_id=repo.id) }}" class="btn btn-sm btn-outline-parchment row-action">View</a>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
 
-  {% else %}
-
-    <div class="ledger-book">
-      <div class="empty-state">
-        <span class="seal-mark seal-mark--large" aria-hidden="true">
-          <svg viewBox="0 0 40 40" width="40" height="40">
-            <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" stroke-width="0.8"/>
-            <path d="M20 9 L22.5 16.5 L30 16.5 L24 21 L26 29 L20 24.5 L14 29 L16 21 L10 16.5 L17.5 16.5 Z"
-                  fill="currentColor" opacity="0.85"/>
-          </svg>
-        </span>
-        <h2 class="h5 text-light">No repositories scanned yet</h2>
-        <p class="mb-3">Run your first scan to see results here.</p>
-        <a href="{{ url_for('scan') }}" class="btn btn-ribbon">
-          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Scan
-        </a>
+      {# A real record, not a mock-up: the most recent scan in the database. #}
+      <div class="hero__preview">
+        {% if repos %}
+          {% set latest = repos[0] %}
+          <article class="preview-card" aria-label="Most recent scan">
+            <header class="preview-card__bar">
+              <span class="preview-card__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="preview-card__label">Latest scan</span>
+              <span class="preview-card__time">{{ latest.scanned_at.strftime('%d %b %Y') if latest.scanned_at else '' }}</span>
+            </header>
+            <div class="preview-card__body">
+              <div class="preview-card__repo">
+                <span class="preview-card__owner">{{ latest.owner }} /</span>
+                <span class="preview-card__name">{{ latest.repo_name }}</span>
+              </div>
+              <div class="preview-card__axes">
+                <div class="axis-panel">
+                  <div class="axis-panel__head">
+                    <span>Vulnerability</span>
+                    <span class="seal-badge seal-{{ latest.vuln_level | lower }}">{{ latest.vuln_level }}</span>
+                  </div>
+                  <div class="axis-panel__score">{{ latest.vuln_score | default(0, true) | round | int }}<small>score</small></div>
+                  {{ level_scale(latest.vuln_level) }}
+                </div>
+                <div class="axis-panel">
+                  <div class="axis-panel__head">
+                    <span>Malicious pattern</span>
+                    <span class="seal-badge seal-{{ latest.malware_level | lower }}">{{ latest.malware_level }}</span>
+                  </div>
+                  <div class="axis-panel__score">{{ latest.malware_score | default(0, true) | round | int }}<small>score</small></div>
+                  {{ level_scale(latest.malware_level) }}
+                </div>
+              </div>
+              <a class="preview-card__link" href="{{ url_for('detail', repo_id=latest.id) }}">
+                Open full report <i class="bi bi-arrow-right" aria-hidden="true"></i>
+              </a>
+            </div>
+          </article>
+        {% else %}
+          <article class="preview-card" aria-label="No scans yet">
+            <header class="preview-card__bar">
+              <span class="preview-card__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="preview-card__label">Latest scan</span>
+            </header>
+            <div class="preview-card__body preview-card__body--empty">
+              <p>No repositories scanned yet. Your first result will appear here.</p>
+              <a class="preview-card__link" href="#scan">Run the first scan <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+            </div>
+          </article>
+        {% endif %}
       </div>
     </div>
+  </section>
 
-  {% endif %}
+  {# =============================================================
+     Numbers — all live counts from the database
+     ============================================================= #}
+  <section class="section section--paper stats" aria-labelledby="statsTitle">
+    <div class="site-container">
+      <div class="section-head section-head--center reveal">
+        <h2 class="section-title" id="statsTitle">One scan. Six engines. <em>Two verdicts.</em></h2>
+        <p class="section-lede">Running every tool by hand means reconciling six output formats and
+          severity scales. MalDet does that work and reduces it to two numbers you can act on.</p>
+      </div>
+      <div class="stat-grid reveal">
+        <div class="stat-card">
+          <div class="stat-card__value">{{ total }}</div>
+          <div class="stat-card__label">Repositories scanned</div>
+          <p>Every result is stored so you can compare a repository with its earlier scans.</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__value">{{ "{:,}".format(total_findings) }}</div>
+          <div class="stat-card__label">Findings analysed</div>
+          <p>Each one is scored by the classifier for how likely it is to be a real issue.</p>
+        </div>
+        <div class="stat-card stat-card--split">
+          <div class="stat-card__label">Worst verdict per repository</div>
+          <ul class="verdict-tally">
+            <li><span class="dot dot--safe"></span>Safe<b>{{ safe }}</b></li>
+            <li><span class="dot dot--low"></span>Low<b>{{ low }}</b></li>
+            <li><span class="dot dot--medium"></span>Medium<b>{{ medium }}</b></li>
+            <li><span class="dot dot--high"></span>High<b>{{ high }}</b></li>
+            <li><span class="dot dot--critical"></span>Critical<b>{{ critical }}</b></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
 
+  {# =============================================================
+     What the project is
+     ============================================================= #}
+  <section class="section section--paper" aria-labelledby="projectTitle">
+    <div class="site-container project">
+      <div class="project__copy reveal">
+        <p class="eyebrow">The project</p>
+        <h2 class="section-title" id="projectTitle">A second opinion for<br><em>code you didn't write.</em></h2>
+        <p class="section-lede">Developers clone, install and depend on public repositories every day,
+          usually without reading them. Attackers know that and hide malware in packages, archives
+          and install scripts. MalDet checks a repository for you before it reaches your machine.</p>
+
+        <div class="accordion-list">
+          <details class="accordion-item" open>
+            <summary><i class="bi bi-bug" aria-hidden="true"></i>Vulnerability verdict</summary>
+            <p>Insecure coding patterns an attacker could exploit, such as injection, weak crypto or
+               hard-coded secrets, plus known CVEs in the repository's pinned dependencies.</p>
+          </details>
+          <details class="accordion-item">
+            <summary><i class="bi bi-shield-exclamation" aria-hidden="true"></i>Malicious-pattern verdict</summary>
+            <p>Signs that the code is meant to cause harm: malware signatures, obfuscated payloads,
+               typosquatted package names and install-time hooks. It is scored separately, because a
+               careless mistake and a deliberate attack are different risks.</p>
+          </details>
+          <details class="accordion-item">
+            <summary><i class="bi bi-funnel" aria-hidden="true"></i>Noise filtering with machine learning</summary>
+            <p>Six engines on a large repository can produce tens of thousands of findings. A Random
+               Forest classifier gives each finding a confidence that it is real, and that confidence
+               weights the score instead of every alert counting the same.</p>
+          </details>
+          <details class="accordion-item">
+            <summary><i class="bi bi-chat-square-text" aria-hidden="true"></i>Plain-English summary</summary>
+            <p>A local language model explains the main findings in a short paragraph. It only explains
+               the results. The risk levels are decided before it sees anything, and it may not change them.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="project__visual reveal">
+        <div class="pipeline-card">
+          <p class="pipeline-card__title">How a scan runs</p>
+          <ol class="pipeline">
+            <li><span class="pipeline__n">01</span><div><b>Fetch</b><span>Repository metadata from the GitHub API, then a shallow clone.</span></div></li>
+            <li><span class="pipeline__n">02</span><div><b>Unpack</b><span>Archives are extracted, including password-protected ones.</span></div></li>
+            <li><span class="pipeline__n">03</span><div><b>Detect</b><span>Six engines inspect code, files and dependencies.</span></div></li>
+            <li><span class="pipeline__n">04</span><div><b>Triage</b><span>The classifier separates likely-real findings from noise.</span></div></li>
+            <li><span class="pipeline__n">05</span><div><b>Score</b><span>Two risk levels, from Safe to Critical, saved to your history.</span></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# =============================================================
+     Tools
+     ============================================================= #}
+  <section class="section section--white" id="tools" aria-labelledby="toolsTitle">
+    <div class="site-container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Under the hood</p>
+        <h2 class="section-title" id="toolsTitle">The tools <em>behind the verdict</em></h2>
+        <p class="section-lede">Established open-source security tools, each looking for something
+          different, plus two components built for this project.</p>
+      </div>
+
+      <div class="tool-grid reveal">
+        {% set tools_list = [
+          ("Bandit",      "bi-filetype-py",         "Vulnerability",     "Finds common security mistakes in Python code, such as shell injection, unsafe deserialisation and hard-coded passwords."),
+          ("Semgrep",     "bi-code-square",         "Vulnerability",     "Pattern-based code analysis across many languages, using community security rules."),
+          ("pip-audit",   "bi-box-seam",            "Vulnerability",     "Checks pinned Python dependencies against known CVE advisories, without installing or building anything."),
+          ("YARA",        "bi-fingerprint",         "Malicious pattern", "Matches files against signature rules for malware families, droppers and obfuscated payloads."),
+          ("ClamAV",      "bi-virus",               "Malicious pattern", "Open-source antivirus engine that scans every file, including ones inside extracted archives."),
+          ("GuardDog",    "bi-shield-lock",         "Malicious pattern", "Looks for supply-chain attack behaviour: data exfiltration, install hooks and suspicious downloads."),
+          ("Dependency checker", "bi-diagram-3",    "Malicious pattern", "Built for MalDet. Flags typosquatted package names, direct-URL installs and unpinned versions."),
+          ("Risk classifier",    "bi-cpu",          "Triage",            "Built for MalDet. A Random Forest model trained on real scan data that rates each finding's likelihood of being real."),
+        ] %}
+        {% for name, icon, axis, text in tools_list %}
+          <article class="tool-card">
+            <div class="tool-card__icon"><i class="bi {{ icon }}" aria-hidden="true"></i></div>
+            <h3 class="tool-card__name">{{ name }}</h3>
+            <span class="axis-tag axis-tag--{{ axis | lower | replace(' ', '-') }}">{{ axis }}</span>
+            <p>{{ text }}</p>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {# =============================================================
+     2. Start a scan
+     ============================================================= #}
+  <section class="section section--paper" id="scan" aria-labelledby="scanTitle">
+    <div class="site-container">
+      <div class="scan-panel reveal">
+        <div class="scan-panel__copy">
+          <p class="eyebrow eyebrow--on-dark">Start here</p>
+          <h2 class="section-title section-title--on-dark" id="scanTitle">Scan a repository</h2>
+          <p>Paste a public GitHub link. Scans run one at a time on the server and usually take
+             a few minutes. It is safe to close the tab and come back.</p>
+          <ul class="scan-panel__points">
+            <li><i class="bi bi-check2" aria-hidden="true"></i>Public repositories only</li>
+            <li><i class="bi bi-check2" aria-hidden="true"></i>Nothing from the repository is executed</li>
+            <li><i class="bi bi-check2" aria-hidden="true"></i>Results are saved to the history below</li>
+          </ul>
+        </div>
+
+        <div class="scan-panel__form">
+          {% if active_job_id %}
+            <div class="scan-active" role="status">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+              <div>
+                <b>You already have a scan in progress.</b>
+                <a href="{{ url_for('scan_status', job_id=active_job_id) }}">Check its progress</a>
+              </div>
+            </div>
+          {% endif %}
+
+          <form method="POST" action="{{ url_for('scan') }}" id="scanForm" novalidate>
+            <label for="repo_url" class="form-label-ledger form-label-ledger--on-dark">Repository URL</label>
+            <div class="url-field">
+              <i class="bi bi-github url-field__icon" aria-hidden="true"></i>
+              <input type="text" class="url-field__input" id="repo_url" name="repo_url"
+                     placeholder="https://github.com/owner/repo" required
+                     aria-describedby="repoUrlHelp repoUrlError" autocomplete="off" spellcheck="false">
+            </div>
+            <p class="form-hint" id="repoUrlHelp">A full GitHub URL or the short form <code>owner/repo</code>.</p>
+            <p class="form-error" id="repoUrlError" role="alert" hidden></p>
+
+            <details class="advanced">
+              <summary>Advanced options</summary>
+              <label for="archive_password" class="form-label-ledger form-label-ledger--on-dark mt-3">Archive password</label>
+              <input type="text" class="url-field__input url-field__input--plain" id="archive_password"
+                     name="archive_password" value="infected" aria-describedby="archiveHelp">
+              <p class="form-hint" id="archiveHelp">Used to open password-protected .zip, .7z and .rar files
+                 found in the repository. <code>infected</code> is the usual convention for malware samples.</p>
+            </details>
+
+            <button type="submit" class="btn btn-ribbon btn-pill btn-lg-pill w-100 mt-3" id="scanSubmitBtn">
+              <i class="bi bi-search me-2" aria-hidden="true"></i>Run scan
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# =============================================================
+     3. Scan history
+     ============================================================= #}
+  <section class="section section--white" id="history" aria-labelledby="historyTitle">
+    <div class="site-container">
+      <div class="section-head section-head--row reveal">
+        <div>
+          <p class="eyebrow">Scan history</p>
+          <h2 class="section-title" id="historyTitle">Recently <em>scanned</em></h2>
+          <p class="section-lede mb-0">The ten most recent repositories, newest first.</p>
+        </div>
+        {% if total and total > 0 %}
+          <a href="{{ url_for('history') }}" class="btn btn-outline-parchment btn-pill">
+            View all {{ total }} scans <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+          </a>
+        {% endif %}
+      </div>
+
+      {% if repos %}
+        <div class="ledger-book reveal">
+          <div class="table-responsive">
+            <table class="table table-ledger table-stack align-middle mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">Repository</th>
+                  <th scope="col">Language</th>
+                  <th scope="col">Vulnerability</th>
+                  <th scope="col">Malicious pattern</th>
+                  <th scope="col">Scanned</th>
+                  <th scope="col"><span class="visually-hidden">Report</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for repo in repos %}
+                  <tr>
+                    <td class="td-full">
+                      <span class="repo-name">{{ repo.repo_name }}</span>
+                      <span class="repo-owner d-block">{{ repo.owner }} &middot; <i class="bi bi-star-fill" aria-hidden="true"></i> {{ repo.stars }}</span>
+                    </td>
+                    <td class="td-hide-sm">{% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                    <td data-label="Vulnerability"><span class="axis-cell">
+                      <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
+                      <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | default(0, true) | round | int }}</span>
+                    </span></td>
+                    <td data-label="Malicious pattern"><span class="axis-cell">
+                      <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
+                      <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | default(0, true) | round | int }}</span>
+                    </span></td>
+                    <td class="text-muted text-nowrap td-date">{{ repo.scanned_at.strftime('%d %b %Y') if repo.scanned_at else '—' }}</td>
+                    <td class="text-end">
+                      <a href="{{ url_for('detail', repo_id=repo.id) }}" class="btn btn-sm btn-outline-parchment btn-pill row-action"
+                         aria-label="View report for {{ repo.owner }}/{{ repo.repo_name }}">View</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% else %}
+        <div class="ledger-book">
+          <div class="empty-state">
+            <i class="bi bi-shield-check empty-state__icon" aria-hidden="true"></i>
+            <h3 class="h5">No repositories scanned yet</h3>
+            <p class="mb-3">Run your first scan and it will appear here.</p>
+            <a href="#scan" class="btn btn-ribbon btn-pill">Start a scan</a>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {# =============================================================
+     4. About us
+     ============================================================= #}
+  <section class="section section--paper" id="about" aria-labelledby="aboutTitle">
+    <div class="site-container about">
+      <div class="about__copy reveal">
+        <p class="eyebrow">About us</p>
+        <h2 class="section-title" id="aboutTitle">Built as a final year project, <em>made to be used.</em></h2>
+        <p class="section-lede">MalDet is a Final Year Project for the Diploma in Information Security
+          at {{ institution }}. It started from a simple question: how can a developer tell whether a
+          public repository is safe to pull in without running six security tools and reading
+          thousands of alerts?</p>
+        <p class="section-lede">The answer is to combine the tools, filter out the noise, and keep
+          two kinds of risk separate, because they need different responses.</p>
+      </div>
+
+      <div class="team-grid reveal">
+        {% for person in team %}
+          <article class="team-card">
+            <div class="team-card__avatar" aria-hidden="true">{{ person.initials }}</div>
+            <div>
+              <h3 class="team-card__name">{{ person.name }}</h3>
+              <p class="team-card__role">{{ person.role }}</p>
+              <p class="team-card__blurb">{{ person.blurb }}</p>
+              {% if person.link %}
+                <a class="team-card__link" href="{{ person.link }}" target="_blank" rel="noopener noreferrer">
+                  <i class="bi bi-github" aria-hidden="true"></i> {{ person.link_label }}
+                </a>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+        <article class="team-card team-card--note">
+          <i class="bi bi-mortarboard" aria-hidden="true"></i>
+          <p>Diploma in Information Security &middot; {{ institution }} &middot; 2026</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Client-side check mirrors the server's parser in app.py:scan(), so an
+  // obvious typo is caught next to the field instead of on a separate page.
+  (function () {
+    var form  = document.getElementById('scanForm');
+    var input = document.getElementById('repo_url');
+    var error = document.getElementById('repoUrlError');
+    if (!form) { return; }
+
+    function problem(value) {
+      var v = value.trim().replace(/^https?:\/\//, '').replace(/^(www\.)?github\.com\//, '').replace(/\/+$/, '');
+      if (!v) { return 'Enter a GitHub repository URL.'; }
+      if (v.split('/').length < 2 || !v.split('/')[1]) { return 'That does not look like a repository. Example: https://github.com/owner/repo'; }
+      return null;
+    }
+
+    form.addEventListener('submit', function (e) {
+      var msg = problem(input.value);
+      if (msg) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        error.textContent = msg;
+        error.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      }
+    });
+    input.addEventListener('input', function () {
+      if (!error.hidden) { error.hidden = true; input.removeAttribute('aria-invalid'); }
+    });
+  })();
+</script>
 {% endblock %}

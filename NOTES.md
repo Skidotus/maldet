@@ -1,6 +1,6 @@
 # MalDet — Project Notes
 
-Snapshot as of 2026-09-14. Written for the FYP report / your own reference —
+Snapshot as of 2026-09-22. Written for the FYP report / your own reference —
 update as things change rather than treating this as a one-time record.
 
 ## Advantages (current state)
@@ -16,9 +16,11 @@ update as things change rather than treating this as a one-time record.
   parsing fixes below).
 - **The classifier now has a ground-truth-backed number, not just
   self-grading.** A 168-finding hand-reviewed set (`eval_sample.json`) gives
-  precision 0.52 / recall 0.53 / F1 0.53, against a 0.28 baseline for
+  precision 0.52 / recall 0.62 / F1 0.56, against a 0.28 baseline for
   treating every finding as real. Modest, but honest and defensible — and
-  measurably better than before the IGNORE_PATHS fix (0.49 / 0.38 / 0.43).
+  improving across two measured steps: 0.49/0.38/0.43 before the
+  IGNORE_PATHS fix, 0.52/0.53/0.53 after it, and the current figures after
+  20 known-malicious repos were added to the training corpus (2026-09-19).
 - **Complete, cohesive UI.** Dashboard, New Scan, Detail, History, and the
   scan-status page all exist and follow one considered design system
   (wax-seal risk badges, ledger layout) — not a default Bootstrap look.
@@ -189,26 +191,483 @@ Four commits, each verified against the live corpus rather than assumed:
   the two-axis scoring model, the real evaluation numbers, and the
   AI-assisted-labeling disclosure.
 
+## What's improved (2026-09-22 — malicious training data)
+
+- **The classifier has finally seen real malicious code.** `malware_repos.txt`
+  + `batch_scan.py` added 20 known-malicious / offensive-security repos
+  (LaZagne, pupy, byob, Empire, PowerSploit, Backstabbers-Knife-Collection,
+  PayloadsAllTheThings, …) to the corpus overnight on 2026-09-19. They scored
+  where you'd hope — pupy 1128, Empire 871, PayloadsAllTheThings 688, all
+  Critical — which is itself evidence the two-axis scoring separates
+  "malicious" from "merely vulnerable" correctly. The corpus is now 178 repos
+  and ~237.7K findings.
+- **Retraining on that corpus moved recall, which was the stated weak axis.**
+  Against the same untouched 168-finding holdout: recall 0.53 → 0.62 (29 of
+  47 real findings caught, up from 25), F1 0.53 → 0.56, precision unchanged
+  at 0.52. Per-tool, semgrep improved (67% → 73%) and bandit slipped
+  (69% → 64%). The gain is the point: before this the model had almost no
+  examples of what a genuine malicious finding looks like, since only 12 of
+  156 repos carried meaningful malicious patterns.
+- **Fixed: one oversized finding could destroy an entire scan's results.**
+  `byt3bl33d3r/CrackMapExec` failed its save with MySQL error 1406 ("Data too
+  long for column 'code_snippet'") after a 4-minute scan — one Bandit finding
+  on a single-line file in `cme/modules/impersonate.py` exceeded the 65,535
+  *byte* TEXT limit, and took all 240 of the repo's findings down with it.
+  `save_to_db()` now fits every value to its column first (`_fit_text` for
+  TEXT, byte-measured; `_fit_varchar` for VARCHAR, character-measured — the
+  two limits are counted differently and the tables are utf8mb4, so a
+  character-count check alone would still overflow). Exactly one snippet in
+  the whole corpus needed truncating. Offensive repos are full of minified and
+  generated source, so this is normal input here, not an edge case.
+- Worth knowing for the report: the failed save also left an **orphan
+  `repositories` row** (id 225, no findings, no risk score) that would have
+  shown on the dashboard as a clean repo. `save_to_db()` commits the
+  repository row before inserting findings, so a rollback doesn't remove it.
+  The successful rescan repaired the row in place via the existing upsert,
+  but the underlying ordering is unchanged — see below.
+
+- **Tested and rejected: giving the model the flagged code itself.** The
+  model sees `code_snippet` only as a character count, so two findings with
+  the same warning text are indistinguishable to it no matter what the code
+  does. A real pair from Empire, both scoring 0.3797:
+  `subprocess.call("su - ahmed -c 'echo {{payload}} | base64 --decode | sudo bash'")`
+  and `subprocess.check_output("which powershell")`. Added the snippet text
+  as a second TF-IDF feature (line numbers stripped, code-style token
+  pattern, `min_df=5` so per-repo identifiers can't be memorised) and
+  retrained. **It did not work**, and the reason matters more than the
+  result:
+  - Against the same 168-finding holdout: precision 0.52 → 0.50, recall
+    0.62 → 0.64, F1 unchanged at 0.56. One more real finding caught, three
+    more false alarms. A wash, on a 168-item sample — i.e. noise.
+  - The Empire pair afterwards: 0.362 vs 0.367. Still indistinguishable.
+  - Code tokens drew only 4.5% of total feature importance, and the ones it
+    did use were generic (`login`, `requires`, `assert`, `subprocess`) — not
+    `base64`, `sudo` or `bash`.
+  - **Diagnosis: the bottleneck is the labels, not the features.** The weak
+    labels are generated from repo-rarity and the noise-rule list, and
+    nothing in them encodes "base64 piped to sudo bash is dangerous". The
+    model cannot learn a distinction its answer key never makes, so richer
+    input about the code had nothing to attach to. Reverted; the patch is
+    kept for the report rather than the tree.
+  - **The implication for the next step**: the way to make this model reason
+    about danger is a better label source, not better features. The obvious
+    candidate now exists — 20 repos known to be malicious vs ~150 ordinary
+    ones — which is a far stronger signal than rarity and is currently used
+    only as extra training rows, not as labels.
+
+- **Added GuardDog as a sixth detector** (`run_guarddog()`), Datadog's
+  supply-chain malware scanner. It is the first detector in the pipeline that
+  reasons about *malicious intent* rather than insecure coding: reverse
+  shells, obfuscated payloads (base64/chr/steganography/PyArmor), install-time
+  network calls in `setup.py`, browser-credential and process-memory access,
+  cryptomining, DLL injection, npm preinstall hooks. Confirmed working on real
+  malicious source — 13 findings on LaZagne, including Firefox credential
+  reads and memory scraping, which is precisely what that tool does.
+  - **Only `threat-` rules and correlated risks are reported.** GuardDog
+    separates what code *can* do (`capability-*`) from what it *is* doing
+    (`threat-*`), and only treats the pair together as a real risk. Reporting
+    bare capabilities would add thousands of low-severity rows — the exact
+    noise problem the rest of this pipeline exists to solve — so they're
+    dropped unless the correlation engine surfaced them in `risks`.
+  - **It cannot go in `requirements.txt`.** GuardDog requires click >=8.4.1;
+    semgrep pins click ~=8.1.8. Installing it into `venv/` upgrades click and
+    breaks semgrep with no warning. It lives in `.venv-guarddog/` (gitignored)
+    and is invoked as an external command like `yara`/`clamscan`/`7z`;
+    `run_guarddog()` prefers a `guarddog` on PATH so the Docker install (own
+    venv under /opt, symlinked) wins. Docker verifies it immediately after
+    install, because like every detector here it skips silently when missing —
+    a failed install would otherwise look like a clean scan.
+- **Corrected a wrong assumption in the malicious corpus.**
+  `dasfreak/Backstabbers-Knife-Collection` was added on 2026-09-19 as the
+  supply-chain centrepiece — "real malicious npm and PyPI packages". It isn't.
+  The git repo is 2.8MB of HTML, CSS, fonts and two `.js` files: the dataset's
+  landing page. The samples are distributed separately. It scores 4 (Low) and
+  GuardDog finds nothing, correctly. One of the 20 "known-malicious" training
+  repos therefore contributes no malicious examples, and the note in
+  `malware_repos.txt` now says so. Worth stating in the report as a corpus
+  limitation found by inspection rather than assumed away.
+
+- **Built the plain-English summary on Ollama** (`llm_summary.py`), the item
+  that had been sitting in this list since 2026-09-14. This is the piece that
+  actually answers "can a model read the tools' output?" — and it can,
+  because every detector already normalises to one shape, so summarising six
+  engines is just summarising one uniform list.
+  - **It explains, it never scores.** The Random Forest decides what's real
+    and `calculate_risk()` decides how bad it is, both before the LLM sees
+    anything; the prompt is handed the finished risk levels and explicitly
+    forbidden from re-rating them. This is the boundary to defend in the
+    report: the scoring component is measured (0.52/0.62 against a
+    hand-reviewed holdout), the explainer is not, and swapping which one does
+    the deciding would throw that away. A fluent model will happily
+    contradict a measured number if the prompt leaves it room to.
+  - **Top ~15 finding *groups*, not all findings.** Findings are collapsed by
+    (tool, issue_text) and ranked by severity weight x classifier confidence
+    — the same weights `calculate_risk()` uses, so "top" means the same thing
+    the score next to it means. Grouping also tells the model "this fired 43
+    times" instead of making it count 43 near-identical lines.
+  - **Generated once at scan time**, stored in `risk_scores.llm_summary`
+    (new column, in `schema.sql` and applied to the live DB). Generating on
+    page view would cost tens of seconds per refresh — this is CPU-only on
+    the dev machine, which has no GPU and 3.7GB free.
+  - **Optional infrastructure.** Every path returns None rather than raising:
+    not installed, not running, timed out, empty or unparsable response. The
+    rule-based `build_findings_summary()` stays as the fallback and the
+    template shows one or the other, never both. Verified: with Ollama
+    absent a full scan completes normally and the detail page renders the
+    rule-based text.
+  - **Not yet verified against a live model** — Ollama needs a sudo install
+    and isn't on this machine. The fallback path, grouping, ranking and
+    prompt construction are tested; the generation path is not.
+
+## What's improved (2026-09-23 — deployment, queue, model selection)
+
+The deployment target was fixed this week: a 4GB / 100GB Ubuntu 24 VPS,
+already approved and paid for by the management team, so the hardware is a
+constraint to design against rather than a variable. Most of what follows
+follows from that number.
+
+- **Measured what the pipeline actually costs, instead of guessing.** Peak
+  resident memory, taken with `/usr/bin/time -v` on a trivial directory —
+  real repositories are worse:
+
+  | component            | peak RAM  |
+  |----------------------|-----------|
+  | semgrep              | 1,976 MB  |
+  | clamscan             |   992 MB  |
+  | qwen3.5:2b (loaded)  | ~2,400 MB |
+  | MySQL                |   131 MB  |
+  | Flask app            |    48 MB  |
+  | worker (idle)        |    39 MB  |
+
+  The shape of that table is the finding: **semgrep costs 40x the web
+  application it serves**. Effort spent optimising the web tier would have
+  been wasted. Note too that clamscan takes ~39s to load 3.6M signatures
+  *before scanning a single file*, every invocation.
+
+- **Scans are queued, and exactly one runs at a time.** Job state moved from
+  an in-memory dict to a `scan_jobs` table, consumed by a separate
+  `worker.py` process. The old design was honest about being single-user;
+  deployed, it lost every running scan on restart, was invisible across web
+  workers, and redirected a second visitor into whichever scan was already
+  running — so two people scanning meant one of them watched a stranger's
+  progress bar. The single-consumer rule (`claim_next()` refuses while
+  another job runs, under a row lock) is a memory constraint before it is a
+  correctness one: 1.1GB baseline + one semgrep is 3.1GB of 4GB, and two
+  semgreps do not fit at all. Verified with three simultaneous submissions
+  through the web form: positions 0/1/2, drained strictly in order,
+  available memory never below 3.3GB.
+
+- **`queued_at` is `DATETIME(6)` because whole seconds were wrong.** Three
+  jobs submitted in the same second compared as simultaneous, so every
+  visitor was told they were first. Caught by the concurrency test, not by
+  reading the code — worth remembering that the bug was in a timestamp
+  column, not in the locking.
+
+- **gunicorn replaces the Flask development server**, which the container
+  had been running in production. Two workers, ~121MB for master and both.
+  The worker stays a separate service precisely because it isn't one: were
+  the scanner inside the web process, `--workers 2` would mean two
+  concurrent semgreps. For local development `python3 app.py` now starts an
+  inline worker thread, since gunicorn imports the module rather than
+  executing `__main__` — one command locally, two processes deployed, no
+  configuration switch.
+
+- **The LLM explainer was chosen by comparison, not preference.** All three
+  candidate models were run against real findings from the corpus
+  (`samratashok/nishang`, malicious; `AlessandroZ/LaZagne`, insecure but
+  not):
+
+  | model         | warm speed | verified problem                      |
+  |---------------|------------|---------------------------------------|
+  | qwen3.5:2b    | 22s / 32s  | markdown despite being told not to    |
+  | granite4.2:3b | 29s / 60s  | none                                  |
+  | llama3.2:3b   | 36s / 43s  | invented "426.0 **out of 1000**"      |
+
+  llama3.2 fabricating a maximum that does not exist is disqualifying for a
+  tool whose output is its scores, and it was dropped. Worth recording
+  honestly: an earlier reading of this comparison accused qwen of inventing
+  `xml.dom.minidom`, and checking the prompt showed the string was in the
+  input all along — the model was right and the reviewer was wrong. Two
+  repositories judged by eye is enough to pick a default and **not** enough
+  to claim a methodology; a real evaluation would need ~20 repos with the
+  checks scripted.
+
+- **Both reasoning models break the naive integration, in opposite ways.**
+  qwen and granite think before answering. Left alone, qwen spends its
+  entire token budget thinking and returns an *empty* response; granite
+  writes its reasoning inline, which would have been stored in
+  `risk_scores.llm_summary` and rendered to the user as though it were the
+  summary. `"think": False` fixes both and is ignored by non-reasoning
+  models. The second failure is the dangerous one — it does not error, it
+  produces confident-looking prose that is not an answer.
+
+- **The explainer is disabled on the VPS, and that is the right call.**
+  740MB baseline + 2.4GB model leaves nothing for a 2GB semgrep. Because
+  every path in `llm_summary.py` returns `None` rather than raising, the
+  rule-based summary renders instead and no scan fails —
+  `MALDET_OLLAMA_DISABLE=1` is the default in `docker-compose.yml`. The
+  feature being optional is what makes a 4GB deploy possible at all.
+
+- **Found: 12,238 findings have no code snippet, and it is not a bug in this
+  code.** Semgrep withholds the matched line for registry rules when not
+  authenticated, storing the literal string `requires login` instead. All of
+  them are from the 2026-07-29 and 2026-08-22 runs, before `semgrep login`;
+  every scan since 2026-09-15 is clean. 105 repos are affected, listed in
+  `rescan_requires_login.txt`. The snippet was never captured, so only a
+  rescan recovers it. It does not affect the LLM summary, which is built
+  from rule messages and file paths rather than snippets.
+
+- **Dev-environment finding worth writing down: `systemd-oomd`, not a VS Code
+  bug.** The editor was killed twice in one day mid-session. The kernel OOM
+  killer never fired, so `dmesg` showed nothing; `systemd-oomd` did, killing
+  the whole `snap.code.code-*.scope` (29 and 31 processes) once the user
+  slice passed 50% memory pressure for 20 seconds. Both times the trigger
+  was Ollama loading a model on a 7.9GB VM. This is why the summariser now
+  sets `keep_alive` — it was the model sitting idle for Ollama's default
+  five minutes after a scan, not generation itself, that crossed the
+  threshold.
+
+## What's improved (2026-10-07 — rescan, and what the corpus does on its own)
+
+The rescan NOTES has been owing since 2026-09-14 finally ran, against the 18
+repos still carrying their original 2026-07-29 scan. It cleared 10 of them.
+The other 8 are the interesting part: they did not fail for one reason, they
+failed for three, and only one of the three is fixable.
+
+- **The corpus decays while you are not looking.** `malware_repos.txt` records
+  every entry as confirmed live against the GitHub API on 2026-09-19. Three
+  weeks later, five of the 18 could no longer be rescanned as themselves.
+  Three distinct mechanisms, which matters because they fail differently:
+
+  - **Deleted or made private — 4 repos, permanent.**
+    `department-of-veterans-affairs/vets-website`, `Yu9191/Rewrite`,
+    `parti-renaissance/espace-adherent`, `adminlove520/Poc-Monitor_v1.0.1`.
+    All four return HTTP 404 to an authenticated API request; verified
+    individually rather than inferred from the scan error. Their 349
+    withheld code snippets are gone for good, because that text was never
+    captured and the source no longer exists.
+
+    Their severities, however, were repaired without rescanning anything —
+    see "the severities did not need a rescan at all" below. The first
+    version of this section claimed both were unrecoverable, which was
+    wrong, and wrong in the expensive direction: it sent the next step
+    towards a VPS rescan when a one-second UPDATE was sufficient. The
+    lesson worth keeping is that "the repository is gone" and "the data is
+    unrecoverable" are different claims, and the second does not follow
+    from the first.
+
+  - **Renamed or transferred — 1 repo, and this one is quiet.**
+    `envoyproxy/ai-gateway` is now `theagentrouter/agent-router`. The GitHub
+    API follows the redirect and answers HTTP 200 with the *new* full_name,
+    so `get_repo_info()` is handed a different owner and name than it asked
+    for, `save_to_db()` upserts on the key it was given, and a second row
+    appears (id 294) while the original (id 72) keeps its July findings
+    forever. The batch log recorded `OK envoyproxy/ai-gateway` for a scan of
+    something else. A 404 fails loudly; a rename succeeds under another name
+    and leaves an orphan, which is worse. `dedupe_repositories.py` does not
+    catch it either — that cleans duplicates of the *same* name, and these
+    are two names for one repository.
+
+  - **Cannot be cloned here at all — 3 repos, and not for the reason it
+    looks like.** `vxunderground/MalwareSourceCode` (2,172MB),
+    `mlflow/mlflow` (1,457MB) and
+    `juliocesarfort/public-pentesting-reports` (719MB), sizes from the API.
+    All three failed a 300s clone timeout, and all three failed again at
+    900s.
+
+    The cause took two wrong guesses to pin down, which is itself worth
+    recording. It is not rate limiting (the token was at its full
+    5000/5000) and it is not server-side pack generation: run with
+    `git clone --progress`, git sits in "Receiving objects" transferring
+    steadily, not waiting. It is simply a slow connection. Measured on the
+    same link, each sustained over 60 seconds — codeload.github.com
+    46 KB/s, raw.githubusercontent.com 124 KB/s, a CDN 119 KB/s — against a
+    clone rate of 36-45 KiB/s. The clone matches codeload almost exactly,
+    so the slowest host on a slow link happens to be the one git pack data
+    comes from. At 40 KB/s, 719MB is ~5 hours, 1,457MB ~10 and 2,172MB ~15.
+
+    Which makes this not a decision about these repositories at all. No
+    timeout fixes a link, and nothing is wrong with the repos — they are
+    large, and this dev VM is on a phone hotspot at ~120 KB/s. They want a
+    faster connection, so **rescanning them belongs with the VPS
+    deployment**, where the link is a datacentre link and the same clones
+    should take minutes. Folding it into work already owed is better than
+    either running a 15-hour clone here or writing the repos off. In the
+    meantime they hold 390 of ~223,000 findings, so the scoring impact of
+    the delay is marginal. `CLONE_TIMEOUT` is 900s, env-overridable via
+    `MALDET_CLONE_TIMEOUT`.
+
+  Worth stating in the report as a limitation of corpus-based evaluation
+  rather than a defect: 5 of 18 in three weeks is a ~28% churn rate on an
+  arbitrary slice, and any figure computed over the corpus is a figure over
+  the corpus *as it was when scanned*.
+
+- **The severities did not need a rescan at all, and six repos were being
+  reported at the wrong risk level.** This was the actual cost of the stale
+  data, and it was missed for weeks because "stale repo" sounded like a
+  tidiness problem.
+
+  Semgrep names its severities `error`/`warning`/`info`;
+  `normalize_severity()` maps those to `high`/`medium`/`low`. The July scans
+  predate that mapping being applied, so 779 findings sat in the database
+  with Semgrep's own words — and `SEVERITY_WEIGHT` has no entry for them, so
+  `.get(severity, 1)` scored every one as 1. A Semgrep `error` (its most
+  serious class: script injection, `child_process` from an argument, a
+  hardcoded API key) counted exactly the same as "you used http:// instead
+  of https://".
+
+  The repair needed no network at all. The raw values were still stored and
+  the mapping is a pure lookup, so three UPDATE statements plus the existing
+  `recompute_scores.py` / `recompute_category_scores.py` fixed it:
+  134 `error` → high, 556 `warning` → medium, 89 `info` → low. Result, on
+  the six repos whose level was wrong:
+
+  | repo | vulnerability |
+  |---|---|
+  | `department-of-veterans-affairs/vets-website` | High 94 → **Critical 478** |
+  | `vxunderground/MalwareSourceCode` | High 162 → **Critical 498** |
+  | `Yu9191/Rewrite` | Medium 48 → **High 180** |
+  | `parti-renaissance/espace-adherent` | Medium 26 → **High 95** |
+  | `envoyproxy/ai-gateway` | Low 14 → **Medium 60** |
+  | `juliocesarfort/public-pentesting-reports` | Low 15 → **Medium 60** |
+
+  `vets-website` was off by a factor of five. Note that four of the six are
+  the repositories that no longer exist on GitHub — so the fix reached
+  precisely the data that had been written off as unrecoverable.
+
+  Running the recompute also moved five repos unrelated to the severity
+  problem (`django/django` High → Critical, `InQuest/malware-samples`,
+  `JustVugg/colibri` and `Ne0nd0g/merlin` High → Medium,
+  `opentofu/opentofu` Low → Safe), because their stored scores predated the
+  current classifier-weighted formula. The whole corpus is now on one
+  formula, which is the state any reported figure should be computed from.
+  Distribution afterwards: Medium 45, Critical 40, High 39, Low 33, Safe 22.
+
+  The methodological point for the report is not the fix, it is how it was
+  found. The question "does this stale data actually change any number?"
+  had not been asked for weeks of treating the staleness as housekeeping.
+  It was asked only because the premise — that a deleted repository matters
+  — was challenged, and the honest answer to the challenge was that it
+  matters for the scores, not for the repository.
+
+- **A failed scan no longer reports a repo as clean.** `save_to_db()`
+  committed the repositories upsert and both DELETEs before writing a single
+  finding, so a failure in the inserts left the row present with no findings
+  and no risk_scores row — which renders as Safe, not as an error. The
+  intermediate commit is gone and the whole save is one transaction, so a
+  failed rescan leaves the previous results intact. The objection NOTES
+  raised against doing this (157k findings in one transaction) is answered by
+  batching with `executemany`: 20,000 synthetic findings in 0.5s, ~38,700
+  rows/second, so the largest repo is about four seconds inside the
+  transaction. Verified by saving three findings, then saving again with one
+  deliberately unserialisable finding, and confirming the original three
+  survived.
+
+- **The summariser has a number now, and the number is about the checks.**
+  `evaluate_summaries.py` scores a stratified sample against eight
+  mechanical checks (fabricated numbers, invented scales, fabricated
+  filenames, fabricated advisory ids, fabricated tool names, risk-level
+  contradiction, and four format rules). First real run, 20 repos,
+  qwen3.5:2b: 19 produced a summary and **17 passed everything — 89%**. Both
+  failures were six sentences where the prompt asks for three to five, read
+  and confirmed as genuine rather than a splitter artifact.
+
+  The run's real finding was in the checker, twice. It first reported 68%,
+  flagging four summaries for fabricated numbers — all four being the prompt
+  stating "291.0" and the model writing "291". And the contradiction check,
+  on its first run, flagged two summaries that were saying the opposite of
+  what it claimed: "need immediate attention *before* it can be used safely"
+  matched "can be used safely", and "some signs of *potentially* malicious
+  intent" matched "malicious intent". Both corrections went towards
+  precision, because a checker that flags correct output gets ignored and
+  then catches nothing. **The first thing a measurement catches is usually
+  the measurement** — which is a better sentence for the report than a clean
+  score would have been.
+
+- **The summary no longer blocks the results.** It used to run inside
+  `scan_repo()` between scoring and saving. A nishang scan is 48s and its
+  summary another 88s, so nearly two thirds of the wait was a paragraph. The
+  scan now saves and returns, the worker generates afterwards, and the detail
+  page shows a placeholder with the rule-based summary beneath it until the
+  real one arrives. Three independent ways it stops waiting, because a
+  spinner that never resolves is worse than no spinner: the worker marks the
+  row unavailable on failure, a dead worker's "pending" rows are released at
+  the next startup, and the page gives up after four minutes.
+
+- **Four grouping bugs, found by building a second implementation.** The
+  SQL-side aggregation in `backfill_summaries.py` does the same job as
+  `llm_summary._rank_groups()`, so the two were diffed across all 162 scored
+  repos — every disagreement was a defect. Two were pre-existing and had been
+  live since the feature shipped: a group's severity could be *downgraded*
+  by a less-severe finding the classifier was more confident about (the
+  comment claimed to break ties on confidence; the code used `or`, which does
+  not), and equal-scoring groups were ordered by whatever order the findings
+  happened to arrive in, so 21 of 162 repos selected a different top 15
+  depending on the path taken. Two were new: a stored confidence of 0.0 read
+  as 1.0 through `x or 1.0`, inverting "certainly noise" into "certainly
+  real", and MySQL's case-insensitive collation merging 17 issue_texts that
+  Python keeps apart — "Possible hardcoded password: 'abc'" with "...'ABC'".
+  Both paths now build a byte-identical prompt for 161 of 162 repos and
+  select the same top 15 for all 162.
+
 ## What needs improvement (near-term, actionable)
 
-- **Full rescan of all 155 repos** to recover the findings the IGNORE_PATHS
-  bug discarded — particularly `Dockerfile`/`docker-compose.yml`. Hours of
-  runtime, so an overnight job; `rescan_yara_dep.py` won't do it since the
-  loss is in Bandit/Semgrep output.
+- **Mostly done 2026-10-07: the rescan ran, and the severities are fully
+  fixed.** All 1,513 un-normalised severities are now 0 — repaired in place
+  rather than by rescanning, see the 2026-10-07 section. `requires login`
+  findings are down from 12,238 to 389, and those 389 do need a rescan,
+  since the snippet text was never captured; they are display-only and feed
+  neither the scores nor the LLM prompt. They sit in 8 repos, of which 4 are
+  permanently
+  unfixable (deleted or private, HTTP 404) and 1 was renamed out from under
+  the corpus; see the 2026-10-07 section. What is left to finish is the
+  3 that only failed on a 300s clone timeout, now 900s —
+  `vxunderground/MalwareSourceCode`, `mlflow/mlflow` and
+  `juliocesarfort/public-pentesting-reports`, none under 700MB, so an
+  overnight job when nothing else needs the memory. Use
+  `rescan_stale_july.txt`, which is ordered smallest first.
+- **Done 2026-10-07: `save_to_db()` is atomic.** One transaction from the
+  upsert to the history row, with findings inserted in batches of 500 so the
+  157K-finding repo is ~4 seconds inside it rather than minutes. See the
+  2026-10-07 section for the verification.
+- **Handle renamed repositories.** The GitHub API answers a renamed repo with
+  HTTP 200 and the *new* full_name, so `get_repo_info()` returns an owner and
+  name that differ from the ones requested, and `save_to_db()` writes a
+  second row while the original keeps its old findings. Comparing the
+  API's `full_name` against the requested slug would catch it; what to do
+  then is a decision, not a bug fix — update the original row, or record the
+  redirect and retire the old one. Until then, scanning a renamed repo
+  silently produces an orphan, which is how `envoyproxy/ai-gateway` and
+  `theagentrouter/agent-router` both exist in the corpus.
+- **Decide what to do with the 4 dead repositories.** They will misreport
+  permanently. Either drop them, taking the corpus to 175 and saying why, or
+  keep them flagged as frozen at their 2026-07-29 scan. Keeping them is
+  defensible if documented; leaving them silently is not.
 - **Automated tests.** Route smoke tests plus unit tests over
-  `is_ignored_path()`, `_parse_pep508_name_version()` and `normalize_severity()`
-  — the three places where a silent logic bug has already happened at least
-  once each.
+  `is_ignored_path()`, `_parse_pep508_name_version()`, `normalize_severity()`
+  and now `_fit_text()`/`_fit_varchar()` — the places where a silent logic bug
+  has already happened at least once each.
 - **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
   Python and Node are covered.
-- **Build the Ollama/llama3.2 plain-English summary.** Scope it to the top
-  ~20 findings per scan, not all of them — per-finding LLM inference across
-  the corpus is hours-to-days versus seconds for the Random Forest, so the
-  Random Forest stays the scorer and the LLM only explains.
-- **Dockerise for the team** — `bandit`/`semgrep`/`yara`/`clamscan`/`7z`
-  plus MySQL is a painful per-person install, and a compose file would make
-  it one command. Needs env-var config (since `config.py` is gitignored),
-  a story for `semgrep login`, and ClamAV's ~300MB signature DB.
+- **Done 2026-10-07: the summariser is evaluated.** `evaluate_summaries.py`,
+  20 repos stratified across the risk levels, eight mechanical checks:
+  17 of 19 clean, 89%, both failures being sentence count. `summary_eval.json`
+  holds the run so the figure can be cited. `--rescore` re-judges a saved run
+  without regenerating, which is what made correcting two faulty checks
+  cheap. Quote the 89% with the sample size and the model, and say that two
+  of the eight checks had to be corrected before the number meant anything.
+
+- **Resolved 2026-09-23: Ollama stays out of docker-compose.** A model
+  container plus a ~2GB volume does not fit the 4GB VPS alongside a 2GB
+  semgrep, so `MALDET_OLLAMA_DISABLE=1` is the compose default and the
+  rule-based summary renders there. Kept here as a decision rather than
+  deleted, because "why is the AI missing in the deployed demo" is a
+  question the report has to answer.
+- **Done (ba2beef, extended 2026-09-23): Dockerised.** `docker compose up`
+  brings up MySQL, the web app under gunicorn, and the scan worker. Config
+  is env-var driven, `SEMGREP_APP_TOKEN` is passed through, and the ClamAV
+  signature DB lives in a named volume so it downloads once. What remains is
+  running it on the actual VPS, which nothing has yet.
 - **Independently confirm a slice of the evaluation labels**, or have a
   groupmate review the ambiguous ones, so the precision/recall figures rest
   on something stronger than AI-suggested labels the author agreed with
@@ -218,6 +677,18 @@ Four commits, each verified against the live corpus rather than assumed:
 
 - **Public-repo-only, no-auth, single-user, local tool** — this is a
   permanent design constraint per PRODUCT.md, not a gap to close.
+- **The corpus decays, and some of it is unrecoverable.** Repositories are
+  controlled by other people: between 2026-09-19 and 2026-10-07, four of the
+  corpus were deleted or made private (HTTP 404) and one was renamed. The
+  404s can never be rescanned, so anything their scan failed to capture is
+  gone — specifically 349 findings whose code snippet reads `requires login`,
+  because that text was never stored. What is *in* the database about them
+  can still be corrected, which is how their severities were fixed on
+  2026-10-07 without any network access; do not assume "repository gone"
+  means "data unrecoverable". Any metric computed over the corpus is a
+  metric over the corpus as it was when scanned, and the scan dates differ
+  per repo. Report the dates alongside the numbers.
+
 - **No real concurrency.** Even with background execution, there's no job
   queue — only one scan realistically runs at a time.
 - **Weak-supervised ML is inherently bounded.** *Training* labels are still
@@ -225,12 +696,13 @@ Four commits, each verified against the live corpus rather than assumed:
   findings isn't feasible for one person — so the model can only ever be as
   good as those proxies allow. What has changed is the *evaluation*: the
   168-finding hand-reviewed holdout gives a real number (precision 0.52,
-  recall 0.53) instead of the model grading itself. Quote those figures, not
+  recall 0.62) instead of the model grading itself. Quote those figures, not
   `train_classifier.py`'s self-graded ones, and state that the labels were
   AI-assisted with author confirmation.
-- **Recall is the weak axis, and that's a design posture worth defending
-  explicitly.** At the 0.5 confidence threshold the classifier misses
-  roughly half the genuinely real findings in the evaluation set. It is
+- **Recall is still the weak axis, and that's a design posture worth
+  defending explicitly.** At the 0.5 confidence threshold the classifier
+  misses 18 of the 47 genuinely real findings in the evaluation set (it
+  missed 22 before the malicious repos were added). It is
   tuned to favour a quiet, trustworthy list over a thorough one. For a
   "should I install this?" pre-flight check that's arguable; for an audit
   tool it wouldn't be. Lowering the threshold trades precision back for

@@ -6,7 +6,9 @@ import json
 import requests
 import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from dep_checker import check_dependencies
+import llm_summary
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
 CLONE_DIR = "/tmp/maldet_scan_temp"
@@ -16,6 +18,7 @@ CLONE_DIR = "/tmp/maldet_scan_temp"
 def get_db():
     return pymysql.connect(
         host=DB_HOST,
+        port=DB_PORT,
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,
@@ -44,8 +47,26 @@ def get_repo_info(repo):
 
 #Clone repo
 
-CLONE_TIMEOUT = 300  # scans run in a background thread now, so a longer
-                      # timeout no longer means a longer blocked request
+# Scans run in a worker process, so a longer timeout no longer means a longer
+# blocked request. Raised from 300s after the 2026-10-07 rescan lost three
+# large repos to it; 900s did not save them either, and the cause turned out
+# to be the dull one after two wrong guesses, so it is recorded here to stop
+# a third.
+#
+# It is not server-side pack generation, and not rate limiting. Observed with
+# `git clone --progress`: git sits in "Receiving objects" transferring
+# steadily at 36-45 KiB/s. Measured on the same connection, sustained over
+# 60s each: codeload.github.com 46 KB/s, raw.githubusercontent.com 124 KB/s,
+# a CDN 119 KB/s. The clone rate matches codeload almost exactly, so this is
+# simply a slow link whose slowest path happens to be the one git pack data
+# comes from. At 40 KB/s, 719MB takes ~5 hours and 2,172MB takes ~15.
+#
+# Nothing is wrong with those repositories, and no timeout fixes a link.
+# They want a faster connection -- the deployment VPS, not this dev VM -- so
+# rescanning them belongs with the VPS work rather than with a bigger number
+# here. 900s remains a compromise: generous for a normal repo on a poor
+# connection, short enough not to hold the worker for an hour.
+CLONE_TIMEOUT = int(os.environ.get("MALDET_CLONE_TIMEOUT", "900"))
 
 def clone_repo(repo):
     path = os.path.join(CLONE_DIR, repo.replace("/", "_"))
@@ -283,12 +304,24 @@ def filter_noise(findings):
 #Semgrep functionality
 
 
+# Ceiling for semgrep's own memory use, in MB. Tunable because the right
+# value is hardware-dependent: generous on a dev box, essential on the 4GB
+# VPS this deploys to.
+SEMGREP_MAX_MEMORY_MB = int(os.environ.get("MALDET_SEMGREP_MAX_MEMORY", "1500"))
+
+
 def run_semgrep(path):
     print("  Running Semgrep (this may take a few minutes)...")
     findings = []
     try:
         result = subprocess.run(
-            ["semgrep", "--config=auto", path, "--json", "--quiet"],
+            ["semgrep", "--config=auto", path, "--json", "--quiet",
+             # Measured at 1,976MB peak on a trivial directory -- the largest
+             # single consumer in the pipeline, against 4GB on the deployment
+             # VPS. Semgrep skips files it cannot fit in this budget rather
+             # than failing, so the cost of the cap is a few unscanned large
+             # files instead of the OOM killer taking out MySQL mid-scan.
+             "--max-memory", str(SEMGREP_MAX_MEMORY_MB)],
             capture_output=True, text=True, timeout=300
         )
         
@@ -382,6 +415,108 @@ def run_clamav(path):
     except Exception as e:
         print(f"    ClamAV error: {e}")
     print(f"    ClamAV found {len(findings)} threats")
+    return findings
+
+#GuardDog (Datadog) — supply-chain malware heuristics
+
+# GuardDog cannot share this project's virtualenv: it requires click >=8.4.1
+# while semgrep pins click ~=8.1.8, and installing it alongside silently
+# upgrades click out from under semgrep. It therefore lives in its own
+# environment and is invoked as an external command, exactly like yara,
+# clamscan and 7z already are. PATH is checked first so a system or Docker
+# install wins; the project-local venv is the developer fallback.
+GUARDDOG_TIMEOUT = 300
+_GUARDDOG_LOCAL = os.path.join(os.path.dirname(__file__), ".venv-guarddog", "bin", "guarddog")
+
+
+def _guarddog_bin():
+    found = shutil.which("guarddog")
+    if found:
+        return found
+    if os.path.exists(_GUARDDOG_LOCAL):
+        return _GUARDDOG_LOCAL
+    return None
+
+
+def _guarddog_severity(rule, location, risk_map):
+    """GuardDog separates what code *can* do from what it *is* doing, and only
+    treats the two together as a real risk — that correlation is the whole
+    reason to run it rather than more pattern rules. So a rule that the
+    correlation engine surfaced in `risks` carries the severity it assigned;
+    an uncorrelated `threat-` rule is medium; anything else is low."""
+    risk_severity = risk_map.get((rule, location))
+    if risk_severity:
+        return normalize_severity(risk_severity)
+    return "medium" if rule.startswith("threat-") else "low"
+
+
+def run_guarddog(path):
+    print("  Running GuardDog...")
+    findings = []
+    binary = _guarddog_bin()
+    if binary is None:
+        print("    GuardDog not installed, skipping")
+        return findings
+
+    # The ecosystem argument only changes which *metadata* rules apply, and
+    # metadata rules need a registry lookup we don't do for a cloned repo.
+    # The source-code rules are shared, so `pypi` here scans JavaScript
+    # exactly as `npm` would — verified against the same sample.
+    cmd = [binary, "pypi", "scan", path, "--output-format", "json"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=GUARDDOG_TIMEOUT)
+        # The kernel sandbox is on by default and aborts the scan where it
+        # isn't available (common in containers and CI). Retry unsandboxed
+        # rather than losing the detector entirely — we are reading files,
+        # not executing the package.
+        if not result.stdout.strip():
+            result = subprocess.run(cmd + ["--no-sandbox"], capture_output=True,
+                                    text=True, timeout=GUARDDOG_TIMEOUT)
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        print("    GuardDog: no parsable output, skipping")
+        return findings
+    except subprocess.TimeoutExpired:
+        print(f"    GuardDog timed out after {GUARDDOG_TIMEOUT}s, skipping")
+        return findings
+    except Exception as e:
+        print(f"    GuardDog error: {e}")
+        return findings
+
+    # (rule, location) -> severity, for the correlated risks
+    risk_map = {
+        (r.get("threat_rule"), r.get("threat_location")): r.get("severity")
+        for r in data.get("risks", []) or []
+    }
+    correlated_rules = {rule for rule, _ in risk_map}
+
+    for rule, entries in (data.get("results") or {}).items():
+        # A bare capability ("this code can open a socket") is not a finding —
+        # by GuardDog's own model it only means something paired with a threat
+        # indicator. Reporting them unfiltered would bury the real hits under
+        # thousands of low-severity rows, which is the exact problem the rest
+        # of this pipeline exists to solve.
+        if not entries or (not rule.startswith("threat-")
+                           and rule not in correlated_rules):
+            continue
+        for entry in entries:
+            location = entry.get("location", "") or ""
+            filename, _, line = location.rpartition(":")
+            if not filename:            # no line number in the location
+                filename, line = location, "0"
+            message = (entry.get("message") or "").strip()
+            findings.append({
+                "tool":         "guarddog",
+                "severity":     _guarddog_severity(rule, location, risk_map),
+                "issue_text":   f"{message} [{rule}]" if message
+                                else f"GuardDog rule: {rule}",
+                "filename":     "/" + filename.lstrip("/"),
+                "line_number":  int(line) if line.isdigit() else 0,
+                "code_snippet": (entry.get("code") or "").strip(),
+            })
+
+    print(f"    GuardDog found {len(findings)} issues")
     return findings
 
 #False-positive classifier (train_classifier.py)
@@ -486,6 +621,7 @@ TOOL_CATEGORY = {
     "yara":        "malicious_pattern",
     "clamav":      "malicious_pattern",
     "dep_checker": "malicious_pattern",
+    "guarddog":    "malicious_pattern",
     "virustotal":  "malicious_pattern",  # legacy tool name from old scans
 }
 
@@ -534,7 +670,51 @@ def calculate_category_risk(findings):
 
 #DB Functionality
 
-def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk):
+# A finding that overflows its column kills the *entire* save, not just its
+# own row: byt3bl33d3r/CrackMapExec lost a 4-minute scan and all ~20K of its
+# other findings to MySQL error 1406 on one oversized code_snippet. Offensive
+# and malicious repos are full of minified or generated source that puts a
+# whole file on one line, so this is normal input here, not an edge case.
+# Truncating the one value that doesn't fit is strictly better than
+# discarding the repo.
+#
+# The two helpers differ because MySQL measures the two column types
+# differently: TEXT caps at 65,535 *bytes*, while VARCHAR(n) caps at n
+# *characters*. These tables are utf8mb4, so a string that passes a
+# character-count check can still overflow a TEXT column once encoded.
+
+_TRUNCATED = "...[truncated]"
+
+
+def _fit_text(value, max_bytes=65535):
+    """Trim a value to fit a TEXT column, which is limited in bytes."""
+    text = "" if value is None else str(value)
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    budget = max_bytes - len(_TRUNCATED.encode("utf-8"))
+    # errors="ignore" drops the partial multi-byte character the byte-slice
+    # may have cut in half.
+    return encoded[:budget].decode("utf-8", "ignore") + _TRUNCATED
+
+
+def _fit_varchar(value, max_chars):
+    """Trim a value to fit a VARCHAR column, which is limited in characters."""
+    text = "" if value is None else str(value)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars - len(_TRUNCATED)] + _TRUNCATED
+
+
+# Findings per INSERT. Large enough that a six-figure repo is a few hundred
+# round trips instead of 157k, small enough to stay well inside MySQL's
+# default 64MB max_allowed_packet even when every row carries a long
+# issue_text and code snippet.
+FINDING_INSERT_BATCH = 500
+
+
+def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk,
+               llm_text=None, llm_status=None):
     db     = get_db()
     cursor = db.cursor()
 
@@ -567,18 +747,42 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
         cursor.execute("DELETE FROM scan_results WHERE repo_id=%s", (repo_id,))
         cursor.execute("DELETE FROM risk_scores   WHERE repo_id=%s", (repo_id,))
 
-        db.commit()
-
-        # Save each finding
-        for f in findings:
-            cursor.execute("""
+        # No commit here, deliberately. There used to be one, which made the
+        # upsert and the two DELETEs durable before a single finding had been
+        # written -- so any failure in the inserts below left the repository
+        # row present with no findings and no risk_scores row. That does not
+        # surface as an error anywhere: it renders as a clean, Safe repo. A
+        # false clean is the worst result a security scanner can produce, and
+        # it has happened at least once already (CrackMapExec).
+        #
+        # Everything from the upsert to scan_history is now one transaction,
+        # so a failed scan leaves the previous scan's results untouched
+        # rather than destroying them. InnoDB's MVCC means readers keep
+        # seeing the old complete scan until this commits, which is also
+        # better for the web UI during a rescan than briefly seeing none.
+        #
+        # Inserted in batches rather than row by row because the transaction
+        # is now held open across all of them, and the largest repo in the
+        # corpus has ~157k findings -- one round trip each would hold it open
+        # for minutes. The batch size bounds the packet, not the transaction.
+        rows = [
+            (repo_id,
+             _fit_varchar(f["tool"], 50),
+             _fit_varchar(f["severity"], 20),
+             f.get("p_real"),
+             _fit_text(f["issue_text"]),
+             _fit_varchar(f["filename"], 500),
+             f.get("line_number", 0),
+             _fit_text(f.get("code_snippet", "")))
+            for f in findings
+        ]
+        for start in range(0, len(rows), FINDING_INSERT_BATCH):
+            cursor.executemany("""
                 INSERT INTO scan_results
                     (repo_id, tool, severity, confidence, issue_text,
                      filename, line_number, code_snippet)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (repo_id, f["tool"], f["severity"], f.get("p_real"),
-                  f["issue_text"], f["filename"], f.get("line_number", 0),
-                  f.get("code_snippet", "")))
+            """, rows[start:start + FINDING_INSERT_BATCH])
 
         # Save risk score — high_count/medium_count/low_count/final_score/
         # risk_level stay as the blended "overall" figure (kept only for
@@ -591,11 +795,25 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
                 (repo_id, high_count, medium_count, low_count,
                  final_score, risk_level,
                  vuln_high, vuln_medium, vuln_low, vuln_score, vuln_level,
-                 malware_high, malware_medium, malware_low, malware_score, malware_level)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 malware_high, malware_medium, malware_low, malware_score, malware_level,
+                 llm_summary, llm_summary_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (repo_id, high, medium, low, score, level,
               vuln["high"], vuln["medium"], vuln["low"], vuln["score"], vuln["level"],
-              malware["high"], malware["medium"], malware["low"], malware["score"], malware["level"]))
+              malware["high"], malware["medium"], malware["low"], malware["score"], malware["level"],
+              _fit_text(llm_text) if llm_text else None,
+              # "pending" only when a summary is actually expected, so the
+              # page never shows a spinner for a scan that will not produce
+              # one. llm_summary.is_available() checks Ollama is reachable
+              # and has the model, not merely that it is not disabled.
+              # Defaults to "unavailable", NOT "pending". Only a caller that
+              # will actually generate the summary may claim one is coming --
+              # worker.py sets "pending" itself just before it starts. A
+              # default of "pending" stranded every caller that does not
+              # generate (batch_scan.py, a direct scan_repo()) with a row the
+              # detail page spins on until a worker restart clears it.
+              llm_status if llm_status is not None else
+              ("done" if llm_text else "unavailable")))
 
         # Save to history
         cursor.execute("""
@@ -647,6 +865,9 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         report("Running ClamAV")
         findings += run_clamav(path)
 
+        report("Running GuardDog")
+        findings += run_guarddog(path)
+
         report("Checking dependencies")
         findings += check_dependencies(path)
 
@@ -661,6 +882,12 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         high, medium, low, score, level = calculate_risk(findings)
         category_risk = calculate_category_risk(findings)
 
+        # The LLM deliberately does NOT run here. Generation is 20-60s on
+        # CPU, and inside the scan that is 20-60s the visitor spends staring
+        # at a progress bar after the results already exist. The scan saves
+        # and returns; whoever called it generates the summary afterwards and
+        # the detail page shows a placeholder until it lands (see
+        # worker.py and app.py's /api/summary route).
         report("Saving results")
         repo_id = save_to_db(repo_info, findings,
                              high, medium, low, score, level, category_risk)

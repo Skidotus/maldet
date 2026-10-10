@@ -30,6 +30,7 @@ import random
 import pymysql
 
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db_connect import DB_PORT
 from scanner import normalize_severity
 
 TARGET_PER_STRATUM = 15
@@ -87,7 +88,7 @@ def guard_existing_labels(path):
 guard_existing_labels(OUTPUT_PATH)
 
 conn = pymysql.connect(
-    host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+    host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
     cursorclass=pymysql.cursors.DictCursor,
 )
 
