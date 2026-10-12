@@ -4,18 +4,23 @@
 {% block body_class %}landing-page{% endblock %}
 
 {# ---------------------------------------------------------------
-   About-us content. PLACEHOLDERS — replace the bracketed values with
-   the real names, roles and institution before submission.
+   About-us content. Grouped by role; "blurb" and "link" are optional.
    --------------------------------------------------------------- #}
-{% set team = [
-  {"name": "Haikal",                 "role": "Developer & researcher",
-   "blurb": "Designed and built MalDet: the scan pipeline, scoring, classifier and this web interface.",
-   "initials": "H", "link": "https://github.com/Skidotus", "link_label": "GitHub"},
-  {"name": "[Supervisor name]",      "role": "Project supervisor",
-   "blurb": "[One line on the supervisor's role, e.g. guidance on scope, evaluation and the written report.]",
-   "initials": "S", "link": none, "link_label": none},
+{% set team_groups = [
+  ("Project team", [
+    {"name": "Haikal", "initials": "H", "role": "Team lead",
+     "link": "https://github.com/Skidotus", "link_label": "GitHub"},
+    {"name": "Ariff",  "initials": "A", "role": "Team member 1"},
+    {"name": "Aleena", "initials": "A", "role": "Team member 2"},
+    {"name": "Adam",   "initials": "A", "role": "Team member 3"},
+  ]),
+  ("Supervisor", [
+    {"name": "Sir Luqman", "initials": "L", "role": "Project supervisor"},
+  ]),
 ] %}
-{% set institution = "[Institution name]" %}
+{% set programme   = "Diploma in Cyber Security Technology" %}
+{% set institution = "German-Malaysian Institute" %}
+{% set project_title = "Development of an AI‑Driven Malware Detection and Trust Scoring System for GitHub Repositories" %}
 
 {% set level_steps = ["Safe", "Low", "Medium", "High", "Critical"] %}
 
@@ -36,7 +41,7 @@
   <section class="hero" id="overview" aria-labelledby="heroTitle">
     <div class="site-container">
       <div class="hero__copy">
-        <p class="eyebrow eyebrow--on-dark">Final Year Project &middot; Diploma in Information Security</p>
+        <p class="eyebrow eyebrow--on-dark hero__eyebrow">Final Year Project &middot; {{ project_title }} (MalDet)</p>
         <h1 class="hero__title" id="heroTitle">
           Know what a repository hides <em>before you run&nbsp;it.</em>
         </h1>
@@ -367,34 +372,53 @@
       <div class="about__copy reveal">
         <p class="eyebrow">About us</p>
         <h2 class="section-title" id="aboutTitle">Built as a final year project, <em>made to be used.</em></h2>
-        <p class="section-lede">MalDet is a Final Year Project for the Diploma in Information Security
-          at {{ institution }}. It started from a simple question: how can a developer tell whether a
+        <p class="section-lede">MalDet is a Final Year Project for the {{ programme }}
+          at the {{ institution }}. It started from a simple question: how can a developer tell whether a
           public repository is safe to pull in without running six security tools and reading
           thousands of alerts?</p>
         <p class="section-lede">The answer is to combine the tools, filter out the noise, and keep
           two kinds of risk separate, because they need different responses.</p>
       </div>
 
-      <div class="team-grid reveal">
-        {% for person in team %}
-          <article class="team-card">
-            <div class="team-card__avatar" aria-hidden="true">{{ person.initials }}</div>
-            <div>
-              <h3 class="team-card__name">{{ person.name }}</h3>
-              <p class="team-card__role">{{ person.role }}</p>
-              <p class="team-card__blurb">{{ person.blurb }}</p>
-              {% if person.link %}
-                <a class="team-card__link" href="{{ person.link }}" target="_blank" rel="noopener noreferrer">
-                  <i class="bi bi-github" aria-hidden="true"></i> {{ person.link_label }}
-                </a>
-              {% endif %}
+      <div class="team reveal">
+        {% for group, people in team_groups %}
+          <div class="team-group">
+            <h3 class="team-group__title">{{ group }}</h3>
+            <div class="team-grid{{ ' team-grid--duo' if people|length > 1 else '' }}">
+              {% for person in people %}
+                <article class="team-card">
+                  <div class="team-card__avatar" aria-hidden="true">{{ person.initials }}</div>
+                  <div>
+                    <p class="team-card__name">{{ person.name }}</p>
+                    {% if person.role %}<p class="team-card__role">{{ person.role }}</p>{% endif %}
+                    {% if person.blurb %}<p class="team-card__blurb">{{ person.blurb }}</p>{% endif %}
+                    {% if person.link %}
+                      <a class="team-card__link" href="{{ person.link }}" target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-github" aria-hidden="true"></i> {{ person.link_label }}<span class="visually-hidden"> (opens in a new tab)</span>
+                      </a>
+                    {% endif %}
+                  </div>
+                </article>
+              {% endfor %}
             </div>
-          </article>
+          </div>
         {% endfor %}
         <article class="team-card team-card--note">
           <i class="bi bi-mortarboard" aria-hidden="true"></i>
-          <p>Diploma in Information Security &middot; {{ institution }} &middot; 2026</p>
+          <p>{{ programme }} &middot; {{ institution }} &middot; 2026</p>
         </article>
+      </div>
+    </div>
+  </section>
+
+  {# =============================================================
+     Closing: the project's full title
+     ============================================================= #}
+  <section class="section section--paper project-title-section" aria-labelledby="projectTitleFull">
+    <div class="site-container">
+      <div class="title-plate reveal">
+        <h2 class="title-plate__text" id="projectTitleFull">{{ project_title }}</h2>
+        <p class="title-plate__meta">Final Year Project &middot; {{ programme }} &middot; {{ institution }}</p>
       </div>
     </div>
   </section>

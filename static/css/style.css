@@ -574,9 +574,12 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
 .about { display: grid; gap: 3rem; }
 @media (min-width: 992px) { .about { grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start; } }
 
-.team-grid { display: grid; gap: 1rem; }
+.team { display: grid; gap: 1.5rem; }
+.team-group__title { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.6rem; }
+.team-grid { display: grid; gap: 0.75rem; }
+@media (min-width: 576px) { .team-grid--duo { grid-template-columns: 1fr 1fr; } }
 .team-card {
-  display: flex; gap: 1.1rem; align-items: flex-start;
+  display: flex; gap: 1rem; align-items: flex-start;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -590,7 +593,11 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
   font-family: var(--font-display); font-size: 1.6rem;
 }
 .team-card__name { font-size: 1.1rem; font-weight: 700; margin: 0.15rem 0 0.1rem; }
-.team-card__role { color: var(--green-text); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
+.team-card__role { color: var(--green-text); font-size: 0.82rem; font-weight: 600; margin-bottom: 0.4rem; }
+.team-card__name { margin-bottom: 0.1rem; }
+.team-card__blurb:last-child { margin-bottom: 0; }
+.team-card:not(:has(.team-card__blurb)) { align-items: center; }
+.team-card:not(:has(.team-card__blurb)) .team-card__role { margin-bottom: 0; }
 .team-card__blurb { color: var(--muted); font-size: 0.92rem; margin-bottom: 0.5rem; }
 .team-card__link { font-size: 0.9rem; font-weight: 600; text-decoration: none; display: inline-flex; gap: 0.35rem; align-items: center; min-height: 44px; }
 .team-card--note { background: var(--green-tint); border-color: var(--green-tint-line); box-shadow: none; align-items: center; }
@@ -1039,3 +1046,32 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   .seg__btn { justify-content: center; border-radius: 8px; }
   .case-header__actions, .case-header__actions .btn { width: 100%; }
 }
+
+/* Closing plate with the project's full title */
+.project-title-section { padding-top: 0; }
+.title-plate {
+  background:
+    radial-gradient(60% 90% at 100% 0%, rgba(163, 217, 184, 0.10), transparent 70%),
+    var(--forest-900);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  box-shadow: var(--shadow-lift);
+}
+@media (min-width: 768px) { .title-plate { padding: 3.5rem 3rem; } }
+.title-plate__text {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 3.2vw, 2.4rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--on-forest);
+  max-width: 30ch;
+  margin: 0 auto 1rem;
+  text-wrap: balance;
+}
+.title-plate__meta { color: var(--on-forest-muted); font-size: 0.9rem; margin: 0; }
+
+/* The hero eyebrow carries the full project title, so it keeps its own
+   capitalisation (MalDet, GitHub) instead of the tracked all-caps label. */
+.hero__eyebrow { text-transform: none; letter-spacing: 0.01em; font-size: 0.88rem; font-weight: 500; line-height: 1.5; max-width: 58ch; margin-bottom: 1rem; }
