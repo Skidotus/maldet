@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 MalDet is a web-based static analysis tool (Flask + MySQL) that scans public GitHub
 repositories for malware, vulnerable dependencies, and supply chain attacks, combining
 several detection engines with an ML risk classifier. It's a Final Year Project (FYP)
-for a Diploma in Information Security.
+for the Diploma in Cyber Security Technology at the German-Malaysian Institute.
+Full title: "Development of an AI-Driven Malware Detection and Trust Scoring
+System for GitHub Repositories".
 
 **Current state**: the scan pipeline (`scanner.py`, `dep_checker.py`), the queue
 (`job_queue.py`, `worker.py`), Flask routes (`app.py`), `templates/`, `static/`,
@@ -180,8 +182,9 @@ counts `safe`/`low`/`medium`/`high`/`critical`, `total_findings` (a
 running job, or None — shown as a "scan in progress" link above the form,
 since submitting again would only bounce back to it). The hero card shows
 `repos[0]`, a real record; scores are unbounded, so it shows the level on a
-five-step scale rather than a percentage bar. About-us names live in the
-`team` / `institution` set at the top of the template and are placeholders.
+five-step scale rather than a percentage bar. About-us people, programme,
+institution and the full project title live in the `team_groups` /
+`programme` / `institution` / `project_title` sets at the top of the template.
 
 **`scan.html`** — nothing, or `error` on a bad URL. The form normally lives
 in `index.html#scan`; this page is what the server renders on a rejected

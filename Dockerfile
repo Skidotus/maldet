@@ -1,9 +1,12 @@
 # MalDet — Flask app plus the detection engines it shells out to.
 #
-# Only four tools need to come from the OS: scanner.py shells out to `yara`,
-# `clamscan` and `git`, and extract_archives() shells out to `7z`. Bandit,
-# Semgrep and pip-audit are Python packages and arrive via requirements.txt
-# instead, so they are not installed here.
+# Four tools come from the OS: scanner.py shells out to `yara`, `clamscan`
+# and `git`, and extract_archives() shells out to `7z`. Bandit, Semgrep and
+# pip-audit are Python packages and arrive via requirements.txt instead, so
+# they are not installed here.
+#
+# The OS also supplies Pango, which WeasyPrint loads at import time to render
+# the PDF report.
 
 FROM python:3.12-slim
 
@@ -21,11 +24,22 @@ ENV PYTHONUNBUFFERED=1 \
 # (providing /usr/bin/7z), while trixie dropped it for `7zip` (providing
 # `7zz` instead). Try the former, fall back to the latter, and symlink so
 # the `7z` that extract_archives() shells out to exists either way.
+# WeasyPrint 70 dlopens Pango, PangoFT2, HarfBuzz, GObject and fontconfig --
+# NOT cairo, which it dropped in v53 for its own PDF writer, so libcairo2 and
+# libgdk-pixbuf are not needed here. libpango-1.0-0 and libpangoft2-1.0-0 pull
+# the rest of that set in transitively; libharfbuzz-subset0 does not come with
+# them and is what lets WeasyPrint subset embedded fonts. fonts-dejavu-core
+# also arrives transitively, named here because it is the only font in the
+# image: without it the report renders as empty boxes rather than failing.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         yara \
         clamav \
         clamav-freshclam \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libharfbuzz-subset0 \
+        fonts-dejavu-core \
     && (apt-get install -y --no-install-recommends p7zip-full \
         || (apt-get install -y --no-install-recommends 7zip \
             && ln -sf "$(command -v 7zz)" /usr/local/bin/7z)) \
@@ -48,6 +62,18 @@ RUN set -eu; \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+
+# Render a PDF now, for the same reason the system tools are checked above:
+# app.py's /report/<id>.pdf route catches an unavailable WeasyPrint and
+# returns 503 so the rest of the app keeps working, which means a missing
+# shared library would only surface when someone tried to download a report.
+# Importing is not enough -- the libraries are dlopened lazily, so this
+# writes an actual PDF.
+RUN python -c "\
+import weasyprint; \
+pdf = weasyprint.HTML(string='<h1>MalDet</h1><p>build check</p>').write_pdf(); \
+assert pdf[:5] == b'%PDF-', pdf[:5]; \
+print('weasyprint renders PDFs:', len(pdf), 'bytes')"
 
 # GuardDog gets its own virtualenv rather than a line in requirements.txt:
 # it requires click >=8.4.1 while semgrep pins click ~=8.1.8, so installing

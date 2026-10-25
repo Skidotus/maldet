@@ -450,15 +450,16 @@ def report_pdf(repo_id):
         db.close()
 
     try:
-        # Imported here, not at module scope: WeasyPrint pulls in cairo and
-        # pango through cffi, and the whole app should still start on a box
+        # Imported here, not at module scope: WeasyPrint dlopens Pango and
+        # friends through cffi, and the whole app should still start on a box
         # where those are missing -- only this one route needs to fail.
         from weasyprint import HTML
     except Exception as e:
         app.logger.error("WeasyPrint unavailable: %s", e)
         return ("PDF export is unavailable on this server: WeasyPrint or its "
-                "system libraries (cairo, pango) are not installed. The report "
-                "page itself still works, and a browser can print it to PDF.", 503)
+                "system libraries (libpango-1.0-0, libpangoft2-1.0-0) are not "
+                "installed. The report page itself still works, and a browser "
+                "can print it to PDF.", 503)
 
     # base_url lets any relative asset resolve against the app root. Nothing
     # in the template needs it today, but a logo added later would silently
