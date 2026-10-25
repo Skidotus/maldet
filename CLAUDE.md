@@ -138,12 +138,17 @@ the OOM killer. Tune via `MALDET_OLLAMA_MODEL` / `MALDET_OLLAMA_HOST` /
 findings in the standard dict shape, call it inside `scan_repo()` and append its
 output to `findings` before `filter_noise()` runs.
 
-**`db_connect.py`** — the one place that knows where MySQL is. Resolves the
-port from `DB_PORT` in the environment, else `DB_PORT` in `config.py`, else
-3306, and all fifteen `pymysql.connect()` calls pass it. Exists for the SSH
-tunnel case (`ssh -L 3307:127.0.0.1:3306`), because without a configurable
-port every script silently connects to the *local* database instead — same
-tables, plausible results, wrong data, no error.
+**`db_connect.py`** — the one place that knows where MySQL is. Resolves
+`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME` from the
+environment, else the same name in `config.py`, else a default, and all
+fifteen `pymysql.connect()` calls go through it. Exists for the SSH tunnel
+case (`ssh -L 3307:127.0.0.1:3306`), because without a configurable port
+every script silently connects to the *local* database instead — same
+tables, plausible results, wrong data, no error. The credentials resolve the
+same way for the same reason: a tunnel points at a different server with its
+own MySQL users, so the deployed password is never the one in a developer's
+`config.py`. An empty variable counts as unset, since `DB_PASSWORD= cmd` is
+a shell saying "no value", not "the empty password".
 
 **`backfill_summaries.py`** — generates `risk_scores.llm_summary` for repos
 that lack one, from stored findings, without rescanning. Groups the findings
