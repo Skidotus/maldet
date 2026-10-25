@@ -32,9 +32,13 @@ instance matching `config.py`.
 Semgrep is capped by `MALDET_SEMGREP_MAX_MEMORY` (default 1500MB) because it is
 the pipeline's largest consumer.
 
-`guarddog` is deliberately **not** in `requirements.txt` — it requires
-click >=8.4.1 while semgrep pins click ~=8.1.8, so installing it into `venv/`
-silently upgrades click and breaks semgrep. It gets its own environment:
+`guarddog` is deliberately **not** in `requirements.txt`. It requires
+click >=8.4.1,<9, and semgrep pinned click ~=8.1.8 until 1.182.1, so
+installing it into `venv/` silently upgraded click and broke semgrep. Since
+the 1.182.1 bump semgrep pins click ~=8.4.2 and a single click (8.4.2)
+satisfies both, so that specific conflict is gone — but the separate
+environment is what is tested and what `run_guarddog()` falls back to, so it
+stays until someone verifies the merge deliberately:
 
 ```bash
 python3 -m venv .venv-guarddog && .venv-guarddog/bin/pip install guarddog

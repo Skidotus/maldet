@@ -76,8 +76,11 @@ assert pdf[:5] == b'%PDF-', pdf[:5]; \
 print('weasyprint renders PDFs:', len(pdf), 'bytes')"
 
 # GuardDog gets its own virtualenv rather than a line in requirements.txt:
-# it requires click >=8.4.1 while semgrep pins click ~=8.1.8, so installing
-# both into one environment breaks semgrep. scanner.py looks for `guarddog`
+# it requires click >=8.4.1,<9, and semgrep pinned click ~=8.1.8 until
+# 1.182.1, so installing both into one environment broke semgrep. The pins
+# now overlap on click 8.4.2, but the isolation stays -- it costs one layer
+# and removes a whole class of resolver conflict from a tool whose only job
+# is to run other people's packaging code. scanner.py looks for `guarddog`
 # on PATH first, which the symlink satisfies. Verified immediately for the
 # same reason as the system tools above — run_guarddog() skips silently when
 # the binary is absent, so a failed install would look like a clean scan.
