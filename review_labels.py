@@ -13,7 +13,6 @@ Run standalone: `python3 review_labels.py`
 """
 
 import json
-import os
 
 PATH = "eval_sample.json"
 
@@ -29,7 +28,14 @@ def save(data):
 
 
 def clear():
-    os.system("cls" if os.name == "nt" else "clear")
+    # An ANSI escape rather than os.system("clear"): no shell, no subprocess,
+    # and nothing platform-specific to branch on. The old call passed a
+    # constant string so it was never injectable, but bandit rates every
+    # os.system as high severity (B605) and MalDet scanning its own
+    # repository reported it -- a scanner that ships a high finding against
+    # itself has to either fix it or explain it, and this was cheaper to fix.
+    # \033[2J clears the screen, \033[H returns the cursor to the top-left.
+    print("\033[2J\033[H", end="")
 
 
 def main():
