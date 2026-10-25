@@ -486,7 +486,9 @@
 {% endif %}
 
   {% if history_dates and history_dates != '[]' %}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+            integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+            crossorigin="anonymous"></script>
     <script>
       Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
       new Chart(document.getElementById('trendChart'), {

@@ -13,15 +13,26 @@ script connects to 3306 and therefore to the *local* database — same table
 names, same schema, plausible-looking results, entirely the wrong data. No
 error is raised, so it reads as success.
 
-Resolution order, first match wins:
+Every connection setting resolves the same way, first match wins:
 
-    1. DB_PORT environment variable  (per-invocation, e.g. a tunnel)
-    2. DB_PORT in config.py          (if the local setup needs a fixed port)
-    3. 3306                          (the MySQL default)
+    1. the environment variable  (per-invocation, e.g. a tunnel)
+    2. the same name in config.py
+    3. the default below
+
+    DB_HOST  DB_PORT  DB_USER  DB_PASSWORD  DB_NAME
+
+The credentials are overridable for the same reason the port is: a tunnel
+points at a *different server*, which has its own MySQL users. Deployed
+MalDet generates its password at install time, so it is never the one in a
+developer's config.py, and without this the tunnel authenticates as the
+local user against the remote database and is simply refused.
+
+    DB_PORT=3307 DB_PASSWORD="$(ssh vps 'grep ^DB_PASSWORD /root/maldet/.env | cut -d= -f2-')" \
+        python3 backfill_summaries.py
 
 config.py is gitignored and predates this module, so step 2 uses getattr
-rather than a direct import: an existing config.py without DB_PORT must keep
-working untouched, not raise ImportError on every script at once.
+rather than a direct import: an existing config.py missing any of these must
+keep working untouched, not raise ImportError on every script at once.
 """
 
 import os
@@ -33,10 +44,22 @@ import config
 DEFAULT_DB_PORT = 3306
 
 
+def _resolve(name, default=None):
+    """The environment first, then config.py, then the default.
+
+    An empty environment variable counts as unset. `DB_PASSWORD= cmd` is how
+    a shell says "no value", not "the empty password", and treating it as a
+    real value turns a typo into an authentication failure that looks like
+    wrong credentials.
+    """
+    value = os.environ.get(name)
+    if value:
+        return value
+    return getattr(config, name, default)
+
+
 def _resolve_port():
-    raw = os.environ.get("DB_PORT")
-    if raw is None:
-        raw = getattr(config, "DB_PORT", DEFAULT_DB_PORT)
+    raw = _resolve("DB_PORT", DEFAULT_DB_PORT)
     try:
         return int(raw)
     except (TypeError, ValueError):
@@ -44,7 +67,11 @@ def _resolve_port():
         return DEFAULT_DB_PORT
 
 
-DB_PORT = _resolve_port()
+DB_HOST     = _resolve("DB_HOST")
+DB_PORT     = _resolve_port()
+DB_USER     = _resolve("DB_USER")
+DB_PASSWORD = _resolve("DB_PASSWORD")
+DB_NAME     = _resolve("DB_NAME")
 
 
 def connect(**overrides):
@@ -54,11 +81,11 @@ def connect(**overrides):
     everything else is shared so the host/port/credentials are stated once.
     """
     settings = {
-        "host":     config.DB_HOST,
+        "host":     DB_HOST,
         "port":     DB_PORT,
-        "user":     config.DB_USER,
-        "password": config.DB_PASSWORD,
-        "database": config.DB_NAME,
+        "user":     DB_USER,
+        "password": DB_PASSWORD,
+        "database": DB_NAME,
     }
     settings.update(overrides)
     return pymysql.connect(**settings)
@@ -67,5 +94,5 @@ def connect(**overrides):
 def describe():
     """Human-readable target, for scripts that should say where they are
     writing — the whole point of the port is that it changes which database
-    you are talking to."""
-    return f"{config.DB_USER}@{config.DB_HOST}:{DB_PORT}/{config.DB_NAME}"
+    you are talking to. No password, so it is safe to print in a log."""
+    return f"{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

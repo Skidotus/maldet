@@ -11,16 +11,17 @@ recompute_scores.py/recompute_category_scores.py after this finishes.
 
 import os
 import shutil
+import tempfile
 import subprocess
 import sys
 import time
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import extract_archives, run_yara, filter_noise
+from scanner import extract_archives, run_yara, filter_noise, ensure_scratch_dir
 from dep_checker import check_dependencies
 
-CLONE_DIR = "/tmp/maldet_rescan_temp"
+CLONE_DIR = os.path.join(tempfile.gettempdir(), "maldet_rescan_temp")
 
 conn = pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
                         cursorclass=pymysql.cursors.DictCursor)
@@ -30,7 +31,7 @@ with conn.cursor() as cur:
     repos = cur.fetchall()
 
 print(f"Re-scanning YARA + dep_checker for {len(repos)} repos\n")
-os.makedirs(CLONE_DIR, exist_ok=True)
+ensure_scratch_dir(CLONE_DIR)
 t0 = time.time()
 
 for i, r in enumerate(repos, 1):

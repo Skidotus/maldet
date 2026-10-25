@@ -3,6 +3,7 @@ import re
 import subprocess
 import shutil
 import json
+import tempfile
 import requests
 import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
@@ -11,7 +12,32 @@ from dep_checker import check_dependencies
 import llm_summary
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
-CLONE_DIR = "/tmp/maldet_scan_temp"
+# Not a hardcoded "/tmp/..." literal: gettempdir() honours TMPDIR, which is
+# what a container sets, and the directory itself is created by
+# ensure_scratch_dir() rather than trusted to already be safe.
+CLONE_DIR = os.path.join(tempfile.gettempdir(), "maldet_scan_temp")
+
+
+def ensure_scratch_dir(path):
+    """Create `path` as a private directory, or refuse to use it.
+
+    The system temp directory is world-writable, so plain
+    makedirs(exist_ok=True) will adopt whatever is already sitting at that
+    name -- including a directory another user created first, or a symlink
+    pointing somewhere else entirely. Everything written underneath is an
+    untrusted repository's own files, so that is worth one check: bail if it
+    is not a real directory we own, and force 0700 so nothing else can read
+    a clone mid-scan or swap a file under a detector.
+    """
+    if os.path.islink(path) or (os.path.exists(path) and not os.path.isdir(path)):
+        raise RuntimeError(f"Scratch path {path} exists and is not a directory")
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    # makedirs' mode is masked by umask, and it leaves an existing directory's
+    # permissions alone, so set them explicitly either way.
+    os.chmod(path, 0o700)
+    if hasattr(os, "getuid") and os.stat(path).st_uid != os.getuid():
+        raise RuntimeError(f"Scratch path {path} is not owned by this user")
+    return path
 
 #DB
 
@@ -69,10 +95,10 @@ def get_repo_info(repo):
 CLONE_TIMEOUT = int(os.environ.get("MALDET_CLONE_TIMEOUT", "900"))
 
 def clone_repo(repo):
+    ensure_scratch_dir(CLONE_DIR)
     path = os.path.join(CLONE_DIR, repo.replace("/", "_"))
     if os.path.exists(path):
         shutil.rmtree(path)
-    os.makedirs(CLONE_DIR, exist_ok=True)
     print(f"Cloning {repo}...")
     try:
         result = subprocess.run(
