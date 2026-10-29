@@ -2,48 +2,74 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>MalDet — options</title>
+  <title>MalDet</title>
   <link rel="icon" type="image/png" href="icons/icon32.png">
   <style>
     :root { color-scheme: light dark; }
-    /* Serves as both the toolbar popup and the full options page. A popup
+
+    /* Serves as the toolbar popup and as the full options page. A popup
        sizes itself to its content, so min-width is what stops it rendering
        as a sliver; max-width keeps it readable when opened in a tab. */
     body {
-      font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      min-width: 340px; max-width: 560px; margin: 1.25rem auto; padding: 0 1rem 1rem;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      min-width: 300px; max-width: 360px; margin: 0; padding: 14px 16px 16px;
       background: #fbfaf7; color: #1b2a22;
     }
-    h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
-    .sub { color: #5d6b63; margin: 0 0 1.25rem; }
-    .foot { margin: 1.25rem 0 0; padding-top: 0.9rem; border-top: 1px solid #dfe5e0; font-size: 0.85rem; }
-    .foot a { color: #1d4733; }
-    label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
+
+    .brand { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; }
+    .brand img { width: 20px; height: 20px; }
+    .brand span { font-weight: 700; letter-spacing: -0.01em; }
+
+    /* --- the part that matters: what is on screen right now --- */
+    .repo { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 13px; font-weight: 600; word-break: break-all; margin: 0 0 2px; }
+    .status { margin: 0 0 12px; font-size: 12.5px; color: #5d6b63; }
+    .status.stale { color: #8a6d1f; font-weight: 600; }
+    .status.warn  { color: #8a3a2f; font-weight: 600; }
+
+    .actions { display: flex; flex-direction: column; gap: 7px; }
+    .btn {
+      display: block; width: 100%; box-sizing: border-box; text-align: center;
+      padding: 8px 12px; font: inherit; font-weight: 600; font-size: 13px;
+      border-radius: 6px; cursor: pointer; text-decoration: none;
+      border: 1px solid #1d4733;
+    }
+    .btn--primary { background: #0a1d15; color: #a3d9b8; }
+    .btn--primary:hover { background: #11301f; }
+    .btn--ghost { background: transparent; color: #1d4733; }
+    .btn--ghost:hover { background: #eef3ef; }
+
+    .empty { color: #5d6b63; font-size: 13px; margin: 0 0 12px; }
+
+    /* --- settings, deliberately out of the way --- */
+    details { margin-top: 14px; border-top: 1px solid #dfe5e0; padding-top: 10px; }
+    summary { cursor: pointer; font-size: 12.5px; color: #5d6b63; font-weight: 600; }
+    summary::marker { color: #9bab9f; }
+    label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
     input {
-      width: 100%; padding: 0.55rem 0.7rem; font: inherit; font-family: ui-monospace, monospace;
-      border: 1px solid #c9d3cc; border-radius: 6px; background: #fff; color: inherit;
+      width: 100%; box-sizing: border-box; padding: 7px 9px; font: inherit; font-size: 12.5px;
+      font-family: ui-monospace, monospace; border: 1px solid #c9d3cc; border-radius: 5px;
+      background: #fff; color: inherit;
     }
-    .hint { color: #5d6b63; font-size: 0.85rem; margin: 0.4rem 0 1.2rem; }
-    .row { display: flex; gap: 0.6rem; }
-    button {
-      padding: 0.5rem 1rem; font: inherit; font-weight: 600; cursor: pointer;
-      border-radius: 6px; border: 1px solid #1d4733;
-    }
-    .primary { background: #0a1d15; color: #a3d9b8; }
-    .secondary { background: #fff; color: #1d4733; }
-    #result {
-      margin-top: 1.25rem; padding: 0.85rem 1rem; border-radius: 6px;
-      border: 1px solid #c9d3cc; background: #fff; display: none; white-space: pre-wrap;
-    }
-    #result.ok   { border-color: #2f6b4f; background: #f0f8f3; }
-    #result.bad  { border-color: #8a3a2f; background: #fdf3f1; }
-    code { background: #eef2ef; padding: 0.1rem 0.3rem; border-radius: 3px; }
+    .hint { color: #5d6b63; font-size: 11.5px; margin: 5px 0 9px; }
+    .row { display: flex; gap: 6px; }
+    .row .btn { font-size: 12.5px; padding: 6px 10px; }
+    #result { margin-top: 9px; padding: 8px 10px; border-radius: 5px; font-size: 12px;
+              border: 1px solid #c9d3cc; background: #fff; display: none; white-space: pre-wrap; }
+    #result.ok  { border-color: #2f6b4f; background: #f0f8f3; }
+    #result.bad { border-color: #8a3a2f; background: #fdf3f1; }
+    code { background: #eef2ef; padding: 0.05rem 0.25rem; border-radius: 3px; }
+
     @media (prefers-color-scheme: dark) {
       body { background: #11150f; color: #e6ece8; }
-      input, #result, .secondary { background: #1a211b; border-color: #33403a; color: #e6ece8; }
-      .hint, .sub { color: #9bab9f; }
-      .foot { border-top-color: #33403a; }
-      .foot a { color: #a3d9b8; }
+      input, #result { background: #1a211b; border-color: #33403a; color: #e6ece8; }
+      .hint, .status, .empty, summary { color: #9bab9f; }
+      .status.stale { color: #e3c168; }
+      .status.warn  { color: #e39a8f; }
+      details { border-top-color: #33403a; }
+      .btn--ghost { color: #a3d9b8; border-color: #2f6b4f; }
+      .btn--ghost:hover { background: #1a211b; }
+      .btn--primary { border-color: #2f6b4f; }
       code { background: #222a24; }
       #result.ok  { background: #11261a; }
       #result.bad { background: #2a110d; }
@@ -51,29 +77,37 @@
   </style>
 </head>
 <body>
-  <h1>MalDet</h1>
-  <p class="sub">Where the extension should send repositories to be checked.</p>
-
-  <label for="serverUrl">MalDet server address</label>
-  <input id="serverUrl" type="url" spellcheck="false" autocomplete="off"
-         placeholder="https://maldet-fyp.my">
-  <p class="hint">
-    Include the port. Use <code>http://localhost:5000</code> when running MalDet
-    on this machine.<br>
-    <strong id="active">&nbsp;</strong>
-  </p>
-
-  <div class="row">
-    <button id="save" class="primary" type="button">Save</button>
-    <button id="test" class="secondary" type="button">Test connection</button>
+  <div class="brand">
+    <img src="icons/icon32.png" alt="">
+    <span>MalDet</span>
   </div>
 
-  <div id="result" role="status"></div>
+  <!-- Filled in by options.js from whatever tab is in front. -->
+  <div id="context">
+    <p class="empty" id="loading">Checking this page…</p>
+  </div>
 
-  <p class="foot">
-    <a id="open" href="#">Open MalDet &rarr;</a>
-  </p>
+  <details id="settings">
+    <summary>Settings</summary>
 
+    <label for="serverUrl">MalDet server address</label>
+    <input id="serverUrl" type="url" spellcheck="false" autocomplete="off"
+           placeholder="https://maldet-fyp.my">
+    <p class="hint">
+      Include the port if it is not the default, e.g.
+      <code>http://localhost:5000</code>.<br>
+      <strong id="active">&nbsp;</strong>
+    </p>
+
+    <div class="row">
+      <button id="save" class="btn btn--primary" type="button">Save</button>
+      <button id="test" class="btn btn--ghost" type="button">Test connection</button>
+    </div>
+
+    <div id="result" role="status"></div>
+  </details>
+
+  <script src="repo.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

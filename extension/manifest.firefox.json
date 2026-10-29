@@ -30,7 +30,7 @@
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],
-      "js": ["content.js"],
+      "js": ["repo.js", "content.js"],
       "css": ["button.css"],
       "run_at": "document_idle"
     }
