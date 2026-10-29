@@ -140,7 +140,12 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
   text-decoration: none;
 }
 .brand:hover { color: var(--on-forest); }
-.brand__mark { color: var(--green-glow); flex: none; }
+.brand__mark {
+  flex: none;
+  /* The logo is a circle on a transparent background; contain keeps it
+     round if the width/height attributes are ever changed unevenly. */
+  object-fit: contain;
+}
 .brand__text { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; }
 
 .nav-toggler {
@@ -594,7 +599,6 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
 }
 .team-card__name { font-size: 1.1rem; font-weight: 700; margin: 0.15rem 0 0.1rem; }
 .team-card__role { color: var(--green-text); font-size: 0.82rem; font-weight: 600; margin-bottom: 0.4rem; }
-.team-card__name { margin-bottom: 0.1rem; }
 .team-card__blurb:last-child { margin-bottom: 0; }
 .team-card:not(:has(.team-card__blurb)) { align-items: center; }
 .team-card:not(:has(.team-card__blurb)) .team-card__role { margin-bottom: 0; }

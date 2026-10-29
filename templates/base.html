@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Dashboard{% endblock %} · MalDet</title>
-  <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a1d15'/%3E%3Cpath d='M16 5l9 3.3V15c0 5.6-3.9 9.9-9 11.5C10.9 24.9 7 20.6 7 15V8.3z' fill='none' stroke='%23a3d9b8' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='15' r='3.6' fill='none' stroke='%23a3d9b8' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" sizes="64x64"
+        href="{{ url_for('static', filename='img/favicon.png') }}">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,12 +31,9 @@
     <div class="site-container">
       <div class="site-nav__row">
         <a class="brand" href="{{ url_for('index') }}" aria-label="MalDet home">
-          <svg class="brand__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
-            <path d="M16 3.5l10 3.7V15c0 6.3-4.3 11.1-10 12.9C10.3 26.1 6 21.3 6 15V7.2z"
-                  fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-            <circle cx="16" cy="14.5" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
-            <path d="M19 17.5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
+          <img class="brand__mark"
+               src="{{ url_for('static', filename='img/logo.png') }}"
+               width="28" height="28" alt="" aria-hidden="true">
           <span class="brand__text">MalDet</span>
         </a>
 
@@ -77,12 +74,9 @@
         <div class="site-footer__grid">
           <div class="site-footer__brand">
             <a class="brand" href="{{ url_for('index') }}">
-              <svg class="brand__mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
-                <path d="M16 3.5l10 3.7V15c0 6.3-4.3 11.1-10 12.9C10.3 26.1 6 21.3 6 15V7.2z"
-                      fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                <circle cx="16" cy="14.5" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
-                <path d="M19 17.5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+              <img class="brand__mark"
+                   src="{{ url_for('static', filename='img/logo.png') }}"
+                   width="26" height="26" alt="" aria-hidden="true">
               <span class="brand__text">MalDet</span>
             </a>
             <p>Static analysis and supply-chain risk scanning for public GitHub
