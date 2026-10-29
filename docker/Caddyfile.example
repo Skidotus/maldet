@@ -1,0 +1,49 @@
+# Caddy in front of MalDet, terminating TLS.
+#
+#   sudo cp docker/Caddyfile.example /etc/caddy/Caddyfile
+#   sudo nano /etc/caddy/Caddyfile        # put your own domain at the top
+#   sudo systemctl reload caddy
+#
+# Caddy obtains and renews the certificate itself -- no certbot, no cron
+# job, no renewal that quietly stops working in ninety days. It needs
+# ports 80 and 443 reachable from the internet: Let's Encrypt proves you
+# control the domain by connecting to them, so a provider firewall that
+# blocks either means no certificate, however correct this file is.
+#
+# Why bother, beyond the padlock: browsers treat a plain http:// address on
+# a public IP as untrusted. A browser extension cannot call it at all --
+# measured on Firefox, a request to http://<ip>:5000 hangs until it is
+# aborted while the same request to the same server over localhost answers
+# in milliseconds -- and visitors are told the site is not secure.
+
+maldet-fyp.my, www.maldet-fyp.my {
+	# MalDet listens on loopback only (MALDET_BIND=127.0.0.1 in .env), so
+	# this proxy is the single way in. Port 5000 stops being exposed at
+	# all, which also means the scan form cannot be reached except
+	# through here.
+	reverse_proxy 127.0.0.1:5000
+
+	encode gzip
+
+	# A scan is queued, not performed, in the request -- but a large detail
+	# page over a slow link still beats a short default.
+	timeouts {
+		read_body 5m
+	}
+
+	header {
+		# HSTS is deliberately NOT set. It is a one-way door: once a
+		# browser has seen it, that browser refuses plain http for this
+		# domain until the max-age expires, which is painful on a
+		# student project that may need to move hosts. Add it when the
+		# deployment is settled.
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output file /var/log/caddy/maldet.log
+		format console
+	}
+}

@@ -73,10 +73,17 @@ services:
       MALDET_PORT: 5000
       SKIP_FRESHCLAM: ${SKIP_FRESHCLAM:-0}
     ports:
-      # 127.0.0.1 prefix is deliberate: reachable from this machine's
-      # browser, not from anything else on the network. Drop the prefix only
-      # if you actually intend to expose it.
-      - "127.0.0.1:${MALDET_PORT:-5000}:5000"
+      # The bind address is configurable so a deployment never has to edit
+      # this file. Editing it in place was the old answer, and it turns every
+      # later `git pull` into a merge conflict on the one file the whole
+      # stack is described by.
+      #
+      # 127.0.0.1 by default: reachable from this machine's browser, not from
+      # anything else on the network. Set MALDET_BIND=0.0.0.0 in .env to
+      # expose it directly, or leave this alone and put a reverse proxy in
+      # front -- which is what serving it over HTTPS needs anyway, and keeps
+      # the app itself off the public internet.
+      - "${MALDET_BIND:-127.0.0.1}:${MALDET_PORT:-5000}:5000"
     volumes:
       # Signature database persists, so the ~110MB download happens once
       # rather than on every container rebuild.
