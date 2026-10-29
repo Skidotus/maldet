@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MalDet for GitHub",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shows whether a GitHub repository has been scanned by MalDet, and how long ago.",
 
   "host_permissions": [
