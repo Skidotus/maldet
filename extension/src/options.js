@@ -14,7 +14,7 @@
  */
 const api = typeof browser !== "undefined" ? browser : chrome;
 
-const DEFAULT_BASE = "http://103.233.1.97:5000";
+const DEFAULT_BASE = "https://maldet-fyp.my";
 
 const $url = document.getElementById("serverUrl");
 const $result = document.getElementById("result");

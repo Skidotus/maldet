@@ -22,7 +22,7 @@
  */
 const api = typeof browser !== "undefined" ? browser : chrome;
 
-const DEFAULT_BASE = "http://103.233.1.97:5000";
+const DEFAULT_BASE = "https://maldet-fyp.my";
 
 // Generous enough for a cold container, short enough that the button is not
 // stuck saying "Scan with MalDet" long after the answer would have mattered.

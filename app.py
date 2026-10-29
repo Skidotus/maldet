@@ -11,6 +11,21 @@ import job_queue
 
 app = Flask(__name__)
 
+# Behind a reverse proxy, the scheme and host Flask sees are the proxy's
+# (http, 127.0.0.1:5000) rather than the visitor's (https, maldet-fyp.my).
+# url_for(..., _external=True) would then build links to an address nobody
+# can reach -- and the browser extension consumes those URLs directly, so a
+# wrong one is not cosmetic.
+#
+# Opt-in rather than always on: X-Forwarded-* headers are set by whoever
+# connects, so trusting them while the app is also reachable directly lets
+# any visitor claim any host or scheme. Safe only when the only thing that
+# can reach this port is the proxy -- which is what MALDET_BIND=127.0.0.1
+# arranges.
+if os.environ.get("MALDET_TRUST_PROXY") == "1":
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # Confidence thresholds for the plain-English findings summary — same
 # "likely noise" cutoff (<0.3) used to dim findings in detail.html, so the
 # summary text and the visual treatment always agree with each other.

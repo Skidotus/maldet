@@ -71,6 +71,11 @@ services:
       # is what actually limits reachability. Debugger stays off.
       MALDET_HOST: 0.0.0.0
       MALDET_PORT: 5000
+      # Set to 1 only when a reverse proxy is the only thing that can reach
+      # this port (MALDET_BIND=127.0.0.1). It makes Flask believe the
+      # X-Forwarded-* headers, which is right behind a proxy and forgeable
+      # without one.
+      MALDET_TRUST_PROXY: ${MALDET_TRUST_PROXY:-0}
       SKIP_FRESHCLAM: ${SKIP_FRESHCLAM:-0}
     ports:
       # The bind address is configurable so a deployment never has to edit

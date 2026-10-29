@@ -50,7 +50,7 @@ needed again after a restart.
 
 ## Pointing it at your MalDet
 
-Defaults to `http://103.233.1.97:5000`.
+Defaults to `https://maldet-fyp.my`.
 
 **Click the MalDet icon in the toolbar.** That is the settings panel: the
 server address, a **Test connection** button, and a link to the site. If the
