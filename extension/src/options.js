@@ -37,8 +37,11 @@ function normalise(raw) {
   }
 }
 
-api.storage.sync.get("serverUrl").then(({ serverUrl }) => {
+api.storage.local.get("serverUrl").then(({ serverUrl }) => {
   $url.value = serverUrl || DEFAULT_BASE;
+  document.getElementById("active").textContent = serverUrl
+    ? `Currently using ${serverUrl}`
+    : `Currently using the default, ${DEFAULT_BASE}`;
 });
 
 document.getElementById("save").addEventListener("click", async () => {
@@ -73,9 +76,21 @@ document.getElementById("save").addEventListener("click", async () => {
     show(`Saved. Permission request unavailable here (${err}).`, false);
   }
 
+  await api.storage.local.set({ serverUrl: origin });
+
+  // Read back rather than trusting the write. A storage backend that
+  // rejects silently is exactly how the previous version came to report
+  // "Saved" while every lookup kept going to the old address.
+  const check = await api.storage.local.get("serverUrl");
+  if (check.serverUrl !== origin) {
+    show(
+      `Could not save. Storage still holds ${check.serverUrl || "(nothing)"}.`,
+      false
+    );
+    return;
+  }
   $url.value = origin;
-  await api.storage.sync.set({ serverUrl: origin });
-  show(`Saved. Using ${origin}`, true);
+  show(`Saved. Lookups now go to ${origin}`, true);
 });
 
 // The toolbar icon opens this popup rather than MalDet, so the site needs a
@@ -83,7 +98,7 @@ document.getElementById("save").addEventListener("click", async () => {
 // address rather than whatever it was when the popup opened.
 document.getElementById("open").addEventListener("click", async (e) => {
   e.preventDefault();
-  const { serverUrl } = await api.storage.sync.get("serverUrl");
+  const { serverUrl } = await api.storage.local.get("serverUrl");
   chrome.tabs.create({ url: serverUrl || DEFAULT_BASE });
   window.close();
 });

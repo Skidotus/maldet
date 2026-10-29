@@ -30,7 +30,7 @@ const TIMEOUT_MS = 6000;
 
 async function baseUrl() {
   try {
-    const stored = await api.storage.sync.get("serverUrl");
+    const stored = await api.storage.local.get("serverUrl");
     return (stored.serverUrl || DEFAULT_BASE).replace(/\/+$/, "");
   } catch {
     return DEFAULT_BASE;
