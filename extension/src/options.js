@@ -5,6 +5,15 @@
  * which of the three outcomes you are in without reading a console.
  */
 
+/*
+ * Firefox exposes promise-based APIs as `browser`; its `chrome` object is a
+ * callback-style compatibility alias, so awaiting chrome.storage there is
+ * not safe. Chrome has no `browser`, and its MV3 APIs do return promises.
+ * Event listeners and callback-style sendMessage behave the same in both and
+ * are left on `chrome`.
+ */
+const api = typeof browser !== "undefined" ? browser : chrome;
+
 const DEFAULT_BASE = "http://103.233.1.97:5000";
 
 const $url = document.getElementById("serverUrl");
@@ -28,7 +37,7 @@ function normalise(raw) {
   }
 }
 
-chrome.storage.sync.get("serverUrl").then(({ serverUrl }) => {
+api.storage.sync.get("serverUrl").then(({ serverUrl }) => {
   $url.value = serverUrl || DEFAULT_BASE;
 });
 
@@ -47,9 +56,9 @@ document.getElementById("save").addEventListener("click", async () => {
    */
   try {
     const pattern = `${origin}/*`;
-    const already = await chrome.permissions.contains({ origins: [pattern] });
+    const already = await api.permissions.contains({ origins: [pattern] });
     if (!already) {
-      const granted = await chrome.permissions.request({ origins: [pattern] });
+      const granted = await api.permissions.request({ origins: [pattern] });
       if (!granted) {
         show(
           "Saved, but permission for that address was declined, so lookups " +
@@ -65,7 +74,7 @@ document.getElementById("save").addEventListener("click", async () => {
   }
 
   $url.value = origin;
-  await chrome.storage.sync.set({ serverUrl: origin });
+  await api.storage.sync.set({ serverUrl: origin });
   show(`Saved. Using ${origin}`, true);
 });
 

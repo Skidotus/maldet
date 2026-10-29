@@ -13,6 +13,15 @@
  * was last scanned.
  */
 
+/*
+ * Firefox exposes promise-based APIs as `browser`; its `chrome` object is a
+ * callback-style compatibility alias, so awaiting chrome.storage there is
+ * not safe. Chrome has no `browser`, and its MV3 APIs do return promises.
+ * Event listeners and callback-style sendMessage behave the same in both and
+ * are left on `chrome`.
+ */
+const api = typeof browser !== "undefined" ? browser : chrome;
+
 const DEFAULT_BASE = "http://103.233.1.97:5000";
 
 // Generous enough for a cold container, short enough that the button is not
@@ -21,7 +30,7 @@ const TIMEOUT_MS = 6000;
 
 async function baseUrl() {
   try {
-    const stored = await chrome.storage.sync.get("serverUrl");
+    const stored = await api.storage.sync.get("serverUrl");
     return (stored.serverUrl || DEFAULT_BASE).replace(/\/+$/, "");
   } catch {
     return DEFAULT_BASE;

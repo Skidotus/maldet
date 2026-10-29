@@ -35,10 +35,18 @@ That writes `dist/chrome` and `dist/firefox`.
 **Firefox**
 1. `about:debugging#/runtime/this-firefox`
 2. **Load Temporary Add-on** → pick `extension/dist/firefox/manifest.json`
+3. **Grant host access**, which Firefox does not do for you:
+   `about:addons` → Extensions → MalDet for GitHub → **Permissions** →
+   turn on access for the MalDet server address.
 
-Firefox clears temporary add-ons when it restarts, and treats Manifest V3
-host permissions as opt-in — if lookups fail there, grant the host under
-`about:addons` → MalDet → Permissions.
+Step 3 is not optional. Firefox treats Manifest V3 `host_permissions` as
+opt-in, unlike Chrome, which grants them at install. Skip it and the
+extension looks like it works — the button appears on every repo page — but
+every lookup fails and it silently falls back to "Scan with MalDet". If scan
+dates never appear in Firefox, check this before anything else.
+
+Firefox also clears temporary add-ons when it restarts, so both steps are
+needed again after a restart.
 
 ## Pointing it at your MalDet
 
