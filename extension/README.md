@@ -132,6 +132,31 @@ taken on trust.
 Opening a tab is never blocked, which is why the fallback always works
 regardless.
 
+## What it sends, and what Mozilla is told
+
+The extension declares `browsingActivity` under
+`browser_specific_settings.gecko.data_collection_permissions`, so Firefox
+asks the user to accept it at install.
+
+**Not `none`, deliberately.** Mozilla defines `browsingActivity` as
+"websites visited, URLs, domains", and on every GitHub repository page the
+content script sends that repository's `owner/name` to MalDet to ask whether
+it has been scanned. Page content never leaves the browser and nothing is
+stored against a person, but a URL you visited is still being sent to a
+server. Declaring `none` would be a false statement to Mozilla and to the
+person installing it, and a tool whose subject is supply-chain trust is a
+poor place to start lying about what it transmits.
+
+`strict_min_version` is 140 because the declaration needs built-in consent,
+which Firefox gained in 140. Supporting older versions would mean writing a
+consent screen by hand.
+
+If that trade is not worth it, the cheap reduction is to stop the in-page
+button looking anything up — leave it reading "Scan with MalDet" always, and
+let only the popup query, so nothing is sent unless the user opens it. The
+declaration would still be required; the volume would drop from every
+repository page viewed to only the ones asked about.
+
 ## Layout
 
 ```
