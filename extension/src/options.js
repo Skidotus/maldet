@@ -1,0 +1,105 @@
+/*
+ * Options page. The "Test connection" button is not decoration: whether a
+ * browser will let an extension reach a plain-HTTP MalDet from an HTTPS
+ * page is version- and browser-dependent, and this is how you find out
+ * which of the three outcomes you are in without reading a console.
+ */
+
+const DEFAULT_BASE = "http://103.233.1.97:5000";
+
+const $url = document.getElementById("serverUrl");
+const $result = document.getElementById("result");
+
+function show(message, good) {
+  $result.textContent = message;
+  $result.className = good ? "ok" : "bad";
+  $result.style.display = "block";
+}
+
+function normalise(raw) {
+  const text = (raw || "").trim().replace(/\/+$/, "");
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+chrome.storage.sync.get("serverUrl").then(({ serverUrl }) => {
+  $url.value = serverUrl || DEFAULT_BASE;
+});
+
+document.getElementById("save").addEventListener("click", async () => {
+  const origin = normalise($url.value);
+  if (!origin) {
+    show("That does not look like a URL. Example: http://103.233.1.97:5000", false);
+    return;
+  }
+
+  /*
+   * The manifest only declares the addresses MalDet is normally at. Pointing
+   * the extension somewhere else needs that host's permission, and asking
+   * for it must happen inside a click -- which is why this lives on the
+   * button rather than running on save-as-you-type.
+   */
+  try {
+    const pattern = `${origin}/*`;
+    const already = await chrome.permissions.contains({ origins: [pattern] });
+    if (!already) {
+      const granted = await chrome.permissions.request({ origins: [pattern] });
+      if (!granted) {
+        show(
+          "Saved, but permission for that address was declined, so lookups " +
+          "will fail. Re-save and accept the prompt to enable them.",
+          false
+        );
+      }
+    }
+  } catch (err) {
+    // Firefox MV3 treats host permissions as opt-in and may refuse the
+    // request outside its own UI; not fatal, so say so rather than stop.
+    show(`Saved. Permission request unavailable here (${err}).`, false);
+  }
+
+  $url.value = origin;
+  await chrome.storage.sync.set({ serverUrl: origin });
+  show(`Saved. Using ${origin}`, true);
+});
+
+document.getElementById("test").addEventListener("click", () => {
+  show("Testing…", true);
+  chrome.runtime.sendMessage({ type: "probe" }, (response) => {
+    if (chrome.runtime.lastError) {
+      show(`Could not reach the extension's background worker: ${chrome.runtime.lastError.message}`, false);
+      return;
+    }
+    if (response && response.ok) {
+      show(
+        "Connected. MalDet answered, so the button will show when each " +
+        "repository was last scanned.",
+        true
+      );
+      return;
+    }
+
+    const error = (response && response.error) || "no response";
+    /*
+     * A mixed-content refusal arrives as an opaque network TypeError, so it
+     * cannot be told apart from "the server is off" by the error alone.
+     * Both possibilities get named rather than guessing at one.
+     */
+    show(
+      `Could not reach MalDet (${error}).\n\n` +
+      "Either the server is not running, or this browser blocked the " +
+      "request because MalDet is served over plain http:// while GitHub " +
+      "is https://.\n\n" +
+      "The extension still works: the button falls back to a plain " +
+      "\"Scan with MalDet\" link. To get scan dates back, serve MalDet " +
+      "over https://.",
+      false
+    );
+  });
+});

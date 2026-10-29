@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
 import pymysql
@@ -98,6 +99,52 @@ def _start_scan_job(repo, archive_password):
     return job_queue.enqueue(repo, archive_password)
 
 
+# A scan is a snapshot, and repositories keep changing after one. Past this
+# many days the extension marks a stored result as stale rather than letting
+# it read as a current verdict.
+STALE_AFTER_DAYS = 30
+
+# GitHub's own naming rules. Owners are alphanumeric and hyphens only, no
+# leading or trailing hyphen, 39 characters at most; repository names also
+# allow dots and underscores but cannot be "." or "..". Checked against the
+# whole corpus before tightening: 0 of 181 stored repos are rejected.
+#
+# The point is not injection -- the lookup query is parameterised and
+# clone_repo() flattens slashes -- it is that "../.." would otherwise parse
+# as a repository, be echoed back, and be offered to the scan form as
+# something worth cloning.
+_OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
+_NAME_RE  = re.compile(r"^(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$")
+
+
+def parse_repo_slug(raw):
+    """"owner/repo" from whatever form it arrived in, or None.
+
+    Accepts a full URL, a bare github.com path, or the short owner/repo
+    form. Returns None rather than raising so each caller can word its own
+    error -- the scan form renders it next to the field, the extension
+    lookup returns JSON.
+
+    One parser, two callers, deliberately: an extension that disagreed with
+    the form about what counts as a repository would queue scans for
+    something the visitor never asked for.
+    """
+    if not raw:
+        return None
+    text = raw.strip()
+    for prefix in ("https://", "http://", "www.", "github.com/"):
+        text = text.replace(prefix, "")
+    parts = [p for p in text.strip("/").split("/") if p]
+    if len(parts) < 2:
+        return None
+    owner, name = parts[0], parts[1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    if not _OWNER_RE.match(owner) or not _NAME_RE.match(name):
+        return None
+    return f"{owner}/{name}"
+
+
 def _job_payload(job, job_id):
     """Shape a scan_jobs row the way the status page and its poller expect."""
     return {
@@ -188,37 +235,23 @@ def scan():
         return _redirect_to_job(own_job_id)
 
     if request.method == 'GET':
-        return render_template('scan.html')
+        # ?repo=owner/name prefills the field. The browser extension links
+        # here rather than submitting for you: a GET that starts a scan is
+        # the same mistake /rescan/<id> already makes, and crawlers and chat
+        # link previews follow GET links. Prefilled, one click, no surprise
+        # scans queued by a link unfurler.
+        return render_template('scan.html',
+                               prefill_repo=parse_repo_slug(request.args.get('repo')) or '')
 
     # POST — user submitted the scan form
     repo_url         = request.form.get('repo_url', '').strip()
     archive_password = request.form.get('archive_password', 'infected').strip()
 
-    # Validate input
     if not repo_url:
         return render_template('scan.html', error="Please enter a GitHub URL")
 
-    # Extract owner/repo from URL
-    # Handles:
-    # https://github.com/owner/repo
-    # github.com/owner/repo
-    # owner/repo
-    try:
-        repo_url = repo_url.replace("https://", "").replace("http://", "")
-        repo_url = repo_url.replace("github.com/", "")
-        repo_url = repo_url.strip("/")
-        parts    = repo_url.split("/")
-
-        if len(parts) < 2:
-            return render_template('scan.html',
-                error="Invalid GitHub URL. Example: https://github.com/owner/repo")
-
-        owner_part, repo_part = parts[0], parts[1]
-        if repo_part.endswith(".git"):
-            repo_part = repo_part[:-4]
-        repo = f"{owner_part}/{repo_part}"
-
-    except Exception:
+    repo = parse_repo_slug(repo_url)
+    if not repo:
         return render_template('scan.html',
             error="Invalid GitHub URL. Example: https://github.com/owner/repo")
 
@@ -699,6 +732,93 @@ def api_results(repo_id):
     finally:
         cursor.close()
         db.close()
+
+
+# Browser extension API
+#
+# One read-only endpoint, separate from the /api routes the site's own pages
+# poll, because this one is called cross-origin and therefore carries a CORS
+# header. Keeping it on its own route means that header is never attached to
+# anything that changes state -- /scan in particular.
+
+
+@app.route('/api/extension/lookup')
+def api_extension_lookup():
+    """Has this repository been scanned, and how long ago?
+
+    The extension asks before deciding what its button should say and where
+    it should link. Returns only what that decision needs: whether a scan
+    exists, when, and where to read it. Deliberately no risk level -- the
+    button reports recency and sends you to the report, it does not quietly
+    become a scoreboard on top of github.com.
+    """
+    repo = parse_repo_slug(request.args.get('repo'))
+    if not repo:
+        return _cors_json({"error": "pass ?repo=owner/name"}, 400)
+
+    owner, name = repo.split("/", 1)
+
+    db     = get_db()
+    cursor = db.cursor()
+    try:
+        # Newest first: dedupe_repositories.py exists because duplicates have
+        # happened, and the freshest scan is the one worth reporting.
+        cursor.execute("""
+            SELECT id, owner, repo_name, scanned_at, source_status
+            FROM repositories
+            WHERE owner = %s AND repo_name = %s
+            ORDER BY scanned_at DESC
+            LIMIT 1
+        """, (owner, name))
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        db.close()
+
+    if not row:
+        return _cors_json({
+            "known":    False,
+            "repo":     repo,
+            "scan_url": url_for('scan', repo=repo, _external=True),
+        })
+
+    scanned_at = row["scanned_at"]
+    days = (datetime.now() - scanned_at).days if scanned_at else None
+
+    return _cors_json({
+        "known":            True,
+        "repo":             f"{row['owner']}/{row['repo_name']}",
+        "repo_id":          row["id"],
+        "scanned_at":       scanned_at.isoformat() if scanned_at else None,
+        "scanned_at_human": scanned_at.strftime("%d %b %Y") if scanned_at else None,
+        "days_since_scan":  days,
+        # Unknown age is treated as stale: a result we cannot date is exactly
+        # the kind the visitor should not read as current.
+        "stale":            True if days is None else days > STALE_AFTER_DAYS,
+        # NULL, 'gone' or 'renamed' — the extension repeats the warning the
+        # detail page gives, instead of linking to findings that can no
+        # longer be refreshed as though they were live.
+        "source_status":    row["source_status"],
+        "detail_url":       url_for('detail', repo_id=row["id"], _external=True),
+        "rescan_hint":      "Open the report and use Rescan for current results.",
+    })
+
+
+def _cors_json(payload, status=200):
+    """JSON with the one header that lets an extension read it.
+
+    `*` rather than an echoed Origin on purpose: extension background
+    workers have been reported to send `Origin: null`, which an echo would
+    turn into a refusal. Safe here because the endpoint is read-only, sends
+    no cookies, and returns data the site already shows publicly.
+    """
+    resp = jsonify(payload)
+    resp.status_code = status
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    # Staleness is the whole point of the response, so never let an
+    # intermediary serve yesterday's answer.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 #run app

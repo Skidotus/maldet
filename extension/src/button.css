@@ -1,0 +1,94 @@
+/*
+ * Everything here is namespaced .maldet-* and sets its own values rather
+ * than inheriting: this stylesheet lands inside someone else's page, so it
+ * must neither depend on GitHub's variables nor leak into them.
+ */
+
+.maldet-wrap {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 8px 0 0;
+}
+
+/* Used only when no GitHub anchor matched -- see placeButton() in
+   content.js. Deliberately conspicuous: it means the page shape changed. */
+.maldet-wrap--floating {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483000;
+  margin: 0;
+}
+
+.maldet-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid #2f6b4f;
+  border-radius: 6px;
+  background: #0a1d15;
+  color: #a3d9b8 !important;
+  font: 600 12px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+    Arial, sans-serif;
+  text-decoration: none !important;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.maldet-button:hover {
+  background: #11301f;
+  border-color: #a3d9b8;
+  text-decoration: none !important;
+}
+
+.maldet-button:focus-visible {
+  outline: 2px solid #a3d9b8;
+  outline-offset: 2px;
+}
+
+.maldet-button__icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Past the staleness threshold. Amber rather than red: an old scan is not
+   a problem with the repository, it is a caveat about the answer. */
+.maldet-button--stale {
+  border-color: #8a6d1f;
+  background: #2a2007;
+  color: #e3c168 !important;
+}
+.maldet-button--stale:hover {
+  background: #3a2c09;
+  border-color: #e3c168;
+}
+
+/* source_status is 'gone' or 'renamed': findings exist but can never be
+   refreshed, which is worth more than a colour change. */
+.maldet-button--warn {
+  border-color: #8a3a2f;
+  background: #2a0f0b;
+  color: #e39a8f !important;
+}
+.maldet-button--warn:hover {
+  background: #3a1610;
+  border-color: #e39a8f;
+}
+
+/* MalDet unreachable. Muted, because this is our problem, not the user's. */
+.maldet-button--offline {
+  border-color: #4a4a4a;
+  background: #1c1c1c;
+  color: #9a9a9a !important;
+}
+
+/* GitHub's light theme puts this on a white header, where the dark chip
+   reads as deliberate. Nothing to change -- the rules above already assume
+   a dark chip -- but the border needs a little more contrast. */
+@media (prefers-color-scheme: light) {
+  .maldet-button {
+    border-color: #1d4733;
+  }
+}

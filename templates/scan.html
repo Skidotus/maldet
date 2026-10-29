@@ -20,7 +20,12 @@
     <form method="POST" action="{{ url_for('scan') }}" class="p-4" id="scanForm">
       <div class="mb-3">
         <label for="repo_url" class="form-label-ledger">Repository URL</label>
+        {# value is set when the browser extension links here as
+           /scan?repo=owner/name. It prefills rather than auto-submitting --
+           a GET that queues a scan would be triggered by crawlers and chat
+           link previews, so the visitor still presses the button. #}
         <input type="text" class="form-control form-control-ledger font-monospace" id="repo_url" name="repo_url"
+               value="{{ prefill_repo or '' }}"
                placeholder="https://github.com/owner/repo" required autofocus
                {% if error %}aria-invalid="true"{% endif %} aria-describedby="repoUrlHelp">
         <div class="form-text" id="repoUrlHelp">Public repositories only. A full GitHub URL or <code>owner/repo</code>.</div>

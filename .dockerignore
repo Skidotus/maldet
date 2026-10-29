@@ -19,6 +19,9 @@ design/
 # Design sources only. The logo the site actually serves is generated
 # from these into static/img/, which does ship.
 image_reference_UI/
+# Browser extension: a client-side artifact, built with extension/build.sh
+# and loaded into a browser. The Flask image neither serves nor needs it.
+extension/
 
 # Seed data is bind-mounted into the MySQL container by docker-compose,
 # so it doesn't need to be inside the app image.
