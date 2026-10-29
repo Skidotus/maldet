@@ -1131,12 +1131,6 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   font-weight: 600;
 }
 
-.ext__downloads {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  margin-bottom: 1.25rem;
-}
 .ext__dl {
   display: inline-flex;
   flex-direction: column;
@@ -1163,6 +1157,36 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   padding: 0.05rem 0.3rem;
   border-radius: 3px;
 }
+
+/* The Firefox button is the one route that ends in a real install, so it
+   gets the width and the weight. Everything else is a fallback. */
+.ext__dl--hero {
+  width: 100%;
+  margin-bottom: 0.85rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.ext__note {
+  margin: 0 0 0.85rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.ext__note--quiet { font-size: 0.78rem; }
+
+.ext__more {
+  margin: 1.1rem 0 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+.ext__more > summary {
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--green-text);
+}
+.ext__more[open] > summary { margin-bottom: 0.7rem; }
 
 .ext__meta {
   margin: 0;

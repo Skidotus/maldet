@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import os
 import re
 from datetime import datetime
@@ -10,6 +11,12 @@ from scanner import scan_repo
 import job_queue
 
 app = Flask(__name__)
+
+# Firefox offers to *install* an add-on only when it arrives as
+# application/x-xpinstall. Python's mimetypes table has no entry for .xpi,
+# so without this Flask serves it as a generic download and the one-click
+# install silently becomes "a file appeared in your Downloads folder".
+mimetypes.add_type("application/x-xpinstall", ".xpi")
 
 # Behind a reverse proxy, the scheme and host Flask sees are the proxy's
 # (http, 127.0.0.1:5000) rather than the visitor's (https, maldet-fyp.my).
@@ -152,6 +159,18 @@ def extension_info():
         if not os.path.exists(full):
             return None
         meta["kb"] = round(meta["bytes"] / 1024)
+
+    # A Mozilla-signed build, if one has been dropped in. Detected on disk
+    # rather than recorded by the build, because signing happens at AMO
+    # long after build.sh has run -- the file simply appears. Its presence
+    # is what promotes the page from "download and load it by hand" to a
+    # one-click install.
+    signed = os.path.join(app.static_folder, "downloads", "maldet-firefox.xpi")
+    if os.path.exists(signed):
+        info["signed"] = {
+            "name": "maldet-firefox.xpi",
+            "kb":   round(os.path.getsize(signed) / 1024),
+        }
     return info
 
 

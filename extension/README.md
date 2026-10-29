@@ -90,6 +90,31 @@ dates never appear in Firefox, check this before anything else.
 Firefox also clears temporary add-ons when it restarts, so both steps are
 needed again after a restart.
 
+## Publishing a signed build
+
+Firefox is the only browser this can be properly installed on: Mozilla signs
+add-ons for distribution outside its own catalogue, and Chrome refuses
+anything that did not come from the Chrome Web Store.
+
+1. Build: `./build.sh`
+2. Submit `static/downloads/maldet-firefox.zip` at
+   [addons.mozilla.org](https://addons.mozilla.org) &rarr; Developer Hub,
+   choosing **"On your own"** rather than listing it publicly
+3. Answer **No** to the source-code question -- nothing here is minified,
+   bundled or templated; build.sh only copies files, so the archive *is* the
+   source
+4. Drop the signed file in as `static/downloads/maldet-firefox.xpi`
+
+Step 4 is all it takes. The site detects that file on disk rather than being
+told about it -- signing happens at AMO long after build.sh ran, so the file
+simply appears -- and the download section promotes itself from "download
+and load it by hand" to a one-click **Install for Firefox**. app.py
+registers the `application/x-xpinstall` type for it, without which Firefox
+treats the file as a download and the install prompt never shows.
+
+Bump `version` in both manifests before each resubmission: AMO will not
+accept a version it has already seen.
+
 ## Where it points
 
 `https://maldet-fyp.my`, fixed. There was a settings panel for this; it
