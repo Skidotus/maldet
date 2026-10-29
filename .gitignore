@@ -28,3 +28,6 @@ __pycache__/
 # the actual diff in every pull request. Config, not project source.
 .claude/
 .impeccable/
+
+# Built extension bundles — regenerate with extension/build.sh
+extension/dist/

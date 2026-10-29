@@ -231,13 +231,33 @@ capped at 200 per engine, so the log says so when it is truncated.
   `renamed` it says these are the superseded original. Without this the page
   presents unverifiable months-old findings as current.
 
-**JSON endpoints** (both exist because their work outlives a request):
+**JSON endpoints** (the first two exist because their work outlives a
+request):
 - `GET /api/scan-status/<job_id>` → the `_job_payload()` fields above.
 - `GET /api/summary/<repo_id>` → `{status, summary}` where status is
   `pending` / `done` / `unavailable`. `unavailable` is a normal outcome, not
   an error — it means stop polling and keep the rule-based summary already on
   screen. A NULL `llm_summary_status` (a row predating the column) reports as
   `unavailable`.
+- `GET /api/extension/lookup?repo=<owner>/<name>` → `{known, repo_id,
+  scanned_at, days_since_scan, stale, source_status, detail_url}`, or
+  `{known: false, scan_url}`. The **only** route carrying
+  `Access-Control-Allow-Origin: *`, because it is the only one called
+  cross-origin. Keep it that way — never put that header on `/scan`, and
+  never make it site-wide. It deliberately returns no risk level: the
+  browser extension reports *when* a repo was scanned and links to the
+  report, rather than becoming a score pinned to someone else's page.
+
+**`app.py:parse_repo_slug()`** turns a URL, a `github.com/...` path or a
+bare `owner/repo` into `"owner/repo"`, or None. Both the scan form and the
+extension lookup go through it, deliberately: two parsers would eventually
+disagree, and the one that queues scans is the wrong place to find out.
+It enforces GitHub's own naming rules, which is what stops `../..` parsing
+as a repository and being offered to the scan form as something to clone.
+
+**`GET /scan?repo=<owner>/<name>`** prefills the form and does **not**
+auto-submit. A GET that starts a scan gets fired by crawlers and chat-app
+link previews — the same latent bug `/rescan/<id>` still has.
 
 Styling lives in `static/css/style.css`: a forest-green / off-white "paper"
 theme over Bootstrap, with tokens on `:root`. Below 768px, tables marked

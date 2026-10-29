@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MalDet — options</title>
+  <link rel="icon" type="image/png" href="icons/icon32.png">
+  <style>
+    :root { color-scheme: light dark; }
+    /* Serves as both the toolbar popup and the full options page. A popup
+       sizes itself to its content, so min-width is what stops it rendering
+       as a sliver; max-width keeps it readable when opened in a tab. */
+    body {
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      min-width: 340px; max-width: 560px; margin: 1.25rem auto; padding: 0 1rem 1rem;
+      background: #fbfaf7; color: #1b2a22;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+    .sub { color: #5d6b63; margin: 0 0 1.25rem; }
+    .foot { margin: 1.25rem 0 0; padding-top: 0.9rem; border-top: 1px solid #dfe5e0; font-size: 0.85rem; }
+    .foot a { color: #1d4733; }
+    label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
+    input {
+      width: 100%; padding: 0.55rem 0.7rem; font: inherit; font-family: ui-monospace, monospace;
+      border: 1px solid #c9d3cc; border-radius: 6px; background: #fff; color: inherit;
+    }
+    .hint { color: #5d6b63; font-size: 0.85rem; margin: 0.4rem 0 1.2rem; }
+    .row { display: flex; gap: 0.6rem; }
+    button {
+      padding: 0.5rem 1rem; font: inherit; font-weight: 600; cursor: pointer;
+      border-radius: 6px; border: 1px solid #1d4733;
+    }
+    .primary { background: #0a1d15; color: #a3d9b8; }
+    .secondary { background: #fff; color: #1d4733; }
+    #result {
+      margin-top: 1.25rem; padding: 0.85rem 1rem; border-radius: 6px;
+      border: 1px solid #c9d3cc; background: #fff; display: none; white-space: pre-wrap;
+    }
+    #result.ok   { border-color: #2f6b4f; background: #f0f8f3; }
+    #result.bad  { border-color: #8a3a2f; background: #fdf3f1; }
+    code { background: #eef2ef; padding: 0.1rem 0.3rem; border-radius: 3px; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #11150f; color: #e6ece8; }
+      input, #result, .secondary { background: #1a211b; border-color: #33403a; color: #e6ece8; }
+      .hint, .sub { color: #9bab9f; }
+      .foot { border-top-color: #33403a; }
+      .foot a { color: #a3d9b8; }
+      code { background: #222a24; }
+      #result.ok  { background: #11261a; }
+      #result.bad { background: #2a110d; }
+    }
+  </style>
+</head>
+<body>
+  <h1>MalDet</h1>
+  <p class="sub">Where the extension should send repositories to be checked.</p>
+
+  <label for="serverUrl">MalDet server address</label>
+  <input id="serverUrl" type="url" spellcheck="false" autocomplete="off"
+         placeholder="http://103.233.1.97:5000">
+  <p class="hint">
+    Include the port. Use <code>http://localhost:5000</code> when running MalDet
+    on this machine.<br>
+    <strong id="active">&nbsp;</strong>
+  </p>
+
+  <div class="row">
+    <button id="save" class="primary" type="button">Save</button>
+    <button id="test" class="secondary" type="button">Test connection</button>
+  </div>
+
+  <div id="result" role="status"></div>
+
+  <p class="foot">
+    <a id="open" href="#">Open MalDet &rarr;</a>
+  </p>
+
+  <script src="options.js"></script>
+</body>
+</html>
