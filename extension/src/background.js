@@ -42,6 +42,7 @@ async function getJSON(url) {
   // waiting on a dead host keeps the button in its placeholder state.
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+  const started = Date.now();
   try {
     const resp = await fetch(url, {
       signal: abort.signal,
@@ -50,15 +51,25 @@ async function getJSON(url) {
       credentials: "omit",
       cache: "no-store",
     });
+    const ms = Date.now() - started;
     if (!resp.ok) {
-      return { ok: false, error: `HTTP ${resp.status}` };
+      return { ok: false, error: `HTTP ${resp.status}`, url, ms };
     }
-    return { ok: true, data: await resp.json() };
+    return { ok: true, data: await resp.json(), url, ms };
   } catch (err) {
-    // The interesting case lands here: a mixed-content refusal looks like
-    // an ordinary TypeError, so the message is kept for the options page's
-    // connection test to show.
-    return { ok: false, error: String((err && err.message) || err) };
+    /*
+     * The url and elapsed time are reported because the message alone
+     * cannot distinguish the cases that matter. A refused request fails in
+     * milliseconds; one that sat until the abort fired never reached the
+     * host at all, which is what a browser blocking plain http:// from an
+     * https:// page looks like from in here.
+     */
+    return {
+      ok: false,
+      error: String((err && err.message) || err),
+      url,
+      ms: Date.now() - started,
+    };
   } finally {
     clearTimeout(timer);
   }

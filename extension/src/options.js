@@ -95,13 +95,21 @@ document.getElementById("test").addEventListener("click", () => {
     }
 
     const error = (response && response.error) || "no response";
+    const where = (response && response.url) || "(unknown URL)";
+    const took = response && response.ms;
+    // A refusal comes back in milliseconds; a block looks like a stall that
+    // only ends when our own timeout fires. Showing the time is what lets
+    // those two be told apart.
+    const timing = took >= 5000
+      ? `\n\nIt hung for ${took}ms rather than failing immediately, which is what a blocked request looks like \u2014 not a server that is switched off.`
+      : `\n\nIt failed after ${took}ms.`;
     /*
      * A mixed-content refusal arrives as an opaque network TypeError, so it
      * cannot be told apart from "the server is off" by the error alone.
      * Both possibilities get named rather than guessing at one.
      */
     show(
-      `Could not reach MalDet (${error}).\n\n` +
+      `Could not reach MalDet (${error})\nTried: ${where}${timing}\n\n` +
       "Either the server is not running, or this browser blocked the " +
       "request because MalDet is served over plain http:// while GitHub " +
       "is https://.\n\n" +

@@ -93,15 +93,20 @@
   /* ------------------------------------------------------------- placing */
 
   /*
-   * Preferred homes for the button, in order. These are GitHub's own class
-   * and id names, which they change without warning -- hence the fallback
-   * below rather than a single selector and crossed fingers.
+   * Preferred homes for the button, newest GitHub first. Found by reading
+   * the HTML github.com actually serves, not from documentation -- none of
+   * this is a public API, which is why there is a list and a fallback
+   * rather than one selector and crossed fingers.
+   *
+   * repo-header-actions is the <ul> holding Watch / Fork / Star, so the
+   * button lands beside them. The rest are older layouts, kept because they
+   * cost nothing and this extension will outlive at least one redesign.
    */
   const ANCHORS = [
+    '[data-testid="repo-header-actions"]',
     "#repository-details-container ul",
     "ul.pagehead-actions",
     '[data-testid="repository-container-header"] ul',
-    "#repo-content-pjax-container > div > div",
   ];
 
   function tryAnchor(wrap) {
@@ -295,6 +300,8 @@
         log("lookup ok:", repo, response.data.known ? "known" : "not scanned");
       } else {
         log("lookup failed:", (response && response.error) || "no response",
+            "| url:", (response && response.url) || "(unknown)",
+            "| after:", (response && response.ms) + "ms",
             "- falling back to a plain scan link");
       }
       draw(repo, response && response.ok ? response.data : null);
