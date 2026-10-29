@@ -11,6 +11,21 @@ import job_queue
 
 app = Flask(__name__)
 
+# Behind a reverse proxy, the scheme and host Flask sees are the proxy's
+# (http, 127.0.0.1:5000) rather than the visitor's (https, maldet-fyp.my).
+# url_for(..., _external=True) would then build links to an address nobody
+# can reach -- and the browser extension consumes those URLs directly, so a
+# wrong one is not cosmetic.
+#
+# Opt-in rather than always on: X-Forwarded-* headers are set by whoever
+# connects, so trusting them while the app is also reachable directly lets
+# any visitor claim any host or scheme. Safe only when the only thing that
+# can reach this port is the proxy -- which is what MALDET_BIND=127.0.0.1
+# arranges.
+if os.environ.get("MALDET_TRUST_PROXY") == "1":
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # Confidence thresholds for the plain-English findings summary — same
 # "likely noise" cutoff (<0.3) used to dim findings in detail.html, so the
 # summary text and the visual treatment always agree with each other.
@@ -746,11 +761,14 @@ def api_results(repo_id):
 def api_extension_lookup():
     """Has this repository been scanned, and how long ago?
 
-    The extension asks before deciding what its button should say and where
-    it should link. Returns only what that decision needs: whether a scan
-    exists, when, and where to read it. Deliberately no risk level -- the
-    button reports recency and sends you to the report, it does not quietly
-    become a scoreboard on top of github.com.
+    The extension asks before deciding what to show and where to link.
+
+    The risk figures are here for the extension's *popup*, which a visitor
+    opens deliberately. The in-page button still shows only when the repo
+    was last scanned: a verdict pinned onto github.com unasked would be read
+    as GitHub's own, and a number with no page around it invites being
+    quoted without the findings that produced it. Asked for is different
+    from imposed, which is the whole distinction this endpoint serves.
     """
     repo = parse_repo_slug(request.args.get('repo'))
     if not repo:
@@ -764,10 +782,16 @@ def api_extension_lookup():
         # Newest first: dedupe_repositories.py exists because duplicates have
         # happened, and the freshest scan is the one worth reporting.
         cursor.execute("""
-            SELECT id, owner, repo_name, scanned_at, source_status
-            FROM repositories
-            WHERE owner = %s AND repo_name = %s
-            ORDER BY scanned_at DESC
+            SELECT r.id, r.owner, r.repo_name, r.scanned_at, r.source_status,
+                   r.stars, r.language, r.last_pushed,
+                   rs.risk_level, rs.final_score,
+                   rs.vuln_level, rs.vuln_score,
+                   rs.malware_level, rs.malware_score,
+                   rs.high_count, rs.medium_count, rs.low_count
+            FROM repositories r
+            LEFT JOIN risk_scores rs ON rs.repo_id = r.id
+            WHERE r.owner = %s AND r.repo_name = %s
+            ORDER BY r.scanned_at DESC
             LIMIT 1
         """, (owner, name))
         row = cursor.fetchone()
@@ -801,6 +825,36 @@ def api_extension_lookup():
         "source_status":    row["source_status"],
         "detail_url":       url_for('detail', repo_id=row["id"], _external=True),
         "rescan_hint":      "Open the report and use Rescan for current results.",
+
+        # What the repository is, as GitHub described it at scan time.
+        # last_pushed is recorded during the scan, so it can never postdate
+        # scanned_at -- it says how active the project was, not whether it
+        # has changed since. Measured across the corpus: 0 of 181 rows have
+        # last_pushed after scanned_at, which is why it is not used as a
+        # staleness signal.
+        "meta": {
+            "stars":             row["stars"],
+            "language":          row["language"],
+            "last_pushed":       row["last_pushed"].isoformat() if row["last_pushed"] else None,
+            "last_pushed_human": row["last_pushed"].strftime("%d %b %Y") if row["last_pushed"] else None,
+        },
+
+        # LEFT JOIN above, so a repository row can exist without a score --
+        # a scan that died partway leaves exactly that. None here rather
+        # than a zero, which would read as "checked, nothing found".
+        "risk": None if row["risk_level"] is None else {
+            "level":         row["risk_level"],
+            "score":         float(row["final_score"]) if row["final_score"] is not None else None,
+            # The two tracks are the point: 'badly written' and 'hostile'
+            # are different questions and MalDet answers them separately.
+            "vuln_level":    row["vuln_level"],
+            "vuln_score":    float(row["vuln_score"]) if row["vuln_score"] is not None else None,
+            "malware_level": row["malware_level"],
+            "malware_score": float(row["malware_score"]) if row["malware_score"] is not None else None,
+            "high":          row["high_count"],
+            "medium":        row["medium_count"],
+            "low":           row["low_count"],
+        },
     })
 
 

@@ -22,20 +22,6 @@
   const log = (...args) => console.info("[MalDet]", ...args);
   log("content script loaded on", location.pathname);
 
-  /*
-   * github.com/<a>/<b> matches plenty of pages that are not repositories.
-   * Without this list the button appears on your own settings page and
-   * offers to scan "settings/profile".
-   */
-  const RESERVED_OWNERS = new Set([
-    "settings", "orgs", "organizations", "features", "marketplace", "topics",
-    "sponsors", "collections", "events", "explore", "notifications", "issues",
-    "pulls", "codespaces", "new", "login", "logout", "join", "about",
-    "pricing", "security", "enterprise", "apps", "site", "contact",
-    "dashboard", "search", "trending", "stars", "watching", "account",
-    "readme", "home", "customer-stories", "sessions", "signup", "github-copilot",
-  ]);
-
   /* ---------------------------------------------------------------- repo */
 
   /*
@@ -63,29 +49,13 @@
   }
 
   function repoFromPath() {
-    const parts = location.pathname.split("/").filter(Boolean);
-    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
-  }
-
-  function looksLikeRepo(slug) {
-    if (!slug) return false;
-    const [owner, name] = slug.split("/");
-    if (!owner || !name) return false;
-    if (RESERVED_OWNERS.has(owner.toLowerCase())) return false;
-    // Mirrors the server's parser so the two cannot disagree about what
-    // counts as a repository.
-    return (
-      /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner) &&
-      /^[A-Za-z0-9._-]{1,100}$/.test(name) &&
-      name !== "." &&
-      name !== ".."
-    );
+    return MalDetRepo.fromPath(location.pathname);
   }
 
   function currentRepo() {
     for (const read of [repoFromMeta, repoFromCanonical, repoFromPath]) {
       const slug = read();
-      if (looksLikeRepo(slug)) return slug;
+      if (MalDetRepo.isValid(slug)) return slug;
     }
     return null;
   }
@@ -177,19 +147,6 @@
 
   /* ------------------------------------------------------------ drawing */
 
-  function humanAge(days) {
-    if (days === null || days === undefined) return "date unknown";
-    if (days <= 0) return "scanned today";
-    if (days === 1) return "scanned yesterday";
-    if (days < 30) return `scanned ${days} days ago`;
-    if (days < 365) {
-      const months = Math.round(days / 30);
-      return `scanned ${months} month${months === 1 ? "" : "s"} ago`;
-    }
-    const years = Math.round(days / 365);
-    return `scanned ${years} year${years === 1 ? "" : "s"} ago`;
-  }
-
   function draw(repo, result) {
     document.getElementById(WRAP_ID)?.remove();
 
@@ -215,7 +172,7 @@
 
     if (result && result.known) {
       target = result.detail_url;
-      label.textContent = `MalDet · ${humanAge(result.days_since_scan)}`;
+      label.textContent = `MalDet · ${MalDetRepo.humanAge(result.days_since_scan)}`;
       a.title =
         `This repository was last scanned on ${result.scanned_at_human}` +
         (result.stale

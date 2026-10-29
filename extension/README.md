@@ -13,9 +13,40 @@ On any `github.com/<owner>/<repo>` page a button appears:
 | Never scanned | `◎ Scan with MalDet` | opens the scan form, prefilled |
 | MalDet unreachable | `◎ Scan with MalDet` (grey) | opens the scan form |
 
-It reports **when** a repository was scanned, never a risk level. A scan is a
-snapshot and the repository keeps changing after it, so an age is honest
-where a score pinned to someone else's page would not be.
+The in-page button reports **when** a repository was scanned, never a risk
+level. A scan is a snapshot and the repository keeps changing after it, so an
+age is honest where a score pinned to someone else's page would not be — it
+would also read as GitHub's own verdict rather than this project's.
+
+**The toolbar popup is where the verdict lives**, because you open it
+deliberately:
+
+```
+◎ MalDet
+
+mlflow/mlflow
+★ 25,068 · Python · pushed 02 Apr 2026
+
+┌────────────────────────────────┐
+│ CRITICAL                  1658 │
+└────────────────────────────────┘
+
+Vulnerabilities         1536 Critical
+Malware                  122 Critical
+
+77 high · 765 medium · 33,081 low
+scanned 3 months ago — may be out of date
+
+[        View report        ]
+[        Scan again         ]
+▸ Settings
+```
+
+Both tracks show even when one is Safe. "Badly written" and "hostile" are
+different questions, and showing only the worse of the two is how a
+repository with a real dependency problem and a handful of weak malware
+signals gets read as malicious. Scores are unbounded, so the band carries
+the meaning and the number is detail.
 
 ## Install
 
@@ -50,7 +81,7 @@ needed again after a restart.
 
 ## Pointing it at your MalDet
 
-Defaults to `http://103.233.1.97:5000`.
+Defaults to `https://maldet-fyp.my`.
 
 **Click the MalDet icon in the toolbar.** That is the settings panel: the
 server address, a **Test connection** button, and a link to the site. If the
