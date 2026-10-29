@@ -16,6 +16,12 @@
   const BUTTON_ID = "maldet-button";
   const WRAP_ID = "maldet-wrap";
 
+  // Deliberately always on. When this does not appear, the question is
+  // always "did the content script run at all", and a silent extension
+  // cannot answer it. Filter the console on "MalDet".
+  const log = (...args) => console.info("[MalDet]", ...args);
+  log("content script loaded on", location.pathname);
+
   /*
    * github.com/<a>/<b> matches plenty of pages that are not repositories.
    * Without this list the button appears on your own settings page and
@@ -98,26 +104,69 @@
     "#repo-content-pjax-container > div > div",
   ];
 
-  function placeButton(wrap) {
+  function tryAnchor(wrap) {
     for (const selector of ANCHORS) {
       const host = document.querySelector(selector);
-      if (host) {
-        wrap.classList.remove("maldet-wrap--floating");
-        if (host.tagName === "UL") {
-          const li = document.createElement("li");
-          li.appendChild(wrap);
-          host.prepend(li);
-        } else {
-          host.prepend(wrap);
-        }
-        return true;
+      if (!host) continue;
+      wrap.classList.remove("maldet-wrap--floating");
+      if (host.tagName === "UL") {
+        const li = document.createElement("li");
+        li.appendChild(wrap);
+        host.prepend(li);
+      } else {
+        host.prepend(wrap);
       }
+      log("placed in", selector);
+      return true;
     }
-    // Nothing matched: GitHub has restyled, or this is a page shape we have
-    // not seen. A corner button is worse-looking but still works, which
-    // beats the feature silently disappearing.
+    return false;
+  }
+
+  /*
+   * The floating fallback carries its own inline styles as well as its
+   * class. The class alone was not enough: if the injected stylesheet does
+   * not apply for any reason, an unpositioned element appended to <body>
+   * sits below the entire page and reads as "the extension did nothing".
+   * These few properties are the ones that make it visible at all.
+   */
+  function floatIt(wrap) {
     wrap.classList.add("maldet-wrap--floating");
+    Object.assign(wrap.style, {
+      position: "fixed",
+      right: "16px",
+      bottom: "16px",
+      zIndex: "2147483000",
+      display: "inline-flex",
+    });
     document.body.appendChild(wrap);
+    log("no GitHub anchor matched — using the floating fallback");
+  }
+
+  function placeButton(wrap) {
+    if (tryAnchor(wrap)) return true;
+
+    /*
+     * GitHub renders the repository header client-side, so at document_idle
+     * the anchor often does not exist yet. Retry briefly before giving up
+     * on it -- without this the button is always a corner chip, even on
+     * pages where it could have sat in the header.
+     */
+    let attempts = 0;
+    const retry = setInterval(() => {
+      attempts += 1;
+      if (!document.body.contains(wrap) && !wrap.isConnected) {
+        clearInterval(retry);
+        return;
+      }
+      if (tryAnchor(wrap)) {
+        wrap.removeAttribute("style");
+        clearInterval(retry);
+      } else if (attempts >= 10) {
+        clearInterval(retry);
+      }
+    }, 300);
+
+    floatIt(wrap);
     return false;
   }
 
@@ -157,8 +206,10 @@
     const label = document.createElement("span");
     label.className = "maldet-button__label";
 
+    let target = null;
+
     if (result && result.known) {
-      a.href = result.detail_url;
+      target = result.detail_url;
       label.textContent = `MalDet · ${humanAge(result.days_since_scan)}`;
       a.title =
         `This repository was last scanned on ${result.scanned_at_human}` +
@@ -182,10 +233,13 @@
     } else {
       // Covers both "we asked and it is not in the database" and "we could
       // not ask at all". Either way the useful offer is the same one.
-      a.href = (result && result.scan_url) || null;
+      // Tracked in a variable, not by reading a.href back: assigning null
+      // to .href stores the string "null", which then resolves to a real
+      // URL, so the "no link" test below would never fire.
+      target = (result && result.scan_url) || null;
       label.textContent = "Scan with MalDet";
       a.title = "Check this repository with MalDet.";
-      if (!a.href) {
+      if (!target) {
         a.classList.add("maldet-button--offline");
         a.title =
           "MalDet could not be reached. Check the server address in the " +
@@ -193,9 +247,11 @@
       }
     }
 
-    // A link with no href is not focusable and not clickable; ask the
-    // background for a fallback URL rather than rendering a dead button.
-    if (!a.href) {
+    if (target) {
+      a.href = target;
+    } else {
+      // No URL, because the lookup never answered. Still clickable: the
+      // background knows the configured address and can open the tab.
       a.href = "#";
       a.addEventListener("click", (e) => {
         e.preventDefault();
@@ -218,6 +274,7 @@
 
     if (!repo) {
       document.getElementById(WRAP_ID)?.remove();
+      if (lastRendered) log("left a repository page, button removed");
       lastRendered = null;
       return;
     }
@@ -225,6 +282,7 @@
       return;
     }
     lastRendered = repo;
+    log("repository detected:", repo);
 
     // Draw immediately in its unknown state, then correct it when the
     // lookup answers. A button that appears late is a button people miss.
@@ -233,6 +291,12 @@
     chrome.runtime.sendMessage({ type: "lookup", repo }, (response) => {
       if (chrome.runtime.lastError) return;        // worker asleep or gone
       if (currentRepo() !== repo) return;          // navigated away mid-flight
+      if (response && response.ok) {
+        log("lookup ok:", repo, response.data.known ? "known" : "not scanned");
+      } else {
+        log("lookup failed:", (response && response.error) || "no response",
+            "- falling back to a plain scan link");
+      }
       draw(repo, response && response.ok ? response.data : null);
     });
   }
