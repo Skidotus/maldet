@@ -1079,3 +1079,97 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 /* The hero eyebrow carries the full project title, so it keeps its own
    capitalisation (MalDet, GitHub) instead of the tracked all-caps label. */
 .hero__eyebrow { text-transform: none; letter-spacing: 0.01em; font-size: 0.88rem; font-weight: 500; line-height: 1.5; max-width: 58ch; margin-bottom: 1rem; }
+
+/* ---------------------------------------------------------------- *
+ * Browser extension section
+ * ---------------------------------------------------------------- */
+
+.ext {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+/* A mock of the GitHub header rather than a screenshot: it stays legible at
+   any width, costs no bytes, and cannot go stale when GitHub restyles. */
+.ext__preview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--paper);
+}
+.ext__chrome {
+  padding: 0.5rem 0.85rem;
+  background: var(--forest-900);
+  color: var(--green-glow);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.ext__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.1rem 0.85rem;
+}
+.ext__ghbtn {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: #fff;
+}
+.ext__mark {
+  padding: 0.25rem 0.65rem;
+  border: 1px solid #2f6b4f;
+  border-radius: var(--radius-sm);
+  background: var(--forest-900);
+  color: var(--green-glow);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.ext__downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+}
+.ext__dl {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+.ext__size {
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.75;
+  letter-spacing: 0.02em;
+}
+
+.ext__steps {
+  margin: 0 0 1rem;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.ext__steps li { margin-bottom: 0.4rem; }
+.ext__steps code {
+  font-size: 0.82em;
+  background: var(--surface-2);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
+
+.ext__meta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+@media (max-width: 768px) {
+  .ext { grid-template-columns: 1fr; gap: 1.5rem; }
+}

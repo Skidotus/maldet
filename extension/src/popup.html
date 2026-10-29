@@ -73,29 +73,9 @@
 
     .empty { color: #5d6b63; font-size: 13px; margin: 0 0 12px; }
 
-    /* --- settings, deliberately out of the way --- */
-    details { margin-top: 14px; border-top: 1px solid #dfe5e0; padding-top: 10px; }
-    summary { cursor: pointer; font-size: 12.5px; color: #5d6b63; font-weight: 600; }
-    summary::marker { color: #9bab9f; }
-    label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
-    input {
-      width: 100%; box-sizing: border-box; padding: 7px 9px; font: inherit; font-size: 12.5px;
-      font-family: ui-monospace, monospace; border: 1px solid #c9d3cc; border-radius: 5px;
-      background: #fff; color: inherit;
-    }
-    .hint { color: #5d6b63; font-size: 11.5px; margin: 5px 0 9px; }
-    .row { display: flex; gap: 6px; }
-    .row .btn { font-size: 12.5px; padding: 6px 10px; }
-    #result { margin-top: 9px; padding: 8px 10px; border-radius: 5px; font-size: 12px;
-              border: 1px solid #c9d3cc; background: #fff; display: none; white-space: pre-wrap; }
-    #result.ok  { border-color: #2f6b4f; background: #f0f8f3; }
-    #result.bad { border-color: #8a3a2f; background: #fdf3f1; }
-    code { background: #eef2ef; padding: 0.05rem 0.25rem; border-radius: 3px; }
-
     @media (prefers-color-scheme: dark) {
       body { background: #11150f; color: #e6ece8; }
-      input, #result { background: #1a211b; border-color: #33403a; color: #e6ece8; }
-      .hint, .status, .empty, summary, .meta, .counts,
+      .hint, .status, .empty, .meta, .counts,
       .track__name, .track__val em { color: #9bab9f; }
       .lv-safe     { border-color: #2f6b4f; background: #11261a; color: #a3d9b8; }
       .lv-low      { border-color: #2f6b4f; background: #10231a; color: #9ccfb3; }
@@ -104,13 +84,9 @@
       .lv-critical { border-color: #8a3a2f; background: #2a110d; color: #e39a8f; }
       .status.stale { color: #e3c168; }
       .status.warn  { color: #e39a8f; }
-      details { border-top-color: #33403a; }
       .btn--ghost { color: #a3d9b8; border-color: #2f6b4f; }
       .btn--ghost:hover { background: #1a211b; }
       .btn--primary { border-color: #2f6b4f; }
-      code { background: #222a24; }
-      #result.ok  { background: #11261a; }
-      #result.bad { background: #2a110d; }
     }
   </style>
 </head>
@@ -120,32 +96,13 @@
     <span>MalDet</span>
   </div>
 
-  <!-- Filled in by options.js from whatever tab is in front. -->
+  <!-- Filled in by popup.js from whatever tab is in front. -->
   <div id="context">
     <p class="empty" id="loading">Checking this page…</p>
   </div>
 
-  <details id="settings">
-    <summary>Settings</summary>
-
-    <label for="serverUrl">MalDet server address</label>
-    <input id="serverUrl" type="url" spellcheck="false" autocomplete="off"
-           placeholder="https://maldet-fyp.my">
-    <p class="hint">
-      Include the port if it is not the default, e.g.
-      <code>http://localhost:5000</code>.<br>
-      <strong id="active">&nbsp;</strong>
-    </p>
-
-    <div class="row">
-      <button id="save" class="btn btn--primary" type="button">Save</button>
-      <button id="test" class="btn btn--ghost" type="button">Test connection</button>
-    </div>
-
-    <div id="result" role="status"></div>
-  </details>
 
   <script src="repo.js"></script>
-  <script src="options.js"></script>
+  <script src="popup.js"></script>
 </body>
 </html>

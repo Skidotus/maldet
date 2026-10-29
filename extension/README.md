@@ -52,11 +52,22 @@ the meaning and the number is detail.
 
 Nothing is published to a store — load it unpacked.
 
+Easiest: **download it from the site**, at
+[maldet-fyp.my#extension](https://maldet-fyp.my#extension). Unzip and skip to
+step 3 below.
+
+To build from source instead:
+
 ```bash
 ./build.sh
 ```
 
-That writes `dist/chrome` and `dist/firefox`.
+That writes `dist/chrome` and `dist/firefox`, and packages both into
+`static/downloads/` so the website can serve them. **Run it before committing
+any change to the extension** -- those zips are committed, so a forgotten
+rebuild leaves the site offering an old build. The version and date shown on
+the download section come from the same step, so a stale one is visible
+rather than silent.
 
 **Chrome / Edge**
 1. `chrome://extensions`
@@ -79,23 +90,17 @@ dates never appear in Firefox, check this before anything else.
 Firefox also clears temporary add-ons when it restarts, so both steps are
 needed again after a restart.
 
-## Pointing it at your MalDet
+## Where it points
 
-Defaults to `https://maldet-fyp.my`.
+`https://maldet-fyp.my`, fixed. There was a settings panel for this; it
+existed so the extension could be aimed at a laptop during development, and
+every user of a finished build would only ever set it to that one value. A
+setting with exactly one correct answer is a way to get it wrong -- and a
+saved value that silently failed to persist cost an afternoon of debugging
+before it was found.
 
-**Click the MalDet icon in the toolbar.** That is the settings panel: the
-server address, a **Test connection** button, and a link to the site. If the
-icon is not visible, Firefox tucks new extensions behind the puzzle-piece
-button in the toolbar — pin it from there.
-
-The same panel is also reachable as a full page via `about:addons` →
-Extensions → MalDet for GitHub → **Preferences** (Firefox) or
-`chrome://extensions` → Details → **Extension options** (Chrome), but the
-toolbar icon is the short way.
-
-Use **Test connection** after changing the address. It reports the URL it
-tried and how long it took, which is what tells a server that is switched
-off apart from a request the browser refused.
+To build against a different MalDet, change `BASE` in `src/background.js`
+and `src/popup.js` and run `./build.sh`.
 
 ## If scan dates never appear
 
@@ -126,6 +131,31 @@ taken on trust.
 
 Opening a tab is never blocked, which is why the fallback always works
 regardless.
+
+## What it sends, and what Mozilla is told
+
+The extension declares `browsingActivity` under
+`browser_specific_settings.gecko.data_collection_permissions`, so Firefox
+asks the user to accept it at install.
+
+**Not `none`, deliberately.** Mozilla defines `browsingActivity` as
+"websites visited, URLs, domains", and on every GitHub repository page the
+content script sends that repository's `owner/name` to MalDet to ask whether
+it has been scanned. Page content never leaves the browser and nothing is
+stored against a person, but a URL you visited is still being sent to a
+server. Declaring `none` would be a false statement to Mozilla and to the
+person installing it, and a tool whose subject is supply-chain trust is a
+poor place to start lying about what it transmits.
+
+`strict_min_version` is 140 because the declaration needs built-in consent,
+which Firefox gained in 140. Supporting older versions would mean writing a
+consent screen by hand.
+
+If that trade is not worth it, the cheap reduction is to stop the in-page
+button looking anything up — leave it reading "Scan with MalDet" always, and
+let only the popup query, so nothing is sent unless the user opens it. The
+declaration would still be required; the volume would drop from every
+repository page viewed to only the ones asked about.
 
 ## Layout
 

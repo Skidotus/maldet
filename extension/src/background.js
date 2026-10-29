@@ -14,28 +14,18 @@
  */
 
 /*
- * Firefox exposes promise-based APIs as `browser`; its `chrome` object is a
- * callback-style compatibility alias, so awaiting chrome.storage there is
- * not safe. Chrome has no `browser`, and its MV3 APIs do return promises.
- * Event listeners and callback-style sendMessage behave the same in both and
- * are left on `chrome`.
+ * One fixed address. There was a settings panel for this; it existed so the
+ * extension could be pointed at a laptop during development, and every user
+ * of a finished build would only ever set it to the one value below. A
+ * setting that has exactly one correct answer is a way to get it wrong.
+ *
+ * To build against a different MalDet, change this and run build.sh.
  */
-const api = typeof browser !== "undefined" ? browser : chrome;
-
-const DEFAULT_BASE = "https://maldet-fyp.my";
+const BASE = "https://maldet-fyp.my";
 
 // Generous enough for a cold container, short enough that the button is not
 // stuck saying "Scan with MalDet" long after the answer would have mattered.
 const TIMEOUT_MS = 6000;
-
-async function baseUrl() {
-  try {
-    const stored = await api.storage.local.get("serverUrl");
-    return (stored.serverUrl || DEFAULT_BASE).replace(/\/+$/, "");
-  } catch {
-    return DEFAULT_BASE;
-  }
-}
 
 async function getJSON(url) {
   // AbortController rather than letting it hang: a service worker that is
@@ -76,8 +66,7 @@ async function getJSON(url) {
 }
 
 async function lookup(repo) {
-  const base = await baseUrl();
-  return getJSON(`${base}/api/extension/lookup?repo=${encodeURIComponent(repo)}`);
+  return getJSON(`${BASE}/api/extension/lookup?repo=${encodeURIComponent(repo)}`);
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -91,20 +80,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "openScan") {
     // The fallback path when the lookup never answered. Navigating a tab to
     // http:// is allowed regardless of what blocked the fetch.
-    baseUrl().then((base) => {
-      chrome.tabs.create({
-        url: `${base}/scan?repo=${encodeURIComponent(msg.repo)}`,
-      });
+    chrome.tabs.create({
+      url: `${BASE}/scan?repo=${encodeURIComponent(msg.repo)}`,
     });
-    return true;
+    return;
   }
 
-  if (msg.type === "probe") {
-    // Used by the options page to tell the user which of the three possible
-    // worlds they are in: reachable, unreachable, or blocked.
-    lookup("psf/requests").then(sendResponse);
-    return true;
-  }
 });
 
 // No action.onClicked handler: the toolbar icon opens options.html as a

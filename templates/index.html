@@ -293,7 +293,69 @@
   </section>
 
   {# =============================================================
-     3. Scan history
+     3. Browser extension
+     ============================================================= #}
+  {% if extension %}
+  <section class="section section--white" id="extension" aria-labelledby="extensionTitle">
+    <div class="site-container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Browser extension</p>
+        <h2 class="section-title" id="extensionTitle">Check a repository <em>without leaving GitHub.</em></h2>
+        <p class="section-lede">The judgement is wanted while you are looking at a repository and
+          deciding whether to clone it. The extension puts it there: on any GitHub
+          repository page it shows whether MalDet has seen it and when, and one click
+          opens the report or queues a scan.</p>
+      </div>
+
+      <div class="ext reveal">
+        <div class="ext__preview" aria-hidden="true">
+          <div class="ext__chrome">github.com/mlflow/mlflow</div>
+          <div class="ext__row">
+            <span class="ext__ghbtn">Watch</span>
+            <span class="ext__ghbtn">Fork</span>
+            <span class="ext__ghbtn">Star</span>
+            <span class="ext__mark">&#9678; MalDet &middot; scanned 4 days ago</span>
+          </div>
+        </div>
+
+        <div class="ext__get">
+          <div class="ext__downloads">
+            {% for target, label in [("chrome", "Chrome / Edge"), ("firefox", "Firefox")] %}
+              {% set file = extension.files[target] %}
+              <a class="btn btn-ribbon btn-pill ext__dl"
+                 href="{{ url_for('static', filename='downloads/' ~ file.name) }}"
+                 download>
+                Download for {{ label }}
+                <span class="ext__size">ZIP &middot; {{ file.kb }} KB</span>
+              </a>
+            {% endfor %}
+          </div>
+
+          {# Neither store listing exists, so both browsers need developer
+             loading. Saying so here is kinder than letting someone
+             double-click a zip and wonder why nothing happened. #}
+          <ol class="ext__steps">
+            <li>Unzip the download.</li>
+            <li><strong>Chrome / Edge:</strong> open <code>chrome://extensions</code>,
+                turn on Developer mode, choose <em>Load unpacked</em>, pick the folder.</li>
+            <li><strong>Firefox:</strong> open <code>about:debugging</code>,
+                choose <em>Load Temporary Add-on</em>, pick <code>manifest.json</code>
+                inside the folder. Firefox also needs host access granted under
+                <code>about:addons</code>.</li>
+          </ol>
+
+          <p class="ext__meta">
+            Version {{ extension.version }} &middot; built {{ extension.built }} &middot;
+            not published to any store, so it installs in developer mode.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {# =============================================================
+     4. Scan history
      ============================================================= #}
   <section class="section section--white" id="history" aria-labelledby="historyTitle">
     <div class="site-container">
@@ -365,7 +427,7 @@
   </section>
 
   {# =============================================================
-     4. About us
+     5. About us
      ============================================================= #}
   <section class="section section--paper" id="about" aria-labelledby="aboutTitle">
     <div class="site-container about">

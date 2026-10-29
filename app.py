@@ -132,6 +132,29 @@ _OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 _NAME_RE  = re.compile(r"^(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$")
 
 
+def extension_info():
+    """Version, build date and sizes of the downloadable extension bundles.
+
+    Written by extension/package.py during the build and read per request
+    rather than at import, so a rebuild does not need a restart to show.
+    Returns None when the files are absent -- a checkout that has never run
+    build.sh is a normal state, and the download section simply does not
+    render rather than the home page failing.
+    """
+    path = os.path.join(app.static_folder, "downloads", "extension-info.json")
+    try:
+        with open(path) as fh:
+            info = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    for target, meta in info.get("files", {}).items():
+        full = os.path.join(app.static_folder, "downloads", meta["name"])
+        if not os.path.exists(full):
+            return None
+        meta["kb"] = round(meta["bytes"] / 1024)
+    return info
+
+
 def parse_repo_slug(raw):
     """"owner/repo" from whatever form it arrived in, or None.
 
@@ -230,7 +253,10 @@ def index():
             total_findings = total_findings,
             # The landing page's scan form would only bounce this visitor
             # back to the scan they already have running, so say so up front.
-            active_job_id  = _visitor_job_id()
+            active_job_id  = _visitor_job_id(),
+            # None when build.sh has never run; the template skips the
+            # download section rather than offering a link to nothing.
+            extension      = extension_info()
         )
 
     finally:

@@ -42,6 +42,9 @@ print(f"  {root}: {len(refs)} referenced files all present")
 PY
 done
 
+# Package the bundles so the website can offer them for download.
+python3 package.py
+
 echo
 echo "Load it:"
 echo "  Chrome/Edge  chrome://extensions  -> Developer mode -> Load unpacked -> extension/dist/chrome"
