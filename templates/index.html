@@ -319,34 +319,68 @@
         </div>
 
         <div class="ext__get">
-          <div class="ext__downloads">
-            {% for target, label in [("chrome", "Chrome / Edge"), ("firefox", "Firefox")] %}
-              {% set file = extension.files[target] %}
-              <a class="btn btn-ribbon btn-pill ext__dl"
-                 href="{{ url_for('static', filename='downloads/' ~ file.name) }}"
-                 download>
-                Download for {{ label }}
-                <span class="ext__size">ZIP &middot; {{ file.kb }} KB</span>
-              </a>
-            {% endfor %}
-          </div>
+          {# Firefox leads: it is the only browser this can be installed on
+             properly, because Mozilla signs add-ons for distribution outside
+             its catalogue and Chrome does not. #}
+          {% if extension.signed %}
+            <a class="btn btn-ribbon btn-pill ext__dl ext__dl--hero"
+               href="{{ url_for('static', filename='downloads/' ~ extension.signed.name) }}">
+              Install for Firefox
+              <span class="ext__size">Version {{ extension.version }} &middot; {{ extension.signed.kb }} KB</span>
+            </a>
+            <p class="ext__note">Signed by Mozilla. Firefox will ask you to confirm,
+              then it stays installed and updates itself.</p>
+          {% else %}
+            <a class="btn btn-ribbon btn-pill ext__dl ext__dl--hero"
+               href="{{ url_for('static', filename='downloads/' ~ extension.files.firefox.name) }}"
+               download>
+              Download for Firefox
+              <span class="ext__size">ZIP &middot; {{ extension.files.firefox.kb }} KB &middot; v{{ extension.version }}</span>
+            </a>
+            <p class="ext__note">A signed one-click build is with Mozilla for review.
+              Until it clears, Firefox loads this by hand:</p>
+            <ol class="ext__steps">
+              <li>Unzip the download.</li>
+              <li>Open <code>about:debugging</code> &rarr; <em>This Firefox</em>
+                  &rarr; <em>Load Temporary Add-on</em>, and pick
+                  <code>manifest.json</code> inside the folder.</li>
+              <li>Grant host access under <code>about:addons</code> &rarr; MalDet
+                  &rarr; <em>Permissions</em>.</li>
+            </ol>
+            <p class="ext__note ext__note--quiet">Firefox clears temporary add-ons when it
+              restarts, so this is a look rather than a lasting install.</p>
+          {% endif %}
 
-          {# Neither store listing exists, so both browsers need developer
-             loading. Saying so here is kinder than letting someone
-             double-click a zip and wonder why nothing happened. #}
-          <ol class="ext__steps">
-            <li>Unzip the download.</li>
-            <li><strong>Chrome / Edge:</strong> open <code>chrome://extensions</code>,
-                turn on Developer mode, choose <em>Load unpacked</em>, pick the folder.</li>
-            <li><strong>Firefox:</strong> open <code>about:debugging</code>,
-                choose <em>Load Temporary Add-on</em>, pick <code>manifest.json</code>
-                inside the folder. Firefox also needs host access granted under
-                <code>about:addons</code>.</li>
-          </ol>
+          {# Kept, not hidden: someone on Chrome, or who would rather read the
+             code before running it, should not be stuck. #}
+          <details class="ext__more">
+            <summary>Other browsers, or install by hand</summary>
+
+            <p class="ext__note"><strong>Chrome and Edge</strong> refuse extensions from
+              outside the Chrome Web Store, so there is no one-click option. Developer
+              mode is the only route:</p>
+            <ol class="ext__steps">
+              <li><a href="{{ url_for('static', filename='downloads/' ~ extension.files.chrome.name) }}"
+                     download>Download the Chrome build</a>
+                  (ZIP &middot; {{ extension.files.chrome.kb }} KB) and unzip it.</li>
+              <li>Open <code>chrome://extensions</code> and turn on <em>Developer mode</em>.</li>
+              <li>Choose <em>Load unpacked</em> and pick the folder.</li>
+            </ol>
+
+            {% if extension.signed %}
+              <p class="ext__note"><strong>Firefox, unsigned build.</strong>
+                <a href="{{ url_for('static', filename='downloads/' ~ extension.files.firefox.name) }}"
+                   download>Download the ZIP</a>
+                ({{ extension.files.firefox.kb }} KB) and load it through
+                <code>about:debugging</code> if you would rather inspect it first.</p>
+            {% endif %}
+
+            <p class="ext__note ext__note--quiet">Nothing is minified or bundled &mdash;
+              the files in either archive are the source.</p>
+          </details>
 
           <p class="ext__meta">
-            Version {{ extension.version }} &middot; built {{ extension.built }} &middot;
-            not published to any store, so it installs in developer mode.
+            Version {{ extension.version }} &middot; built {{ extension.built }}
           </p>
         </div>
       </div>
