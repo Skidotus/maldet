@@ -77,13 +77,24 @@ causes, and the error alone cannot tell them apart:
    while MalDet may be served over plain `http://`. Some browsers refuse
    that combination even from an extension.
 
-The fix for the second is to serve MalDet over HTTPS. Let's Encrypt will not
-issue a certificate for a bare IP address, but `nip.io` resolves one into a
-hostname that it will — `103-233-1-97.nip.io` points at `103.233.1.97` — so a
-reverse proxy such as Caddy can obtain a real certificate without buying a
-domain.
+**Confirmed on Firefox 2026-10-29:** a lookup to `http://localhost:5000`
+connects, while the same lookup to `http://103.233.1.97:5000` hangs for six
+seconds and is aborted — against a server that answers that exact URL in
+17ms. `localhost` is a trusted origin and a public bare-IP `http://` address
+is not, so this is the browser refusing, not the server failing.
 
-Opening a tab is never blocked, which is why the fallback always works.
+The fix is to serve MalDet over HTTPS. Let's Encrypt will not issue for a
+bare IP, so it needs a hostname. Use a dynamic-DNS name whose zone is on the
+[Public Suffix List](https://publicsuffix.org/list/) — `duckdns.org` is, so
+each subdomain carries its own issuance limit.
+
+`nip.io` looks tempting because it needs no signup, but it is **not** on that
+list, so every nip.io user in the world shares a single Let's Encrypt quota
+and issuance usually fails. Checked against the list directly rather than
+taken on trust.
+
+Opening a tab is never blocked, which is why the fallback always works
+regardless.
 
 ## Layout
 
