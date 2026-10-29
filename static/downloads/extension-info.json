@@ -1,0 +1,16 @@
+{
+  "built": "2026-10-29",
+  "files": {
+    "chrome": {
+      "name": "maldet-chrome.zip",
+      "bytes": 39295,
+      "sha256": "3ff092154d12a9f298e27e121f8d9284dea2fae33c28de56f75792962db96007"
+    },
+    "firefox": {
+      "name": "maldet-firefox.zip",
+      "bytes": 39345,
+      "sha256": "20deb5bb77e821b2e1afc3394c37fd8305ebd76f85350319012bfa3997066b8f"
+    }
+  },
+  "version": "1.0.0"
+}

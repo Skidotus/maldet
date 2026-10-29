@@ -10,27 +10,16 @@
 
 /*
  * Firefox exposes promise-based APIs as `browser`; its `chrome` object is a
- * callback-style compatibility alias, so awaiting chrome.storage there is
- * not safe. Chrome has no `browser`, and its MV3 APIs do return promises.
+ * callback-style compatibility alias. Chrome has no `browser`, and its MV3
+ * APIs do return promises. Callback-style sendMessage works in both and is
+ * left on `chrome`.
  */
 const api = typeof browser !== "undefined" ? browser : chrome;
 
-const DEFAULT_BASE = "https://maldet-fyp.my";
+// Must match background.js. Change both and rebuild to target another host.
+const BASE = "https://maldet-fyp.my";
 
 const $context = document.getElementById("context");
-const $url = document.getElementById("serverUrl");
-const $result = document.getElementById("result");
-
-function show(message, good) {
-  $result.textContent = message;
-  $result.className = good ? "ok" : "bad";
-  $result.style.display = "block";
-}
-
-async function baseUrl() {
-  const { serverUrl } = await api.storage.local.get("serverUrl");
-  return serverUrl || DEFAULT_BASE;
-}
 
 /* ------------------------------------------------------------- rendering */
 
@@ -161,7 +150,12 @@ function renderRepo(repo, result, base) {
     );
     if (!reachable) {
       nodes.push(
-        el("p", "hint", "Scanning still works. Check the server address below to show scan results.")
+        el(
+          "p",
+          "hint",
+          "Scanning still works \u2014 the buttons open MalDet directly. " +
+            "Only the stored results need the connection."
+        )
       );
     }
   }
@@ -173,14 +167,7 @@ function renderRepo(repo, result, base) {
 /* --------------------------------------------------------------- startup */
 
 async function init() {
-  const base = await baseUrl();
-
-  $url.value = base;
-  document.getElementById("active").textContent =
-    (await api.storage.local.get("serverUrl")).serverUrl
-      ? `Currently using ${base}`
-      : `Currently using the default, ${DEFAULT_BASE}`;
-
+  const base = BASE;
   let repo = null;
   try {
     // tab.url is readable because github.com is in host_permissions; without
@@ -208,92 +195,3 @@ async function init() {
 }
 
 init();
-
-/* -------------------------------------------------------------- settings */
-
-function normalise(raw) {
-  const text = (raw || "").trim().replace(/\/+$/, "");
-  if (!text) return null;
-  try {
-    const url = new URL(text);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-document.getElementById("save").addEventListener("click", async () => {
-  const origin = normalise($url.value);
-  if (!origin) {
-    show("That does not look like a URL. Example: https://maldet-fyp.my", false);
-    return;
-  }
-
-  /*
-   * The manifest only declares the addresses MalDet is normally at.
-   * Pointing it somewhere else needs that host's permission, and asking for
-   * it must happen inside a click -- hence here rather than on save-as-you-type.
-   */
-  try {
-    const pattern = `${origin}/*`;
-    if (!(await api.permissions.contains({ origins: [pattern] }))) {
-      const granted = await api.permissions.request({ origins: [pattern] });
-      if (!granted) {
-        show("Saved, but permission for that address was declined, so lookups will fail.", false);
-      }
-    }
-  } catch (err) {
-    show(`Saved. Permission request unavailable here (${err}).`, false);
-  }
-
-  await api.storage.local.set({ serverUrl: origin });
-
-  // Read back rather than trusting the write: a storage backend that
-  // rejects silently is how an earlier version came to report "Saved" while
-  // every lookup kept going to the old address.
-  const check = await api.storage.local.get("serverUrl");
-  if (check.serverUrl !== origin) {
-    show(`Could not save. Storage still holds ${check.serverUrl || "(nothing)"}.`, false);
-    return;
-  }
-  $url.value = origin;
-  show(`Saved. Lookups now go to ${origin}`, true);
-  init();
-});
-
-document.getElementById("test").addEventListener("click", () => {
-  show("Testing…", true);
-  chrome.runtime.sendMessage({ type: "probe" }, (response) => {
-    if (chrome.runtime.lastError) {
-      show(`Could not reach the background worker: ${chrome.runtime.lastError.message}`, false);
-      return;
-    }
-    if (response && response.ok) {
-      show("Connected. Scan dates will show on repository pages.", true);
-      return;
-    }
-
-    const error = (response && response.error) || "no response";
-    const where = (response && response.url) || "(unknown URL)";
-    const took = response && response.ms;
-    /*
-     * A refused request fails in milliseconds; one that sat until our own
-     * timeout fired never reached the host. Showing the time is what lets
-     * a server that is switched off be told apart from a browser that
-     * declined to send the request at all.
-     */
-    const timing =
-      took >= 5000
-        ? `\n\nIt hung for ${took}ms rather than failing immediately, which is what a blocked request looks like — not a server that is switched off.`
-        : `\n\nIt failed after ${took}ms.`;
-
-    show(
-      `Could not reach MalDet (${error})\nTried: ${where}${timing}\n\n` +
-        "Scanning still works — the buttons open MalDet directly. Only the " +
-        "scan dates need this connection. A plain http:// address on a public " +
-        "IP is refused by the browser; an https:// one is not.",
-      false
-    );
-  });
-});

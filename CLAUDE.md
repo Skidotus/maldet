@@ -194,6 +194,11 @@ since submitting again would only bounce back to it). The hero card shows
 five-step scale rather than a percentage bar. About-us people, programme,
 institution and the full project title live in the `team_groups` /
 `programme` / `institution` / `project_title` sets at the top of the template.
+Also given `extension` — version, build date and sizes of the downloadable
+browser-extension bundles, from `app.py:extension_info()`, which reads
+`static/downloads/extension-info.json` per request. It is None in a checkout
+where `extension/build.sh` has never run, and the download section is skipped
+rather than offering a link to a file that is not there.
 
 **`scan.html`** — nothing, or `error` on a bad URL. The form normally lives
 in `index.html#scan`; this page is what the server renders on a rejected
