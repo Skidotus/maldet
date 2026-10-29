@@ -58,29 +58,97 @@ function renderEmpty(message, base) {
   $context.replaceChildren(el("p", "empty", message), actions);
 }
 
+function num(n) {
+  return n === null || n === undefined ? "\u2014" : Number(n).toLocaleString();
+}
+
+/* The site's five-step scale, as a class name. */
+function levelClass(level) {
+  return "lv-" + String(level || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function metaLine(meta) {
+  if (!meta) return null;
+  const line = el("p", "meta");
+  if (meta.stars !== null && meta.stars !== undefined) {
+    line.appendChild(el("span", null, `\u2605 ${num(meta.stars)}`));
+  }
+  if (meta.language) line.appendChild(el("span", null, meta.language));
+  if (meta.last_pushed_human) {
+    line.appendChild(el("span", null, `pushed ${meta.last_pushed_human}`));
+  }
+  return line.childElementCount ? line : null;
+}
+
+function verdictBlock(risk) {
+  const box = el("div", `verdict ${levelClass(risk.level)}`);
+  box.append(
+    el("span", "verdict__level", risk.level || "unrated"),
+    el("span", "verdict__score", num(risk.score))
+  );
+  return box;
+}
+
+/*
+ * Both tracks, always, even when one is Safe. "Badly written" and "hostile"
+ * are different questions, and showing only the worse of the two is how a
+ * repository with 54 weak malware signals and a real dependency problem
+ * gets read as malicious.
+ */
+function trackRow(name, level, score) {
+  const row = el("div", "track");
+  const val = el("span", "track__val", num(score));
+  const band = el("em", null, level || "\u2014");
+  val.appendChild(band);
+  row.append(el("span", "track__name", name), val);
+  return row;
+}
+
 function renderRepo(repo, result, base) {
   const nodes = [el("p", "repo", repo)];
   const actions = el("div", "actions");
 
   if (result && result.known) {
+    const meta = metaLine(result.meta);
+    if (meta) nodes.push(meta);
+
+    if (result.risk) {
+      nodes.push(verdictBlock(result.risk));
+
+      const tracks = el("div", "tracks");
+      tracks.append(
+        trackRow("Vulnerabilities", result.risk.vuln_level, result.risk.vuln_score),
+        trackRow("Malware", result.risk.malware_level, result.risk.malware_score)
+      );
+      nodes.push(tracks);
+
+      nodes.push(
+        el(
+          "p",
+          "counts",
+          `${num(result.risk.high)} high \u00B7 ${num(result.risk.medium)} medium \u00B7 ` +
+            `${num(result.risk.low)} low`
+        )
+      );
+    }
+
     const status = el("p", "status", MalDetRepo.humanAge(result.days_since_scan));
     if (result.source_status === "gone") {
       status.className = "status warn";
-      status.textContent = "no longer on GitHub — archived result";
+      status.textContent = "no longer on GitHub \u2014 archived result";
     } else if (result.source_status === "renamed") {
       status.className = "status warn";
-      status.textContent = `${MalDetRepo.humanAge(result.days_since_scan)} — since renamed`;
+      status.textContent = `${MalDetRepo.humanAge(result.days_since_scan)} \u2014 since renamed`;
     } else if (result.stale) {
       status.className = "status stale";
-      status.textContent += " — may be out of date";
+      status.textContent += " \u2014 may be out of date";
     }
     nodes.push(status);
 
     actions.append(
       link("View report", result.detail_url, "primary"),
-      // Deliberately the scan form rather than /rescan/<id>: a GET that
-      // starts a scan is the bug that route still has, and this popup
-      // should not be the thing that fires it.
+      // The scan form, not /rescan/<id>: a GET that starts a scan is the
+      // bug that route still has, and this popup should not fire it.
       link("Scan again", `${base}/scan?repo=${encodeURIComponent(repo)}`, "ghost")
     );
   } else {
@@ -89,19 +157,12 @@ function renderRepo(repo, result, base) {
       el("p", "status", reachable ? "not scanned yet" : "could not reach MalDet")
     );
     actions.append(
-      link(
-        "Scan this repository",
-        `${base}/scan?repo=${encodeURIComponent(repo)}`,
-        "primary"
-      )
+      link("Scan this repository", `${base}/scan?repo=${encodeURIComponent(repo)}`, "primary")
     );
     if (!reachable) {
-      const hint = el(
-        "p",
-        "hint",
-        "Scanning still works. Check the server address below to show scan dates."
+      nodes.push(
+        el("p", "hint", "Scanning still works. Check the server address below to show scan results.")
       );
-      nodes.push(hint);
     }
   }
 

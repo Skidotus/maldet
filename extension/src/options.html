@@ -27,6 +27,38 @@
     .status.stale { color: #8a6d1f; font-weight: 600; }
     .status.warn  { color: #8a3a2f; font-weight: 600; }
 
+    /* --- the verdict block --- */
+    .meta { margin: 0 0 11px; font-size: 11.5px; color: #5d6b63; }
+    .meta span + span::before { content: " \00B7 "; }
+
+    .verdict {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 11px; margin: 0 0 10px; border-radius: 6px;
+      border: 1px solid; font-weight: 700;
+    }
+    .verdict__level { font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase; }
+    .verdict__score { font-size: 15px; font-variant-numeric: tabular-nums; }
+
+    /* Five steps, matching the site's own scale. Scores are unbounded, so
+       the band carries the meaning and the number is only detail. */
+    .lv-safe     { border-color: #2f6b4f; background: #f0f8f3; color: #1d4733; }
+    .lv-low      { border-color: #4e8f69; background: #f2f8f4; color: #23523a; }
+    .lv-medium   { border-color: #8a6d1f; background: #fdf8ec; color: #6b5316; }
+    .lv-high     { border-color: #a35a28; background: #fdf3ec; color: #7d4420; }
+    .lv-critical { border-color: #8a3a2f; background: #fdf1ef; color: #7a2f26; }
+
+    .tracks { margin: 0 0 9px; }
+    .track {
+      display: flex; align-items: baseline; justify-content: space-between;
+      font-size: 12px; padding: 3px 0;
+    }
+    .track__name { color: #5d6b63; }
+    .track__val { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .track__val em { font-style: normal; color: #5d6b63; font-weight: 400; margin-left: 5px; }
+
+    .counts { margin: 0 0 12px; font-size: 11.5px; color: #5d6b63;
+              font-variant-numeric: tabular-nums; }
+
     .actions { display: flex; flex-direction: column; gap: 7px; }
     .btn {
       display: block; width: 100%; box-sizing: border-box; text-align: center;
@@ -63,7 +95,13 @@
     @media (prefers-color-scheme: dark) {
       body { background: #11150f; color: #e6ece8; }
       input, #result { background: #1a211b; border-color: #33403a; color: #e6ece8; }
-      .hint, .status, .empty, summary { color: #9bab9f; }
+      .hint, .status, .empty, summary, .meta, .counts,
+      .track__name, .track__val em { color: #9bab9f; }
+      .lv-safe     { border-color: #2f6b4f; background: #11261a; color: #a3d9b8; }
+      .lv-low      { border-color: #2f6b4f; background: #10231a; color: #9ccfb3; }
+      .lv-medium   { border-color: #8a6d1f; background: #2a2007; color: #e3c168; }
+      .lv-high     { border-color: #a35a28; background: #2b1709; color: #e8ab74; }
+      .lv-critical { border-color: #8a3a2f; background: #2a110d; color: #e39a8f; }
       .status.stale { color: #e3c168; }
       .status.warn  { color: #e39a8f; }
       details { border-top-color: #33403a; }
