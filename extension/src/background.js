@@ -107,7 +107,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-// No popup on the toolbar icon; clicking opens MalDet itself.
-chrome.action.onClicked.addListener(async () => {
-  chrome.tabs.create({ url: await baseUrl() });
-});
+// No action.onClicked handler: the toolbar icon opens options.html as a
+// popup instead. It used to navigate to MalDet, which meant the one obvious
+// thing to click took you away from the browser rather than to the settings
+// everybody was looking for.

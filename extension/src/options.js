@@ -78,6 +78,16 @@ document.getElementById("save").addEventListener("click", async () => {
   show(`Saved. Using ${origin}`, true);
 });
 
+// The toolbar icon opens this popup rather than MalDet, so the site needs a
+// link of its own. Resolved at click time so it always follows the saved
+// address rather than whatever it was when the popup opened.
+document.getElementById("open").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const { serverUrl } = await api.storage.sync.get("serverUrl");
+  chrome.tabs.create({ url: serverUrl || DEFAULT_BASE });
+  window.close();
+});
+
 document.getElementById("test").addEventListener("click", () => {
   show("Testing…", true);
   chrome.runtime.sendMessage({ type: "probe" }, (response) => {

@@ -50,9 +50,21 @@ needed again after a restart.
 
 ## Pointing it at your MalDet
 
-Defaults to `http://103.233.1.97:5000`. To change it, open the extension's
-options (`chrome://extensions` → Details → Extension options) and use
-**Test connection** to confirm it works.
+Defaults to `http://103.233.1.97:5000`.
+
+**Click the MalDet icon in the toolbar.** That is the settings panel: the
+server address, a **Test connection** button, and a link to the site. If the
+icon is not visible, Firefox tucks new extensions behind the puzzle-piece
+button in the toolbar — pin it from there.
+
+The same panel is also reachable as a full page via `about:addons` →
+Extensions → MalDet for GitHub → **Preferences** (Firefox) or
+`chrome://extensions` → Details → **Extension options** (Chrome), but the
+toolbar icon is the short way.
+
+Use **Test connection** after changing the address. It reports the URL it
+tried and how long it took, which is what tells a server that is switched
+off apart from a request the browser refused.
 
 ## If scan dates never appear
 
