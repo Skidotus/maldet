@@ -1197,3 +1197,31 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 @media (max-width: 768px) {
   .ext { grid-template-columns: 1fr; gap: 1.5rem; }
 }
+
+/* ---------------------------------------------------------------- *
+ * Hero constellation
+ * ---------------------------------------------------------------- */
+
+/* Sits between the hero's gradient background and its content, which is
+   already z-index 1. The hero is position:relative and overflow:hidden, so
+   nothing here needs clipping of its own.
+
+   Opacity lives here rather than in the canvas alphas so the whole layer can
+   be tuned in one place -- and so that a browser with no JS shows nothing
+   rather than an empty box. */
+.hero__canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* The canvas draws a single static frame under reduced motion, so the
+   texture stays and only the movement goes. Dimmed a little further,
+   because a still image of it reads heavier than the drifting version. */
+@media (prefers-reduced-motion: reduce) {
+  .hero__canvas { opacity: 0.35; }
+}

@@ -39,6 +39,10 @@
      1. Welcome
      ============================================================= #}
   <section class="hero" id="overview" aria-labelledby="heroTitle">
+    {# Decoration only, behind the hero's gradients and under its content.
+       aria-hidden because there is nothing here to read, and no fallback
+       markup because the gradients already stand on their own. #}
+    <canvas class="hero__canvas" aria-hidden="true"></canvas>
     <div class="site-container">
       <div class="hero__copy">
         <p class="eyebrow eyebrow--on-dark hero__eyebrow">Final Year Project &middot; {{ project_title }} (MalDet)</p>
@@ -523,6 +527,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/hero-constellation.js') }}" defer></script>
 <script>
   // Client-side check mirrors the server's parser in app.py:scan(), so an
   // obvious typo is caught next to the field instead of on a separate page.
