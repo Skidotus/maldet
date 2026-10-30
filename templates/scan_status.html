@@ -24,19 +24,53 @@
 
       {% else %}
         <div id="scanRunning">
-          <div class="d-flex align-items-center gap-2 mb-2">
-            <span class="spinner-border spinner-border-sm text-accent" role="status" aria-hidden="true"></span>
-            <span id="scanStage" class="fw-semibold">{{ job.stage }}</span>
-          </div>
           {# Scans run one at a time so a large repo cannot starve the box of
              memory, which means a visitor may genuinely be waiting behind
              someone else. Saying so beats an unexplained spinner. #}
-          <p id="scanQueue" class="form-text mb-1"{% if not job.position %} style="display: none;"{% endif %}>
+          <p id="scanQueue" class="form-text mt-0 mb-3"{% if not job.position %} style="display: none;"{% endif %}>
             Waiting behind <span id="scanQueuePos">{{ job.position }}</span> other scan(s) — scans run one at a time.
           </p>
+
+          {# The server already reports each of these by name as it reaches
+             it, and this page already polls for them. Showing the sequence
+             turns "something is happening" into "four of six engines have
+             finished" -- the same information the spinner was withholding.
+
+             data-stage values must match scanner.py's report() strings
+             exactly; the script maps the live stage onto this list by that
+             string and falls back to a plain label if it ever sees one it
+             does not recognise. #}
+          <ol class="scan-track" id="scanTrack" aria-label="Scan progress">
+            <li class="scan-track__rail" aria-hidden="true"><span id="scanRail"></span></li>
+
+            <li class="scan-track__phase">Prepare</li>
+            <li class="scan-track__step" data-stage="Fetching repository info"><span></span>Repository info</li>
+            <li class="scan-track__step" data-stage="Cloning repository"><span></span>Clone</li>
+            <li class="scan-track__step" data-stage="Extracting archives"><span></span>Archives</li>
+
+            <li class="scan-track__phase">Analyse</li>
+            <li class="scan-track__step" data-stage="Running Bandit"><span></span>Bandit</li>
+            <li class="scan-track__step" data-stage="Running Semgrep"><span></span>Semgrep</li>
+            <li class="scan-track__step" data-stage="Running YARA"><span></span>YARA</li>
+            <li class="scan-track__step" data-stage="Running ClamAV"><span></span>ClamAV</li>
+            <li class="scan-track__step" data-stage="Running GuardDog"><span></span>GuardDog</li>
+            <li class="scan-track__step" data-stage="Checking dependencies"><span></span>Dependencies</li>
+
+            <li class="scan-track__phase">Decide</li>
+            <li class="scan-track__step" data-stage="Filtering results"><span></span>Filter noise</li>
+            <li class="scan-track__step" data-stage="Scoring findings"><span></span>Score findings</li>
+            <li class="scan-track__step" data-stage="Calculating risk score"><span></span>Risk verdict</li>
+            <li class="scan-track__step" data-stage="Saving results"><span></span>Save</li>
+          </ol>
+
+          {# Kept as the accessible announcement and the fallback for a stage
+             the track does not know about. #}
+          <p class="scan-track__now" role="status" aria-live="polite">
+            <span id="scanStage">{{ job.stage }}</span>
+          </p>
+
           <p class="form-text mb-0">
-            Submitted {{ job.started_at.strftime('%d %b %Y, %H:%M:%S') }}. Scans run Bandit, Semgrep, YARA,
-            ClamAV, and dependency checks in sequence and can take several minutes.
+            Submitted {{ job.started_at.strftime('%d %b %Y, %H:%M:%S') }}. A scan can take several minutes.
           </p>
         </div>
         <div id="scanError" style="display: none;">
@@ -63,6 +97,32 @@
       var stageEl     = document.getElementById('scanStage');
       var queueEl     = document.getElementById('scanQueue');
       var queuePosEl  = document.getElementById('scanQueuePos');
+      var railEl      = document.getElementById('scanRail');
+      var steps       = [].slice.call(document.querySelectorAll('.scan-track__step'));
+
+      // Stage strings come straight from scanner.py's report() calls. An
+      // unrecognised one leaves the track exactly as it was rather than
+      // clearing it -- a new stage added server-side should look like a
+      // pause, not like the scan restarting.
+      function paint(stage) {
+        var at = -1;
+        for (var i = 0; i < steps.length; i++) {
+          if (steps[i].getAttribute('data-stage') === stage) { at = i; break; }
+        }
+        if (at === -1) { return; }
+
+        for (var j = 0; j < steps.length; j++) {
+          steps[j].classList.toggle('is-done', j < at);
+          steps[j].classList.toggle('is-live', j === at);
+        }
+        // The rail is the continuity: one line that advances rather than
+        // thirteen things blinking independently.
+        if (railEl) {
+          railEl.style.height = ((at / (steps.length - 1)) * 100).toFixed(2) + '%';
+        }
+      }
+
+      paint(stageEl.textContent.trim());
 
       function poll() {
         fetch('/api/scan-status/' + jobId)
@@ -76,6 +136,7 @@
               errorText.textContent = data.error;
             } else {
               stageEl.textContent = data.stage;
+              paint(data.stage);
               // Hide the queue line the moment this job starts, so the page
               // does not keep claiming a wait that is over.
               if (data.position > 0) {

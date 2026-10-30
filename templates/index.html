@@ -65,7 +65,11 @@
       <div class="hero__preview">
         {% if repos %}
           {% set latest = repos[0] %}
-          <article class="preview-card" aria-label="Most recent scan">
+          {# data-resolve marks the one element on this page whose arrival is
+             authored: the scale lays itself out, then the verdict lands on it
+             and the scores count up. See main.js. The empty-state card below
+             is deliberately not marked -- there is no verdict to resolve. #}
+          <article class="preview-card" data-resolve aria-label="Most recent scan">
             <header class="preview-card__bar">
               <span class="preview-card__dots" aria-hidden="true"><i></i><i></i><i></i></span>
               <span class="preview-card__label">Latest scan</span>
@@ -82,7 +86,7 @@
                     <span>Vulnerability</span>
                     <span class="seal-badge seal-{{ latest.vuln_level | lower }}">{{ latest.vuln_level }}</span>
                   </div>
-                  <div class="axis-panel__score">{{ latest.vuln_score | default(0, true) | round | int }}<small>score</small></div>
+                  <div class="axis-panel__score"><span class="axis-panel__num" data-score="{{ latest.vuln_score | default(0, true) | round | int }}">{{ latest.vuln_score | default(0, true) | round | int }}</span><small>score</small></div>
                   {{ level_scale(latest.vuln_level) }}
                 </div>
                 <div class="axis-panel">
@@ -90,7 +94,7 @@
                     <span>Malicious pattern</span>
                     <span class="seal-badge seal-{{ latest.malware_level | lower }}">{{ latest.malware_level }}</span>
                   </div>
-                  <div class="axis-panel__score">{{ latest.malware_score | default(0, true) | round | int }}<small>score</small></div>
+                  <div class="axis-panel__score"><span class="axis-panel__num" data-score="{{ latest.malware_score | default(0, true) | round | int }}">{{ latest.malware_score | default(0, true) | round | int }}</span><small>score</small></div>
                   {{ level_scale(latest.malware_level) }}
                 </div>
               </div>
@@ -120,12 +124,12 @@
      ============================================================= #}
   <section class="section section--paper stats" aria-labelledby="statsTitle">
     <div class="site-container">
-      <div class="section-head section-head--center reveal">
+      <div class="section-head section-head--center">
         <h2 class="section-title" id="statsTitle">One scan. Six engines. <em>Two verdicts.</em></h2>
         <p class="section-lede">Running every tool by hand means reconciling six output formats and
           severity scales. MalDet does that work and reduces it to two numbers you can act on.</p>
       </div>
-      <div class="stat-grid reveal">
+      <div class="stat-grid reveal reveal--stagger">
         <div class="stat-card">
           <div class="stat-card__value">{{ total }}</div>
           <div class="stat-card__label">Repositories scanned</div>
@@ -155,7 +159,7 @@
      ============================================================= #}
   <section class="section section--paper" aria-labelledby="projectTitle">
     <div class="site-container project">
-      <div class="project__copy reveal">
+      <div class="project__copy">
         <p class="eyebrow">The project</p>
         <h2 class="section-title" id="projectTitle">A second opinion for<br><em>code you didn't write.</em></h2>
         <p class="section-lede">Developers clone, install and depend on public repositories every day,
@@ -188,7 +192,7 @@
         </div>
       </div>
 
-      <div class="project__visual reveal">
+      <div class="project__visual">
         <div class="pipeline-card">
           <p class="pipeline-card__title">How a scan runs</p>
           <ol class="pipeline">
@@ -208,14 +212,14 @@
      ============================================================= #}
   <section class="section section--white" id="tools" aria-labelledby="toolsTitle">
     <div class="site-container">
-      <div class="section-head reveal">
+      <div class="section-head">
         <p class="eyebrow">Under the hood</p>
         <h2 class="section-title" id="toolsTitle">The tools <em>behind the verdict</em></h2>
         <p class="section-lede">Established open-source security tools, each looking for something
           different, plus two components built for this project.</p>
       </div>
 
-      <div class="tool-grid reveal">
+      <div class="tool-grid reveal reveal--stagger">
         {% set tools_list = [
           ("Bandit",      "bi-filetype-py",         "Vulnerability",     "Finds common security mistakes in Python code, such as shell injection, unsafe deserialisation and hard-coded passwords."),
           ("Semgrep",     "bi-code-square",         "Vulnerability",     "Pattern-based code analysis across many languages, using community security rules."),
@@ -243,7 +247,7 @@
      ============================================================= #}
   <section class="section section--paper" id="scan" aria-labelledby="scanTitle">
     <div class="site-container">
-      <div class="scan-panel reveal">
+      <div class="scan-panel">
         <div class="scan-panel__copy">
           <p class="eyebrow eyebrow--on-dark">Start here</p>
           <h2 class="section-title section-title--on-dark" id="scanTitle">Scan a repository</h2>
@@ -302,7 +306,7 @@
   {% if extension %}
   <section class="section section--white" id="extension" aria-labelledby="extensionTitle">
     <div class="site-container">
-      <div class="section-head reveal">
+      <div class="section-head">
         <p class="eyebrow">Browser extension</p>
         <h2 class="section-title" id="extensionTitle">Check a repository <em>without leaving GitHub.</em></h2>
         <p class="section-lede">The judgement is wanted while you are looking at a repository and
@@ -311,7 +315,7 @@
           opens the report or queues a scan.</p>
       </div>
 
-      <div class="ext reveal">
+      <div class="ext">
         <div class="ext__preview" aria-hidden="true">
           <div class="ext__chrome">github.com/mlflow/mlflow</div>
           <div class="ext__row">
@@ -397,7 +401,7 @@
      ============================================================= #}
   <section class="section section--white" id="history" aria-labelledby="historyTitle">
     <div class="site-container">
-      <div class="section-head section-head--row reveal">
+      <div class="section-head section-head--row">
         <div>
           <p class="eyebrow">Scan history</p>
           <h2 class="section-title" id="historyTitle">Recently <em>scanned</em></h2>
@@ -411,7 +415,7 @@
       </div>
 
       {% if repos %}
-        <div class="ledger-book reveal">
+        <div class="ledger-book">
           <div class="table-responsive">
             <table class="table table-ledger table-stack align-middle mb-0">
               <thead>
@@ -469,7 +473,7 @@
      ============================================================= #}
   <section class="section section--paper" id="about" aria-labelledby="aboutTitle">
     <div class="site-container about">
-      <div class="about__copy reveal">
+      <div class="about__copy">
         <p class="eyebrow">About us</p>
         <h2 class="section-title" id="aboutTitle">Built as a final year project, <em>made to be used.</em></h2>
         <p class="section-lede">MalDet is a Final Year Project for the {{ programme }}
@@ -480,7 +484,7 @@
           two kinds of risk separate, because they need different responses.</p>
       </div>
 
-      <div class="team reveal">
+      <div class="team reveal reveal--stagger">
         {% for group, people in team_groups %}
           <div class="team-group">
             <h3 class="team-group__title">{{ group }}</h3>
@@ -516,7 +520,7 @@
      ============================================================= #}
   <section class="section section--paper project-title-section" aria-labelledby="projectTitleFull">
     <div class="site-container">
-      <div class="title-plate reveal">
+      <div class="title-plate">
         <h2 class="title-plate__text" id="projectTitleFull">{{ project_title }}</h2>
         <p class="title-plate__meta">Final Year Project &middot; {{ programme }} &middot; {{ institution }}</p>
       </div>

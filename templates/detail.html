@@ -35,14 +35,18 @@
 {%- endmacro %}
 
 {% macro verdict_panel(title, question, level, score, high, medium, low, sources) -%}
-  <section class="console-panel verdict" aria-label="{{ title }} verdict">
+  {# Same gesture as the landing page's hero card, so the resolve reads as
+     "this is the verdict" wherever it appears rather than as decoration
+     that happens to live on the home page. #}
+  <section class="console-panel verdict" data-resolve aria-label="{{ title }} verdict">
     <header class="console-panel__head">
       <span class="console-panel__title">{{ title }}</span>
       <span class="seal-badge seal-{{ level | lower }}">{{ level }}</span>
     </header>
     <p class="verdict__question">{{ question }}</p>
     <div class="verdict__score">
-      <span class="verdict__number score-{{ level | lower }}">{{ score | default(0, true) | round | int }}</span>
+      <span class="verdict__number score-{{ level | lower }}"
+            data-score="{{ score | default(0, true) | round | int }}">{{ score | default(0, true) | round | int }}</span>
       <span class="verdict__unit">risk score</span>
     </div>
     {{ level_scale(level) }}
