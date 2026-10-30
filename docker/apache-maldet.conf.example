@@ -1,0 +1,46 @@
+# Apache vhost additions for MalDet.
+#
+# The proxy half is what makes https://your-domain serve the app; the
+# logging half is what stops it keeping a record of what people browse.
+#
+# Goes inside the <VirtualHost *:443> block that certbot created, usually
+# /etc/apache2/sites-enabled/000-default-le-ssl.conf. Needs:
+#
+#   a2enmod proxy proxy_http headers setenvif
+#   apache2ctl configtest && systemctl reload apache2
+
+# --- proxy to the app -------------------------------------------------
+# MalDet listens on loopback only (MALDET_BIND=127.0.0.1), so this is the
+# single way in and port 5000 is not exposed at all.
+ProxyPreserveHost On
+ProxyPass        / http://127.0.0.1:5000/
+ProxyPassReverse / http://127.0.0.1:5000/
+
+# Flask builds external URLs from what it sees, and what it sees is this
+# proxy's plain-http connection to loopback. Without this header, links in
+# the extension's lookup response point at http://127.0.0.1:5000.
+RequestHeader set X-Forwarded-Proto "https"
+
+# --- logging: do not keep a record of what people browse ---------------
+#
+# The browser extension asks /api/extension/lookup?repo=owner/name on every
+# GitHub repository page someone opens. Apache's "combined" format writes
+# the full request line, so the access log quietly becomes a list of which
+# visitor looked at which repositories, and when:
+#
+#   121.x.x.x - - [29/Oct/2026:16:59:05] "GET /api/extension/lookup?repo=mlflow%2Fmlflow" 200
+#
+# Nothing in MalDet reads that, but it is still being written down. The
+# lookup is declared to Mozilla as browsingActivity because the data is
+# genuinely transmitted -- that cannot be helped, the server has to be asked
+# the question. What can be helped is retaining it.
+#
+# So: log the request without its query string. The line still records that
+# a lookup happened, its status and its size, which is what logs are for;
+# it just no longer says which repository.
+SetEnvIf Request_URI "^/api/extension/lookup" maldet_lookup
+
+LogFormat "%h %l %u %t \"%m %U\" %>s %O" maldet_nolookupquery
+
+CustomLog ${APACHE_LOG_DIR}/access.log combined               env=!maldet_lookup
+CustomLog ${APACHE_LOG_DIR}/access.log maldet_nolookupquery   env=maldet_lookup
