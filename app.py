@@ -18,6 +18,22 @@ app = Flask(__name__)
 # install silently becomes "a file appeared in your Downloads folder".
 mimetypes.add_type("application/x-xpinstall", ".xpi")
 
+
+@app.context_processor
+def _share_card_version():
+    """A cache-buster for the share image, from the file's own mtime.
+
+    Facebook, LinkedIn, Slack and the rest cache a scraped preview hard and
+    for a long time. Without something in the URL that changes when the
+    image does, a regenerated card keeps showing the old one for days with
+    no way to ask politely.
+    """
+    path = os.path.join(app.static_folder, "img", "og-card.jpg")
+    try:
+        return {"og_version": int(os.path.getmtime(path))}
+    except OSError:
+        return {"og_version": 0}
+
 # Behind a reverse proxy, the scheme and host Flask sees are the proxy's
 # (http, 127.0.0.1:5000) rather than the visitor's (https, maldet-fyp.my).
 # url_for(..., _external=True) would then build links to an address nobody

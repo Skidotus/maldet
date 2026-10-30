@@ -60,7 +60,11 @@ function metaLine(meta) {
   if (!meta) return null;
   const line = el("p", "meta");
   if (meta.stars !== null && meta.stars !== undefined) {
-    line.appendChild(el("span", null, `\u2605 ${num(meta.stars)}`));
+    var stars = el("span", "meta__stars");
+    var glyph = MalDetRepo.icon("star", 11);
+    if (glyph) { stars.appendChild(glyph); }
+    stars.appendChild(document.createTextNode(" " + num(meta.stars)));
+    line.appendChild(stars);
   }
   if (meta.language) line.appendChild(el("span", null, meta.language));
   if (meta.last_pushed_human) {

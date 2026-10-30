@@ -48,10 +48,14 @@
   outline-offset: 2px;
 }
 
+/* Holds a drawn mark now, not a character, so it aligns as a box rather
+   than sitting on a text baseline. */
 .maldet-button__icon {
-  font-size: 13px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
 }
+.maldet-button__icon svg { display: block; }
 
 /* Past the staleness threshold. Amber rather than red: an old scan is not
    a problem with the repository, it is a caveat about the answer. */

@@ -162,8 +162,12 @@
 
     const icon = document.createElement("span");
     icon.className = "maldet-button__icon";
-    icon.textContent = "◎";
     icon.setAttribute("aria-hidden", "true");
+    // Drawn mark rather than a glyph: a text character would inherit
+    // whatever font github.com is using and render at a different weight on
+    // every platform.
+    const mark = MalDetRepo.icon("mark", 13);
+    if (mark) { icon.appendChild(mark); }
 
     const label = document.createElement("span");
     label.className = "maldet-button__label";

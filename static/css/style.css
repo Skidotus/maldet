@@ -1122,6 +1122,9 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   background: #fff;
 }
 .ext__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   padding: 0.25rem 0.65rem;
   border: 1px solid #2f6b4f;
   border-radius: var(--radius-sm);

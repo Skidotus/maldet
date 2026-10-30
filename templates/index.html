@@ -322,7 +322,17 @@
             <span class="ext__ghbtn">Watch</span>
             <span class="ext__ghbtn">Fork</span>
             <span class="ext__ghbtn">Star</span>
-            <span class="ext__mark">&#9678; MalDet &middot; scanned 4 days ago</span>
+            {# The same mark the extension draws, so the preview is not
+               quietly a different shape from the real thing. #}
+            <span class="ext__mark">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.25"/>
+                <path d="M10.2 10.2 L13.5 13.5"/>
+                <path d="M7 4.6 V9.4 M4.6 7 H9.4" opacity="0.55"/>
+              </svg>
+              MalDet &middot; scanned 4 days ago
+            </span>
           </div>
         </div>
 
@@ -338,6 +348,15 @@
             </a>
             <p class="ext__note">Signed by Mozilla. Firefox will ask you to confirm,
               then it stays installed and updates itself.</p>
+            {# The signed file comes back from Mozilla long after a build, so
+               the two drift the moment the source changes. Saying so beats
+               offering an install button that quietly installs an older
+               build than the one described above it. #}
+            {% if extension.signed.stale %}
+              <p class="ext__note ext__note--quiet">Source is at v{{ extension.version }};
+                the signed build above is v{{ extension.signed.version }} and is awaiting
+                re-signing.</p>
+            {% endif %}
           {% else %}
             <a class="btn btn-ribbon btn-pill ext__dl ext__dl--hero"
                href="{{ url_for('static', filename='downloads/' ~ extension.files.firefox.name) }}"
