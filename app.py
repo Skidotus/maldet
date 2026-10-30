@@ -167,9 +167,23 @@ def extension_info():
     # one-click install.
     signed = os.path.join(app.static_folder, "downloads", "maldet-firefox.xpi")
     if os.path.exists(signed):
+        # Version read from inside the signed file, not from the build. The
+        # two drift the moment the extension is rebuilt without being
+        # re-signed, and the number beside an install button should be the
+        # one that will actually be installed.
+        version = info.get("version")
+        try:
+            import zipfile
+            with zipfile.ZipFile(signed) as zf:
+                version = json.loads(zf.read("manifest.json"))["version"]
+        except (OSError, ValueError, KeyError):
+            pass
         info["signed"] = {
-            "name": "maldet-firefox.xpi",
-            "kb":   round(os.path.getsize(signed) / 1024),
+            "name":    "maldet-firefox.xpi",
+            "kb":      round(os.path.getsize(signed) / 1024),
+            "version": version,
+            # True when the signed build has fallen behind the source.
+            "stale":   version != info.get("version"),
         }
     return info
 
