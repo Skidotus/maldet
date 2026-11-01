@@ -45,6 +45,14 @@
   --medium-text:   #8a5d06;
   --high-text:     #b2521c;
   --critical-text: #b8342a;
+  /* Pill grounds for the two verdict axes, and a hover hairline. Named so
+     the dark theme can re-point them; as literals they stayed pastel and
+     glared off the dark cards. */
+  --low-tint:       #eef5fa;
+  --low-tint-line:  #c4dbea;
+  --high-tint:      #fdf3ec;
+  --high-tint-line: #f4cdb3;
+  --line-strong:    #d6d2c6;
 
   --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
   --font-body:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -520,7 +528,7 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
   padding: 1.4rem;
   transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), border-color 0.25s;
 }
-.tool-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-soft); border-color: #d6d2c6; }
+.tool-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-soft); border-color: var(--line-strong); }
 @media (prefers-reduced-motion: reduce) { .tool-card:hover { transform: none; } }
 .tool-card__icon {
   width: 44px; height: 44px; border-radius: 12px;
@@ -532,8 +540,8 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
 .tool-card p { color: var(--muted); font-size: 0.92rem; line-height: 1.55; margin: 0.75rem 0 0; }
 
 .axis-tag { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid; }
-.axis-tag--vulnerability     { color: var(--low-text);  border-color: #c4dbea; background: #eef5fa; }
-.axis-tag--malicious-pattern { color: var(--high-text); border-color: #f4cdb3; background: #fdf3ec; }
+.axis-tag--vulnerability     { color: var(--low-text);  border-color: var(--low-tint-line);  background: var(--low-tint); }
+.axis-tag--malicious-pattern { color: var(--high-text); border-color: var(--high-tint-line); background: var(--high-tint); }
 .axis-tag--triage            { color: var(--green-text); border-color: var(--green-tint-line); background: var(--green-tint); }
 
 /* ============================================================
@@ -919,6 +927,11 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   --medium-text:   #f0c45e;
   --high-text:     #f2a06b;
   --critical-text: #f3887a;
+  --low-tint:       rgba(143, 192, 226, 0.10);
+  --low-tint-line:  rgba(143, 192, 226, 0.28);
+  --high-tint:      rgba(242, 160, 107, 0.10);
+  --high-tint-line: rgba(242, 160, 107, 0.28);
+  --line-strong:    rgba(241, 240, 232, 0.18);
 
   /* A lift shadow reads as grime on a dark ground. Dark surfaces are
      separated by their own lightness and a hairline instead. */

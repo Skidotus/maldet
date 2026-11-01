@@ -44,3 +44,6 @@ extension/dist/
 /rescan_requires_login.txt
 /rescan_stale_july.txt
 /summary_eval_overnight.json
+
+# Project brief and report drafts -- contain student IDs, keep off the public repo
+/report/
