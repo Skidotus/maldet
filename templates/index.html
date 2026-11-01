@@ -8,14 +8,15 @@
    --------------------------------------------------------------- #}
 {% set team_groups = [
   ("Project team", [
-    {"name": "Haikal", "initials": "H", "role": "Team lead",
+    {"name": "Haikal Hakimi", "initials": "H", "photo": "haikal.jpg", "role": "Team lead · Back-⁠end developer",
      "link": "https://github.com/Skidotus", "link_label": "GitHub"},
-    {"name": "Ariff",  "initials": "A", "role": "Team member 1"},
-    {"name": "Aleena", "initials": "A", "role": "Team member 2"},
-    {"name": "Adam",   "initials": "A", "role": "Team member 3"},
+    {"name": "Abdul Ariff", "initials": "A", "photo": "ariff.jpg", "role": "Front-end developer",
+     "link": "https://github.com/Mechaguy06", "link_label": "GitHub"},
+    {"name": "Aleena Syakila", "initials": "A", "photo": "aleena.jpg", "role": "Technical writer & presenter"},
+    {"name": "Adam Akmal", "initials": "A", "photo": "adam.jpg", "role": "Research & documentation support"},
   ]),
   ("Supervisor", [
-    {"name": "Sir Luqman", "initials": "L", "role": "Project supervisor"},
+    {"name": "Sir Muhammad Luqman", "initials": "L", "photo": "luqman.jpg", "role": "Project supervisor"},
   ]),
 ] %}
 {% set programme   = "Diploma in Cyber Security Technology" %}
@@ -510,7 +511,14 @@
             <div class="team-grid{{ ' team-grid--duo' if people|length > 1 else '' }}">
               {% for person in people %}
                 <article class="team-card">
-                  <div class="team-card__avatar" aria-hidden="true">{{ person.initials }}</div>
+                  {% if person.photo %}
+                    {# alt="" because the name sits right beside it #}
+                    <img class="team-card__avatar team-card__avatar--photo"
+                         src="{{ url_for('static', filename='img/team/' ~ person.photo) }}"
+                         alt="" width="56" height="56" loading="lazy" decoding="async">
+                  {% else %}
+                    <div class="team-card__avatar" aria-hidden="true">{{ person.initials }}</div>
+                  {% endif %}
                   <div>
                     <p class="team-card__name">{{ person.name }}</p>
                     {% if person.role %}<p class="team-card__role">{{ person.role }}</p>{% endif %}

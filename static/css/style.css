@@ -633,6 +633,10 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
   background: var(--forest-900); color: var(--green-glow);
   font-family: var(--font-display); font-size: 1.6rem;
 }
+.team-card__avatar--photo {
+  object-fit: cover; background: var(--forest-900);
+  box-shadow: 0 0 0 2px var(--green-tint-line);
+}
 .team-card__name { font-size: 1.1rem; font-weight: 700; margin: 0.15rem 0 0.1rem; }
 .team-card__role { color: var(--green-text); font-size: 0.82rem; font-weight: 600; margin-bottom: 0.4rem; }
 .team-card__blurb:last-child { margin-bottom: 0; }
