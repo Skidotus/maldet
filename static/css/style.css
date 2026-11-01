@@ -53,6 +53,20 @@
   --high-tint:      #fdf3ec;
   --high-tint-line: #f4cdb3;
   --line-strong:    #d6d2c6;
+  /* Report-page console. Wells are recessed grounds (filters, counts,
+     bar tracks); signal is the data colour for "likely real" and the
+     confidence bars -- a deeper green here, since jade washes out on
+     paper. Both themes define every one of these. */
+  --well:        rgba(15, 26, 20, 0.035);
+  --well-strong: rgba(15, 26, 20, 0.06);
+  --hover-tint:  rgba(15, 26, 20, 0.025);
+  --track:       rgba(15, 26, 20, 0.08);
+  --signal:      #2e8b5f;
+  --signal-soft: #9ccdb1;
+  --signal-ring: rgba(46, 139, 95, 0.18);
+  --unsure:      #8ea597;
+  --noise:       #cfd8d1;
+  --noise-line:  #b3c0b6;
 
   --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
   --font-body:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -893,26 +907,23 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .llm-interim { color: var(--muted); font-size: 0.9375rem; }
 
 /* ============================================================
-   Dark palette — one definition, two triggers
-   The report page has always run dark: it is a working screen people
-   scan for signal, and dark panels let the risk colours carry the
-   meaning. Site-wide dark mode wants exactly that palette, so the two
-   share one block rather than keeping two sets of near-identical
-   values that drift apart the first time one is tweaked.
+   Dark palette
+   [data-theme="dark"] sits on <html> (set before first paint by the
+   inline script in base.html) and covers the whole site, the report
+   page included.
 
-   [data-theme="dark"] sits on <html> and covers the whole site.
-   .console-page sits on the report page's <body> and keeps that page
-   dark even while the rest of the site is light. Listing both in one
-   selector also sidesteps a specificity fight: they score the same, so
-   whichever came later would otherwise win by accident of line number.
+   The report page used to be dark in both themes, sharing this block
+   through a .console-page selector. That left the theme toggle doing
+   nothing there, so it now follows the theme like every other page:
+   its console colours are tokens (--well, --signal, --track, ...)
+   defined in :root for light and re-pointed here for dark.
 
    Tokens are re-pointed rather than every component restyled, so
    shared pieces (badges, buttons, alerts) adapt on their own.
    ============================================================ */
 [hidden] { display: none !important; }
 
-[data-theme="dark"],
-.console-page {
+[data-theme="dark"] {
   --paper:     #07150f;
   --surface:   #0e231a;
   --surface-2: #12291f;
@@ -932,6 +943,16 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   --high-tint:      rgba(242, 160, 107, 0.10);
   --high-tint-line: rgba(242, 160, 107, 0.28);
   --line-strong:    rgba(241, 240, 232, 0.18);
+  --well:        rgba(0, 0, 0, 0.18);
+  --well-strong: rgba(0, 0, 0, 0.25);
+  --hover-tint:  rgba(255, 255, 255, 0.025);
+  --track:       rgba(255, 255, 255, 0.08);
+  --signal:      #a3d9b8;
+  --signal-soft: #4f8f6c;
+  --signal-ring: rgba(163, 217, 184, 0.18);
+  --unsure:      #6d8577;
+  --noise:       #34473c;
+  --noise-line:  #5d7265;
 
   /* A lift shadow reads as grime on a dark ground. Dark surfaces are
      separated by their own lightness and a hairline instead. */
@@ -948,37 +969,27 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   --bs-secondary-color: var(--muted);
 }
 
-/* The report page keeps its own ground, so it still reads as a console
-   rather than as the site with the lights off. */
+/* The report page keeps its own ground -- a faint jade wash in the corner
+   over the theme's paper -- so it reads as a working console in either
+   theme. */
 .console-page {
   background:
     radial-gradient(50% 40% at 85% 0%, rgba(163, 217, 184, 0.06), transparent 70%),
     var(--paper);
 }
 .console-page .site-container { max-width: 1320px; }
-[data-theme="dark"] .site-footer__panel,
-.console-page .site-footer__panel { border: 1px solid var(--line); }
-[data-theme="dark"] .app-alert.alert-danger-ledger,
-.console-page .app-alert.alert-danger-ledger { background: rgba(243, 136, 122, 0.08); border-color: rgba(243, 136, 122, 0.45); color: #f6b3a9; }
-[data-theme="dark"] .btn-outline-parchment,
-.console-page .btn-outline-parchment { background: transparent; }
-[data-theme="dark"] .btn-outline-parchment:hover,
-.console-page .btn-outline-parchment:hover { background: var(--surface-2); }
-[data-theme="dark"] .btn-ribbon,
-.console-page .btn-ribbon { background-color: var(--green-glow); border-color: var(--green-glow); color: var(--forest-900); }
+[data-theme="dark"] .site-footer__panel { border: 1px solid var(--line); }
+[data-theme="dark"] .app-alert.alert-danger-ledger { background: rgba(243, 136, 122, 0.08); border-color: rgba(243, 136, 122, 0.45); color: #f6b3a9; }
+[data-theme="dark"] .btn-outline-parchment { background: transparent; }
+[data-theme="dark"] .btn-outline-parchment:hover { background: var(--surface-2); }
+[data-theme="dark"] .btn-ribbon { background-color: var(--green-glow); border-color: var(--green-glow); color: var(--forest-900); }
 [data-theme="dark"] .btn-ribbon:hover,
-[data-theme="dark"] .btn-ribbon:focus-visible,
-.console-page .btn-ribbon:hover,
-.console-page .btn-ribbon:focus-visible { background-color: var(--green-glow-hover); border-color: var(--green-glow-hover); color: var(--forest-900); }
-[data-theme="dark"] :focus-visible,
-.console-page :focus-visible { outline-color: var(--green-glow); }
-[data-theme="dark"] .level-scale__step.is-on,
-.console-page .level-scale__step.is-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px currentColor; }
-[data-theme="dark"] .code-snippet,
-.console-page .code-snippet { background: #040d09; border: 1px solid var(--line); }
+[data-theme="dark"] .btn-ribbon:focus-visible { background-color: var(--green-glow-hover); border-color: var(--green-glow-hover); color: var(--forest-900); }
+[data-theme="dark"] :focus-visible { outline-color: var(--green-glow); }
+[data-theme="dark"] .level-scale__step.is-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px currentColor; }
+[data-theme="dark"] .code-snippet { background: #040d09; border: 1px solid var(--line); }
 .code-snippet code { background: none; padding: 0; color: inherit; font-size: inherit; border-radius: 0; }
-[data-theme="dark"] .empty-state__icon,
-.console-page .empty-state__icon { color: var(--green-glow); }
+[data-theme="dark"] .empty-state__icon { color: var(--green-glow); }
 
 /* Header */
 .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; }
@@ -989,7 +1000,7 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 
 .case-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 1.25rem; margin-bottom: 1.5rem; }
 .case-header__eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--green-text); margin-bottom: 0.4rem; }
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-glow); box-shadow: 0 0 0 4px rgba(163, 217, 184, 0.15); }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-ring); }
 .case-header__title { font-family: var(--font-display); font-weight: 400; font-size: clamp(1.6rem, 3.2vw, 2.2rem); letter-spacing: -0.02em; color: var(--muted); margin: 0 0 0.75rem; overflow-wrap: anywhere; }
 .case-header__title strong { color: var(--ink); font-weight: 500; }
 .meta-chips { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -1033,30 +1044,29 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .verdict__meaning { font-size: 0.88rem; color: var(--muted); margin: 0.75rem 0 0; line-height: 1.5; }
 
 .sev-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0.9rem 0 0; }
-.sev-counts > div { background: rgba(0, 0, 0, 0.18); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.55rem 0.7rem; }
+.sev-counts > div { background: var(--well); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.55rem 0.7rem; }
 .sev-counts dt { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 500; color: var(--muted); }
 .sev-counts dd { margin: 0.2rem 0 0; font-family: var(--font-mono); font-size: 1.15rem; color: var(--ink); font-variant-numeric: tabular-nums; }
-.dot--real { background: var(--green-glow); }
-.dot--unsure { background: #6d8577; }
-.dot--noise { background: #34473c; border: 1px solid #5d7265; }
+.dot--real { background: var(--signal); }
+.dot--unsure { background: var(--unsure); }
+.dot--noise { background: var(--noise); border: 1px solid var(--noise-line); }
 
-.stack-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: rgba(0, 0, 0, 0.25); gap: 2px; }
-.stack-bar__seg--real { background: var(--green-glow); }
-.stack-bar__seg--unsure { background: #6d8577; }
-.stack-bar__seg--noise { background: #34473c; }
+.stack-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--well-strong); gap: 2px; }
+.stack-bar__seg--real { background: var(--signal); }
+.stack-bar__seg--unsure { background: var(--unsure); }
+.stack-bar__seg--noise { background: var(--noise); }
 
 /* Summary */
 .console-panel--summary .findings-summary { background: transparent; border: 0; padding: 0; color: var(--ink); line-height: 1.65; margin: 0; }
 .console-panel--summary .findings-summary--llm { background: var(--green-tint); border: 1px solid var(--green-tint-line); padding: 1rem 1.1rem; border-radius: var(--radius-sm); }
-[data-theme="dark"] .llm-attribution,
-.console-page .llm-attribution { border-top-color: var(--green-tint-line); }
+[data-theme="dark"] .llm-attribution { border-top-color: var(--green-tint-line); }
 
 /* Engine bars */
 .engine-bars { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.85rem; }
 .engine-bars__label { display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 0.3rem; }
 .engine-bars__n { font-family: var(--font-mono); color: var(--muted); font-size: 0.82rem; }
-.engine-bars__track { height: 6px; border-radius: 3px; background: rgba(0, 0, 0, 0.25); overflow: hidden; }
-.engine-bars__track span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4f8f6c, var(--green-glow)); min-width: 3px; }
+.engine-bars__track { height: 6px; border-radius: 3px; background: var(--well-strong); overflow: hidden; }
+.engine-bars__track span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--signal-soft), var(--signal)); min-width: 3px; }
 .engine-bars__hint { font-size: 0.74rem; color: var(--muted); margin: 0.3rem 0 0; }
 
 .trend-wrap { position: relative; height: 190px; }
@@ -1066,14 +1076,14 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .events-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 0.5rem 1rem; padding: 1.25rem 1.25rem 0.75rem; }
 .events-head__hint { font-size: 0.88rem; color: var(--muted); margin: 0.35rem 0 0; }
 .events-count { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); margin: 0; }
-.events-cap { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0 1.25rem 0.75rem; padding: 0.6rem 0.8rem; font-size: 0.82rem; color: var(--muted); background: rgba(0, 0, 0, 0.18); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.events-cap { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0 1.25rem 0.75rem; padding: 0.6rem 0.8rem; font-size: 0.82rem; color: var(--muted); background: var(--well); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .events-cap .bi { color: var(--green-text); margin-top: 2px; }
 
 .events-toolbar { display: flex; flex-wrap: wrap; gap: 0.6rem; padding: 0 1.25rem 1rem; border-bottom: 1px solid var(--line); }
 .events-search { position: relative; flex: 1 1 260px; margin: 0; }
 .events-search .bi { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.85rem; pointer-events: none; }
 .events-search input, .events-select select {
-  width: 100%; min-height: 40px; background: rgba(0, 0, 0, 0.25); color: var(--ink);
+  width: 100%; min-height: 40px; background: var(--well-strong); color: var(--ink);
   border: 1px solid var(--line); border-radius: 999px; font-size: 0.88rem;
 }
 .events-search input { padding: 0.45rem 0.9rem 0.45rem 2.2rem; }
@@ -1082,9 +1092,9 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239fb0a5' stroke-width='1.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 0.9rem center; }
 .events-select select option { background: var(--surface); color: var(--ink); }
-.events-search input:focus, .events-select select:focus { outline: none; border-color: var(--green-glow); box-shadow: 0 0 0 3px rgba(163, 217, 184, 0.18); }
+.events-search input:focus, .events-select select:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-ring); }
 
-.seg { display: inline-flex; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--well-strong); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
 .seg__btn { display: inline-flex; align-items: center; gap: 0.35rem; border: 0; background: none; color: var(--muted); font-size: 0.82rem; font-weight: 500; padding: 0.35rem 0.8rem; border-radius: 999px; min-height: 32px; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
 .seg__btn span:last-child { font-family: var(--font-mono); font-size: 0.75rem; opacity: 0.8; }
 .seg__btn:hover:not(:disabled) { color: var(--ink); }
@@ -1096,20 +1106,20 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .toggle-chip[aria-pressed="true"] { color: var(--green-text); border-color: var(--green-tint-line); background: var(--green-tint); }
 
 .events-cols, .event__row { display: grid; grid-template-columns: 96px 130px minmax(0, 1fr) minmax(0, 0.6fr) 120px 20px; gap: 1rem; align-items: center; padding: 0 1.25rem; }
-.events-cols { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding-top: 0.7rem; padding-bottom: 0.7rem; background: rgba(0, 0, 0, 0.15); border-bottom: 1px solid var(--line); }
+.events-cols { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding-top: 0.7rem; padding-bottom: 0.7rem; background: var(--well); border-bottom: 1px solid var(--line); }
 
 .event-list { list-style: none; padding: 0; margin: 0; }
 .event { border-bottom: 1px solid var(--line); }
-.event.is-open { background: rgba(0, 0, 0, 0.16); }
+.event.is-open { background: var(--well); }
 .event__row { width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding-top: 0.75rem; padding-bottom: 0.75rem; min-height: 52px; transition: background-color 0.15s; }
-.event__row:hover { background: rgba(255, 255, 255, 0.025); }
+.event__row:hover { background: var(--hover-tint); }
 .event__row:focus-visible { outline-offset: -2px; }
 .event__tool { font-size: 0.85rem; color: var(--ink); }
 .event__text { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event__loc { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event__conf { display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
-.conf-bar { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; max-width: 60px; }
-.conf-bar i { display: block; height: 100%; background: var(--green-glow); }
+.conf-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; max-width: 60px; }
+.conf-bar i { display: block; height: 100%; background: var(--signal); }
 .event--noise .event__text, .event--noise .event__tool { color: var(--muted); }
 .event__chev { color: var(--muted); transition: transform 0.2s var(--ease-out); }
 .event.is-open .event__chev { transform: rotate(180deg); }
@@ -1487,8 +1497,8 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   to   { opacity: 1; filter: blur(0); transform: none; }
 }
 
-/* No dark-page variant needed: .console-page re-points --surface to its own
-   ground, so the ring below already reads correctly on both. */
+/* No dark-page variant needed: the ring is drawn in var(--surface), which
+   each theme re-points, so it reads correctly on both. */
 
 @media (prefers-reduced-motion: reduce) {
   [data-resolve].is-resolved .level-scale__step,
