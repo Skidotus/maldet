@@ -151,3 +151,54 @@ document.addEventListener('DOMContentLoaded', function () {
 
   for (var j = 0; j < targets.length; j++) { io.observe(targets[j]); }
 })();
+
+// Theme toggle.
+//
+// The theme itself is already resolved and written to <html> by an inline
+// script in base.html's <head>, before the first paint. This only handles
+// the button and the remembering, so a slow main.js means a page that is
+// already the right colour with a button that is not wired up yet, rather
+// than a page that changes colour under the reader.
+(function () {
+  var root = document.documentElement;
+  var button = document.getElementById('themeToggle');
+
+  // The label names the destination, not the current state, because that is
+  // what a button press does. The icons are swapped by CSS.
+  function label() {
+    if (!button) { return; }
+    var dark = root.getAttribute('data-theme') === 'dark';
+    button.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+    button.setAttribute('title', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  }
+
+  function set(theme, remember) {
+    root.setAttribute('data-theme', theme);
+    label();
+    if (!remember) { return; }
+    try { window.localStorage.setItem('maldet-theme', theme); } catch (e) {}
+  }
+
+  label();
+
+  if (button) {
+    button.addEventListener('click', function () {
+      set(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark', true);
+    });
+  }
+
+  // Follow the system only until this visitor has chosen for themselves --
+  // after that, their choice outranks the operating system switching over
+  // at sunset.
+  var query = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (query) {
+    var onChange = function (event) {
+      var stored = null;
+      try { stored = window.localStorage.getItem('maldet-theme'); } catch (e) {}
+      if (stored) { return; }
+      set(event.matches ? 'dark' : 'light', false);
+    };
+    if (query.addEventListener) { query.addEventListener('change', onChange); }
+    else if (query.addListener) { query.addListener(onChange); }
+  }
+})();

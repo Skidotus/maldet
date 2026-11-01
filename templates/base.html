@@ -41,6 +41,31 @@
   <meta name="twitter:description" content="{{ self.og_description() }}">
   <meta name="twitter:image" content="{{ url_for('static', filename='img/og-card.jpg', _external=True) }}?v={{ og_version }}">
   <script>if ('IntersectionObserver' in window) document.documentElement.classList.add('js-reveal');</script>
+
+  {# Theme, resolved before the first paint.
+
+     Inline and in <head> on purpose: if this ran with the other scripts the
+     browser would paint the light theme and then repaint dark, which is the
+     flash of wrong theme that every themed site gets wrong once.
+
+     The attribute is always written explicitly, never left absent to mean
+     "follow the system", because the CSS matches on [data-theme="dark"]
+     alone -- one low-specificity selector that the report page's own dark
+     rules can still sit beside without a specificity fight.
+
+     localStorage throws in a browser with site data blocked, so the read is
+     guarded; failing it just means this visitor gets the system preference
+     and no memory of their choice. #}
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = window.localStorage.getItem('maldet-theme'); } catch (e) {}
+      var dark = stored
+        ? stored === 'dark'
+        : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    })();
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}app-page{% endblock %}">
@@ -59,6 +84,16 @@
                width="28" height="28" alt="" aria-hidden="true">
           <span class="brand__text">MalDet</span>
         </a>
+
+        {# Outside the collapse, so it is reachable on a phone without
+           opening the menu. Both icons are in the markup and CSS shows the
+           one for the theme you would get, so switching needs no JS to swap
+           an icon and the button is never momentarily blank. #}
+        <button class="theme-toggle" type="button" id="themeToggle"
+                aria-label="Switch to light theme">
+          <i class="bi bi-sun theme-toggle__sun" aria-hidden="true"></i>
+          <i class="bi bi-moon-stars theme-toggle__moon" aria-hidden="true"></i>
+        </button>
 
         <button class="nav-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain"
                 aria-controls="navMain" aria-expanded="false" aria-label="Toggle navigation">
