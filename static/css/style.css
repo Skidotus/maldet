@@ -148,8 +148,39 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
 }
 .brand__text { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; }
 
-.nav-toggler {
+.theme-toggle {
+  /* The only auto margin in the row, so everything after it is pushed to
+     the right as one group. The nav links used to carry this; they now sit
+     flush against the toggle on desktop. */
   margin-left: auto;
+  background: none;
+  border: 1px solid var(--forest-line);
+  border-radius: var(--radius-sm);
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--on-forest-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+}
+.theme-toggle:hover {
+  color: var(--on-forest);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(241, 240, 232, 0.24);
+}
+
+/* Each theme shows the icon for the theme you would get by pressing it, so
+   the button reads as an action rather than as a status light. */
+.theme-toggle__moon { display: none; }
+[data-theme="dark"] .theme-toggle__sun { display: none; }
+[data-theme="dark"] .theme-toggle__moon { display: inline-block; }
+
+.nav-toggler {
+  margin-left: 0.5rem;
   background: none;
   border: 1px solid var(--forest-line);
   border-radius: var(--radius-sm);
@@ -186,6 +217,11 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
 @media (min-width: 768px) {
   .site-nav__links.collapse:not(.show) { display: flex; }
   .nav-toggler { display: none; }
+  /* The theme toggle carries the auto margin now, so the links must not
+     also claim the free space -- two auto margins would split it and leave
+     the toggle floating in the middle of the header. Below this width the
+     links are collapsed and keep their own auto margin. */
+  .site-nav__links { margin-left: 0; }
 }
 
 /* ============================================================
@@ -597,6 +633,10 @@ code { color: var(--green-text); background: var(--green-tint); padding: 0.05em 
   background: var(--forest-900); color: var(--green-glow);
   font-family: var(--font-display); font-size: 1.6rem;
 }
+.team-card__avatar--photo {
+  object-fit: cover; background: var(--forest-900);
+  box-shadow: 0 0 0 2px var(--green-tint-line);
+}
 .team-card__name { font-size: 1.1rem; font-weight: 700; margin: 0.15rem 0 0.1rem; }
 .team-card__role { color: var(--green-text); font-size: 0.82rem; font-weight: 600; margin-bottom: 0.4rem; }
 .team-card__blurb:last-child { margin-bottom: 0; }
@@ -845,14 +885,25 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .llm-interim { color: var(--muted); font-size: 0.9375rem; }
 
 /* ============================================================
-   Report page — security console (SIEM-style)
-   The report page runs dark: it is a working screen people scan for
-   signal, and dark panels let the risk colours carry the meaning.
+   Dark palette — one definition, two triggers
+   The report page has always run dark: it is a working screen people
+   scan for signal, and dark panels let the risk colours carry the
+   meaning. Site-wide dark mode wants exactly that palette, so the two
+   share one block rather than keeping two sets of near-identical
+   values that drift apart the first time one is tweaked.
+
+   [data-theme="dark"] sits on <html> and covers the whole site.
+   .console-page sits on the report page's <body> and keeps that page
+   dark even while the rest of the site is light. Listing both in one
+   selector also sidesteps a specificity fight: they score the same, so
+   whichever came later would otherwise win by accident of line number.
+
    Tokens are re-pointed rather than every component restyled, so
    shared pieces (badges, buttons, alerts) adapt on their own.
    ============================================================ */
 [hidden] { display: none !important; }
 
+[data-theme="dark"],
 .console-page {
   --paper:     #07150f;
   --surface:   #0e231a;
@@ -868,25 +919,52 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   --medium-text:   #f0c45e;
   --high-text:     #f2a06b;
   --critical-text: #f3887a;
+
+  /* A lift shadow reads as grime on a dark ground. Dark surfaces are
+     separated by their own lightness and a hairline instead. */
   --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
+                 0 18px 40px rgba(0, 0, 0, 0.45);
+
+  --bs-body-bg: var(--paper);
   --bs-body-color: var(--ink);
   --bs-heading-color: var(--ink);
   --bs-link-color: var(--green-text);
+  --bs-link-hover-color: var(--green-glow-hover);
+  --bs-border-color: var(--line);
+  --bs-secondary-color: var(--muted);
+}
+
+/* The report page keeps its own ground, so it still reads as a console
+   rather than as the site with the lights off. */
+.console-page {
   background:
     radial-gradient(50% 40% at 85% 0%, rgba(163, 217, 184, 0.06), transparent 70%),
     var(--paper);
 }
 .console-page .site-container { max-width: 1320px; }
+[data-theme="dark"] .site-footer__panel,
 .console-page .site-footer__panel { border: 1px solid var(--line); }
+[data-theme="dark"] .app-alert.alert-danger-ledger,
 .console-page .app-alert.alert-danger-ledger { background: rgba(243, 136, 122, 0.08); border-color: rgba(243, 136, 122, 0.45); color: #f6b3a9; }
+[data-theme="dark"] .btn-outline-parchment,
 .console-page .btn-outline-parchment { background: transparent; }
+[data-theme="dark"] .btn-outline-parchment:hover,
 .console-page .btn-outline-parchment:hover { background: var(--surface-2); }
+[data-theme="dark"] .btn-ribbon,
 .console-page .btn-ribbon { background-color: var(--green-glow); border-color: var(--green-glow); color: var(--forest-900); }
-.console-page .btn-ribbon:hover, .console-page .btn-ribbon:focus-visible { background-color: var(--green-glow-hover); border-color: var(--green-glow-hover); color: var(--forest-900); }
+[data-theme="dark"] .btn-ribbon:hover,
+[data-theme="dark"] .btn-ribbon:focus-visible,
+.console-page .btn-ribbon:hover,
+.console-page .btn-ribbon:focus-visible { background-color: var(--green-glow-hover); border-color: var(--green-glow-hover); color: var(--forest-900); }
+[data-theme="dark"] :focus-visible,
 .console-page :focus-visible { outline-color: var(--green-glow); }
+[data-theme="dark"] .level-scale__step.is-on,
 .console-page .level-scale__step.is-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px currentColor; }
+[data-theme="dark"] .code-snippet,
 .console-page .code-snippet { background: #040d09; border: 1px solid var(--line); }
 .code-snippet code { background: none; padding: 0; color: inherit; font-size: inherit; border-radius: 0; }
+[data-theme="dark"] .empty-state__icon,
 .console-page .empty-state__icon { color: var(--green-glow); }
 
 /* Header */
@@ -957,6 +1035,7 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 /* Summary */
 .console-panel--summary .findings-summary { background: transparent; border: 0; padding: 0; color: var(--ink); line-height: 1.65; margin: 0; }
 .console-panel--summary .findings-summary--llm { background: var(--green-tint); border: 1px solid var(--green-tint-line); padding: 1rem 1.1rem; border-radius: var(--radius-sm); }
+[data-theme="dark"] .llm-attribution,
 .console-page .llm-attribution { border-top-color: var(--green-tint-line); }
 
 /* Engine bars */
@@ -1202,7 +1281,7 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 }
 
 /* ---------------------------------------------------------------- *
- * Hero constellation
+ * Hero code wall
  * ---------------------------------------------------------------- */
 
 /* Sits between the hero's gradient background and its content, which is
@@ -1218,15 +1297,15 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   z-index: 0;
   width: 100%;
   height: 100%;
-  opacity: 0.5;
+  opacity: 0.34;
   pointer-events: none;
 }
 
-/* The canvas draws a single static frame under reduced motion, so the
-   texture stays and only the movement goes. Dimmed a little further,
-   because a still image of it reads heavier than the drifting version. */
+/* The canvas draws a single static frame under reduced motion, so the code
+   stays and only the drifting goes. Dimmed a little further, because a wall
+   of text that never moves reads heavier than one that does. */
 @media (prefers-reduced-motion: reduce) {
-  .hero__canvas { opacity: 0.35; }
+  .hero__canvas { opacity: 0.26; }
 }
 
 /* ---------------------------------------------------------------- *
