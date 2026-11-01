@@ -245,6 +245,134 @@ def repo_for_summary(cur, repo_id):
     return cur.fetchone()
 
 
+def process(cur, targets, args, skip):
+    """Summarise every repo in `targets`. Returns (written, failed, stopped).
+
+    `skip` collects ids that produced nothing, so --watch does not retry a
+    repo the model cannot summarise every few minutes for the rest of the
+    night. stopped=True means Ollama went away and did not come back.
+    """
+    done = failed = 0
+    for i, repo in enumerate(targets, 1):
+        groups, total = grouped_findings(cur, repo["id"])
+        label = f"[{i}/{len(targets)}] {repo['full_name']}"
+        if not groups:
+            print(f"{label}: no findings, skipped")
+            skip.add(repo["id"])
+            continue
+
+        mal = sum(1 for g in groups if g["category"] == "malicious_pattern")
+        print(f"{label}  {total:,} findings in {len(groups)} groups "
+              f"({mal} malware)  risk={repo['risk_level']}")
+
+        if args.dry_run:
+            continue
+
+        started = time.time()
+        text = summarize_one(cur, repo)
+
+        if not text:
+            # Distinguish "this repo produced nothing" from "Ollama is
+            # gone". On 2026-10-07 the service was oom-killed 19 repos
+            # into a run of 158; it restarted four seconds later, but
+            # this loop had already raced through every remaining repo
+            # at 0s each, marking them unavailable for a reason that had
+            # nothing to do with them. Waiting for the service to come
+            # back is almost always right, because the unit restarts
+            # itself -- so wait, and only give up if it stays down.
+            if not llm_summary.is_available():
+                if not _wait_for_ollama():
+                    print("\n    Ollama did not come back. Stopping here rather "
+                          "than marking every remaining repo unavailable.")
+                    print(f"    {len(targets) - i} repos left; re-run to continue.")
+                    return done, failed, True
+                print("    Ollama is back, retrying this repo")
+                text = summarize_one(cur, repo)
+
+        if not text:
+            print(f"    no summary produced ({time.time()-started:.0f}s), marked unavailable")
+            skip.add(repo["id"])
+            failed += 1
+            continue
+        done += 1
+        print(f"    stored {len(text)} chars in {time.time()-started:.0f}s")
+        if args.show:
+            print(f"    {text}\n")
+    return done, failed, False
+
+
+def _close_quietly(db):
+    if db is not None:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def watch(args):
+    """--watch: after the backlog, keep checking for repos without a summary.
+
+    The VPS cannot run the model, so a scan there always finishes with the
+    rule-based summary, and a rescan clears the old AI one. Without this a
+    repo scanned after the backfill started waited for the next manual run.
+    Checks every --every minutes until stopped; costs a single query while
+    idle, and the model is only loaded when there is something to write
+    (llm_summary's keep_alive unloads it about a minute later).
+
+    Owns its connection, and replaces it after any database error: a dropped
+    tunnel or a laptop that slept leaves a dead socket, and PyMySQL's ping()
+    does not reconnect by default (reconnect=True is deprecated), so reusing
+    the old object would report "unreachable" forever after the tunnel came
+    back. Repos that produced no summary are skipped until the next restart,
+    or one the model cannot handle would be retried all night.
+    """
+    skip = set()
+    total_done = 0
+    db = None
+    wait = args.every * 60
+    print(f"watching : checking every {args.every:g} min, Ctrl+C or "
+          f"`pkill -f backfill_summaries.py` to stop\n", flush=True)
+    try:
+        while True:
+            try:
+                if db is None:
+                    db = connect(autocommit=True)
+                else:
+                    db.ping()
+                cur = db.cursor(pymysql.cursors.DictCursor)
+                targets = [r for r in repos_needing_summary(cur, args.repo, False, args.limit)
+                           if r["id"] not in skip]
+            except pymysql.MySQLError as e:
+                print(f"{time.strftime('%H:%M')}  database unreachable ({e.args[0]}): "
+                      f"is the tunnel up? retrying in {args.every:g} min", flush=True)
+                _close_quietly(db)
+                db = None
+                time.sleep(wait)
+                continue
+
+            if targets:
+                if not llm_summary.is_available() and not _wait_for_ollama():
+                    print(f"{time.strftime('%H:%M')}  Ollama unreachable; "
+                          f"retrying in {args.every:g} min", flush=True)
+                    time.sleep(wait)
+                    continue
+                print(f"{time.strftime('%H:%M')}  {len(targets)} repo(s) need a summary")
+                try:
+                    done, _failed, _stopped = process(cur, targets, args, skip)
+                except pymysql.MySQLError as e:
+                    print(f"    database connection lost ({e.args[0]}); "
+                          f"reconnecting next round", flush=True)
+                    _close_quietly(db)
+                    db = None
+                    done = 0
+                total_done += done
+                print(f"{time.strftime('%H:%M')}  round done, {total_done} written "
+                      f"since start; waiting\n", flush=True)
+            time.sleep(wait)
+    finally:
+        _close_quietly(db)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().split("\n")[0])
     ap.add_argument("--limit", type=int, help="stop after this many repos")
@@ -254,7 +382,17 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="show what would be done, generate nothing, write nothing")
     ap.add_argument("--show", action="store_true", help="print each summary")
+    ap.add_argument("--watch", action="store_true",
+                    help="after the backlog, keep checking for new or rescanned "
+                         "repos without a summary until stopped")
+    ap.add_argument("--every", type=float, default=2, metavar="MIN",
+                    help="with --watch: minutes between checks (default 2)")
     args = ap.parse_args()
+    if args.watch and (args.dry_run or args.force):
+        ap.error("--watch cannot be combined with --dry-run or --force "
+                 "(both would repeat the same repos every round)")
+    if args.every <= 0:
+        ap.error("--every must be more than 0 minutes")
 
     # Stated up front because the whole point of DB_PORT is that it changes
     # which database this writes to.
@@ -266,6 +404,13 @@ def main():
         print("Nothing written. Start it and re-run:  systemctl --user start ollama")
         return 1
 
+    if args.watch:
+        try:
+            watch(args)
+        except KeyboardInterrupt:
+            print("\nstopped watching")
+        return 0
+
     db = connect(autocommit=True)
     try:
         cur = db.cursor(pymysql.cursors.DictCursor)
@@ -276,51 +421,7 @@ def main():
             print("Nothing to do.")
             return 0
 
-        done = failed = 0
-        for i, repo in enumerate(targets, 1):
-            groups, total = grouped_findings(cur, repo["id"])
-            label = f"[{i}/{len(targets)}] {repo['full_name']}"
-            if not groups:
-                print(f"{label}: no findings, skipped")
-                continue
-
-            mal = sum(1 for g in groups if g["category"] == "malicious_pattern")
-            print(f"{label}  {total:,} findings in {len(groups)} groups "
-                  f"({mal} malware)  risk={repo['risk_level']}")
-
-            if args.dry_run:
-                continue
-
-            started = time.time()
-            text = summarize_one(cur, repo)
-
-            if not text:
-                # Distinguish "this repo produced nothing" from "Ollama is
-                # gone". On 2026-10-07 the service was oom-killed 19 repos
-                # into a run of 158; it restarted four seconds later, but
-                # this loop had already raced through every remaining repo
-                # at 0s each, marking them unavailable for a reason that had
-                # nothing to do with them. Waiting for the service to come
-                # back is almost always right, because the unit restarts
-                # itself -- so wait, and only give up if it stays down.
-                if not llm_summary.is_available():
-                    if not _wait_for_ollama():
-                        print("\n    Ollama did not come back. Stopping here rather "
-                              "than marking every remaining repo unavailable.")
-                        print(f"    {len(targets) - i} repos left; re-run to continue.")
-                        break
-                    print("    Ollama is back, retrying this repo")
-                    text = summarize_one(cur, repo)
-
-            if not text:
-                print(f"    no summary produced ({time.time()-started:.0f}s), marked unavailable")
-                failed += 1
-                continue
-            done += 1
-            print(f"    stored {len(text)} chars in {time.time()-started:.0f}s")
-            if args.show:
-                print(f"    {text}\n")
-
+        done, failed, _stopped = process(cur, targets, args, set())
         print(f"\nwritten: {done}   not produced: {failed}")
         return 0
     finally:

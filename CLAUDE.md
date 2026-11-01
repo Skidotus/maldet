@@ -160,7 +160,12 @@ in SQL (one repo has 157k findings but 557 groups) so it is cheap over a slow
 link, and shares `summarize_one()` with `worker.py` so scan-time and
 after-the-fact summaries cannot drift. Survives Ollama being killed mid-batch
 by waiting for the service to restart rather than marking every remaining
-repo unavailable.
+repo unavailable. `--watch` keeps it running after the backlog,
+re-checking every `--every` minutes (default 2) for new or rescanned repos
+without a summary. That is how deployed scans get one, since the VPS runs
+with `MALDET_OLLAMA_DISABLE=1`. Repos that produce nothing are skipped
+until restart rather than retried every round, and a dropped DB connection
+(the tunnel) is retried next round instead of ending the watch.
 
 **`evaluate_summaries.py`** — scores summaries against eight mechanical
 checks (fabricated numbers/files/advisory-ids/tools, invented score scales,
