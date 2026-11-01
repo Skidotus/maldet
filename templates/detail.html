@@ -216,7 +216,7 @@
         </div>
 
       {% elif findings_summary %}
-        <p class="findings-summary">{{ findings_summary }}</p>
+        <p class="findings-summary" id="ruleSummary">{{ findings_summary }}</p>
       {% endif %}
     </section>
 
@@ -439,6 +439,51 @@
     apply();
   })();
 </script>
+
+{% if llm_awaiting %}
+<script>
+  // Quiet wait for a fresh scan: no summary is being written on this server
+  // (status "unavailable"), but one may arrive from a laptop running
+  // backfill_summaries.py --watch. Nothing is shown while waiting -- the
+  // rule-based summary is already on screen -- and if one lands it replaces
+  // that text, looking exactly as if it had been there from the start.
+  (function () {
+    var rule = document.getElementById('ruleSummary');
+    if (!rule) { return; }
+    var repoId = {{ repo.id | tojson }};
+    var deadline = Date.now() + {{ llm_await_s | int }} * 1000;
+
+    function swapIn(summary) {
+      var box = document.createElement('div');
+      box.className = 'findings-summary findings-summary--llm llm-arrived';
+      var p = document.createElement('p');
+      p.className = 'mb-2';
+      p.textContent = summary;
+      var by = document.createElement('p');
+      by.className = 'llm-attribution mb-0';
+      by.innerHTML = '<i class="bi bi-cpu me-1" aria-hidden="true"></i>';
+      by.appendChild(document.createTextNode('Written by a local language model from the findings below. '
+        + 'The risk scores come from the classifier, not from this summary.'));
+      box.appendChild(p);
+      box.appendChild(by);
+      rule.replaceWith(box);
+    }
+
+    function poll() {
+      if (Date.now() > deadline) { return; }
+      fetch('/api/summary/' + repoId)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) { return; }
+          if (d.summary) { swapIn(d.summary); return; }
+          setTimeout(poll, 5000);
+        })
+        .catch(function () { setTimeout(poll, 8000); });
+    }
+    setTimeout(poll, 3000);
+  })();
+</script>
+{% endif %}
 
 {% if llm_pending %}
 <script>
