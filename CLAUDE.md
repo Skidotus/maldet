@@ -207,12 +207,21 @@ URL, so the error sits next to a form that can be corrected.
 **`scan_status.html`** — `job` and `job_id`. `job` is shaped by
 `app.py:_job_payload()`, not the raw `scan_jobs` row: `status`, `stage`,
 `repo`, `repo_id`, `error`, `started_at` (falls back to `queued_at`, since a
-queued job has not started) and `position`. **`position` is how many scans
+queued job has not started), `position` and `elapsed_s` (seconds since
+`started_at`, computed server-side because job_queue stamps times with the
+server's `datetime.now()` and a visitor's clock or timezone would skew it;
+the page only counts up locally between polls). **`position` is how many scans
 are ahead of this one** — scans run strictly one at a time, so a visitor can
 genuinely be waiting behind someone else and the page says so rather than
 showing an unexplained spinner. The page polls `/api/scan-status/<job_id>`
 every 2s and must keep polling while `status` is `queued` *or* `running`; a
-queued job that is not polled looks frozen forever.
+queued job that is not polled looks frozen forever. Laid out like the report
+page (eyebrow + `owner / name` header, `console-panel`s): a "Now" panel
+with the live stage in large type, "Step n of 13 · m:ss elapsed" and the
+queue notice, beside the progress track. The eyebrow, step counter and
+queue notice all switch with state (queued / running / failed) without a
+reload. The track's `data-stage` values must match `scanner.py`'s
+`report()` strings exactly.
 
 **`detail.html`** — `repo`, `risk`, `findings`, `tools`, `tool_totals`,
 `findings_summary` (the rule-based text), `finding_counts` (`total` /

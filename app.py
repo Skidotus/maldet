@@ -244,6 +244,10 @@ def _job_payload(job, job_id):
         # submitted instead of leaving the visitor with a blank timestamp.
         "started_at": (job["started_at"] or job["queued_at"]),
         "position":   job_queue.queue_position(job_id),
+        # Seconds since the job started (or was queued), computed here rather
+        # than in the browser: job_queue stamps times with this server's
+        # datetime.now(), and a visitor's clock or timezone would skew it.
+        "elapsed_s":  max(0, int((datetime.now() - (job["started_at"] or job["queued_at"])).total_seconds())),
     }
 
 
