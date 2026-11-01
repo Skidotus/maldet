@@ -165,7 +165,12 @@ re-checking every `--every` minutes (default 2) for new or rescanned repos
 without a summary. That is how deployed scans get one, since the VPS runs
 with `MALDET_OLLAMA_DISABLE=1`. Repos that produce nothing are skipped
 until restart rather than retried every round, and a dropped DB connection
-(the tunnel) is retried next round instead of ending the watch.
+(the tunnel) is retried next round instead of ending the watch. The backlog is
+worked worst-risk-first, but before every repo it checks for one scanned in
+the last `--recent` minutes (default 30, `0` = off) and does that first,
+newest first, so a fresh scan (a demo, say) does not wait hours behind the
+backlog. The window is computed by MySQL (`NOW()` against
+`repositories.scanned_at`), never the laptop's clock.
 
 **`evaluate_summaries.py`** — scores summaries against eight mechanical
 checks (fabricated numbers/files/advisory-ids/tools, invented score scales,
@@ -245,7 +250,15 @@ trend chart is a canvas, so it reads those tokens itself and redraws on a
 `update('none')`, which keeps the points in the old theme's colour.
 Code snippets stay dark in both themes on purpose.
 
-- `llm_summary` / `llm_pending` — three display states, not two. A summary is
+- `llm_summary` / `llm_pending` / `llm_awaiting` — three display states plus
+  a quiet fourth. `llm_awaiting` is true for a scan under 10 minutes old
+  (`app.py:LLM_AWAIT_WINDOW_S`, age from MySQL's `NOW()` against
+  `scanned_at`) with no summary and nothing pending. That is every fresh
+  scan on the VPS, which runs with the LLM disabled. The page shows the
+  rule-based summary as normal and polls `/api/summary` every 5s, swapping
+  in an AI summary written meanwhile by a laptop running
+  `backfill_summaries.py --watch`. No spinner, because usually none comes.
+  The original three: A summary is
   written *after* the scan finishes (20-60s of CPU), so arriving with none is
   normal. `llm_summary` set → show it. `llm_pending` true → show the
   placeholder, poll `/api/summary/<repo_id>` every 3s, and give up after 4

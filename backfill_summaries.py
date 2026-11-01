@@ -39,10 +39,21 @@ SEVERITY_RANK_SQL = "CASE severity WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 
 RANK_TO_SEVERITY = {3: "high", 2: "medium", 1: "low"}
 
 
-def repos_needing_summary(cur, only_repo=None, force=False, limit=None):
-    """Repos with findings and no stored summary, worst risk first."""
+def repos_needing_summary(cur, only_repo=None, force=False, limit=None,
+                          scanned_within=None):
+    """Repos with findings and no stored summary, worst risk first.
+
+    With scanned_within=N, only repos scanned in the last N minutes, newest
+    first -- the fresh-scan check that lets a new scan jump the backlog.
+    The window is computed by the database (NOW() against scanned_at, which
+    save_to_db() also sets with NOW()), so this laptop's clock never enters
+    into it.
+    """
     where = ["EXISTS (SELECT 1 FROM scan_results s WHERE s.repo_id = r.id)"]
     params = []
+    if scanned_within:
+        where.append("r.scanned_at >= NOW() - INTERVAL %s MINUTE")
+        params.append(int(scanned_within))
     if not force:
         where.append("(rs.llm_summary IS NULL OR rs.llm_summary = '')")
     if only_repo:
@@ -52,11 +63,12 @@ def repos_needing_summary(cur, only_repo=None, force=False, limit=None):
     sql = f"""
         SELECT r.id, CONCAT(r.owner, '/', r.repo_name) AS full_name,
                rs.vuln_score, rs.vuln_level, rs.malware_score, rs.malware_level,
-               rs.risk_level
+               rs.risk_level,
+               TIMESTAMPDIFF(MINUTE, r.scanned_at, NOW()) AS age_min
         FROM repositories r
         JOIN risk_scores rs ON rs.repo_id = r.id
         WHERE {' AND '.join(where)}
-        ORDER BY rs.final_score DESC
+        ORDER BY {'r.scanned_at DESC' if scanned_within else 'rs.final_score DESC'}
     """
     if limit:
         sql += " LIMIT %s"
@@ -245,6 +257,18 @@ def repo_for_summary(cur, repo_id):
     return cur.fetchone()
 
 
+def _fresh_scan(cur, args, skip, handled):
+    """The newest repo scanned within --recent minutes that still needs a
+    summary and has not been tried in this run, or None."""
+    if not args.recent or args.dry_run:
+        return None
+    for r in repos_needing_summary(cur, args.repo, False, None,
+                                   scanned_within=args.recent):
+        if r["id"] not in skip and r["id"] not in handled:
+            return r
+    return None
+
+
 def process(cur, targets, args, skip):
     """Summarise every repo in `targets`. Returns (written, failed, stopped).
 
@@ -253,9 +277,31 @@ def process(cur, targets, args, skip):
     night. stopped=True means Ollama went away and did not come back.
     """
     done = failed = 0
-    for i, repo in enumerate(targets, 1):
+    queue = list(targets)
+    handled = set()
+    i = 0
+    while True:
+        # A repo scanned in the last --recent minutes goes first, newest
+        # first. Checked before every repo, because the backlog is worked
+        # worst-risk-first and can run for hours: without this, someone who
+        # scans a repo mid-backlog -- or during a demo -- sees the rule-based
+        # summary until everything ahead of it is done. One cheap query per
+        # repo, against a model call of 30-75 seconds.
+        repo = _fresh_scan(cur, args, skip, handled)
+        if repo is not None:
+            queue = [q for q in queue if q["id"] != repo["id"]]
+            label = f"[new scan, {repo['age_min']} min ago] {repo['full_name']}"
+        elif not queue:
+            break
+        else:
+            repo = queue.pop(0)
+            if repo["id"] in handled or repo["id"] in skip:
+                continue
+            i += 1
+            label = f"[{i}/{len(targets)}] {repo['full_name']}"
+        handled.add(repo["id"])
+
         groups, total = grouped_findings(cur, repo["id"])
-        label = f"[{i}/{len(targets)}] {repo['full_name']}"
         if not groups:
             print(f"{label}: no findings, skipped")
             skip.add(repo["id"])
@@ -284,7 +330,7 @@ def process(cur, targets, args, skip):
                 if not _wait_for_ollama():
                     print("\n    Ollama did not come back. Stopping here rather "
                           "than marking every remaining repo unavailable.")
-                    print(f"    {len(targets) - i} repos left; re-run to continue.")
+                    print(f"    {len(queue)} repos left; re-run to continue.")
                     return done, failed, True
                 print("    Ollama is back, retrying this repo")
                 text = summarize_one(cur, repo)
@@ -387,10 +433,15 @@ def main():
                          "repos without a summary until stopped")
     ap.add_argument("--every", type=float, default=2, metavar="MIN",
                     help="with --watch: minutes between checks (default 2)")
+    ap.add_argument("--recent", type=int, default=30, metavar="MIN",
+                    help="before each repo, do any repo scanned in the last MIN "
+                         "minutes first, newest first (default 30; 0 turns it off)")
     args = ap.parse_args()
     if args.watch and (args.dry_run or args.force):
         ap.error("--watch cannot be combined with --dry-run or --force "
                  "(both would repeat the same repos every round)")
+    if args.recent < 0:
+        ap.error("--recent must be 0 (off) or more minutes")
     if args.every <= 0:
         ap.error("--every must be more than 0 minutes")
 
