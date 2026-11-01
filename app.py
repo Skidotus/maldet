@@ -498,6 +498,13 @@ def _report_context(cursor, repo_id):
     }
 
 
+# How long after a scan the report keeps quietly checking for an AI summary
+# written elsewhere (backfill_summaries.py --watch on a laptop). Long enough
+# for a summariser that was mid-way through another repo, short enough that
+# an old report never polls.
+LLM_AWAIT_WINDOW_S = 10 * 60
+
+
 @app.route('/api/summary/<int:repo_id>')
 def api_summary(repo_id):
     """The plain-English summary for one repo, for the detail page to poll.
@@ -608,8 +615,12 @@ def detail(repo_id):
 
     try:
         # Get repo info
+        # scanned_age_s comes from MySQL (NOW() against scanned_at, which
+        # save_to_db() also sets with NOW()), so the app's own clock and
+        # timezone never enter into it -- see llm_awaiting below.
         cursor.execute("""
-            SELECT * FROM repositories WHERE id = %s
+            SELECT *, TIMESTAMPDIFF(SECOND, scanned_at, NOW()) AS scanned_age_s
+            FROM repositories WHERE id = %s
         """, (repo_id,))
         repo = cursor.fetchone()
 
@@ -715,10 +726,21 @@ def detail(repo_id):
         # rows from before the column existed -- means stop waiting.
         llm_pending = (risk or {}).get("llm_summary_status") == "pending" \
                       and not llm_summary_text
+        # A fourth, quiet state for a fresh scan with no summary coming from
+        # this server. The VPS runs with the LLM disabled, so its scans finish
+        # "unavailable"; a laptop running backfill_summaries.py --watch may
+        # still write one within a minute or two. The page shows the
+        # rule-based text as normal and swaps the AI summary in if it lands
+        # -- no spinner, so nothing looks wrong when no laptop is attached.
+        age = repo.get("scanned_age_s")
+        llm_awaiting = (not llm_summary_text and not llm_pending
+                        and age is not None and 0 <= age <= LLM_AWAIT_WINDOW_S)
 
         return render_template('detail.html',
             llm_summary   = llm_summary_text,
             llm_pending   = llm_pending,
+            llm_awaiting  = llm_awaiting,
+            llm_await_s   = (LLM_AWAIT_WINDOW_S - age) if llm_awaiting else 0,
             repo          = repo,
             risk          = risk,
             findings      = findings,

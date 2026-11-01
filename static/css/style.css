@@ -1621,3 +1621,10 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   .btn:active:not(:disabled),
   #scanSubmitBtn:active:not(:disabled) { transform: none; }
 }
+
+/* An AI summary that arrived while the report was open (see detail.html's
+   llm_awaiting script) fades in rather than snapping, so the change reads
+   as "it arrived" instead of a layout glitch. */
+.llm-arrived { animation: llm-arrive 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes llm-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .llm-arrived { animation: none; } }
