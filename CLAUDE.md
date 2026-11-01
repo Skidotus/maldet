@@ -218,10 +218,18 @@ queued job that is not polled looks frozen forever.
 `findings_summary` (the rule-based text), `finding_counts` (`total` /
 `likely_real` / `likely_noise` over *all* findings, not the capped list),
 `history_dates`/`history_scores` (JSON for the chart), plus the two below.
-Laid out as a dark security console (`body.console-page` re-points the
-colour tokens): verdict panels, summary / engine / trend row, then a
-findings log filtered client-side and paged 50 at a time. `findings` is
-capped at 200 per engine, so the log says so when it is truncated.
+Laid out as a security console: verdict panels, summary / engine / trend
+row, then a findings log filtered client-side and paged 50 at a time.
+`findings` is capped at 200 per engine, so the log says so when it is
+truncated. It follows the light/dark theme like every other page. It used
+to be dark in both, which left the theme toggle visibly doing nothing
+there; don't reintroduce a page-level palette (`body.console-page` now
+only sets the page's ground and width). Its console colours are the
+`--well` / `--signal` / `--track` / `--unsure` / `--noise` tokens. The
+trend chart is a canvas, so it reads those tokens itself and redraws on a
+`data-theme` change. Use a full `chart.update()` there, not
+`update('none')`, which keeps the points in the old theme's colour.
+Code snippets stay dark in both themes on purpose.
 
 - `llm_summary` / `llm_pending` — three display states, not two. A summary is
   written *after* the scan finishes (20-60s of CPU), so arriving with none is
@@ -268,6 +276,16 @@ Styling lives in `static/css/style.css`: a forest-green / off-white "paper"
 theme over Bootstrap, with tokens on `:root`. Below 768px, tables marked
 `table-stack` turn each row into a card so both verdicts stay visible. There is no build step and no framework: templates are Jinja,
 scripts are inline vanilla JS in each template's `{% block scripts %}`.
+
+**Light / dark theme.** An inline script in `base.html`'s `<head>` writes
+`data-theme` on `<html>` before first paint (stored choice in
+`localStorage['maldet-theme']`, else the OS preference); `main.js` wires
+the toggle. Dark mode is one block, `[data-theme="dark"] { ... }`, that
+re-points the `:root` tokens. So every colour a component uses must be a
+token with a value in **both** blocks. A literal hex or `rgba()` stays the
+same in both themes, which is how the tools-section verdict pills ended up
+as pastel stickers on the dark cards. Literals are fine only on surfaces
+that are dark in both themes (the forest panels, the code blocks).
 
 ## Branching
 

@@ -495,19 +495,41 @@
             crossorigin="anonymous"></script>
     <script>
       Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-      new Chart(document.getElementById('trendChart'), {
+
+      // Colours come from the theme's tokens rather than literals, so the
+      // chart matches whichever theme is on -- and is re-read when the
+      // toggle flips data-theme, since a canvas does not restyle itself.
+      function trendColours() {
+        var css = getComputedStyle(document.documentElement);
+        function token(name) { return css.getPropertyValue(name).trim(); }
+        return { line: token('--signal'), fill: token('--signal-ring'),
+                 text: token('--muted'),  grid: token('--line') };
+      }
+      function applyTrendColours(chart) {
+        var c = trendColours();
+        var ds = chart.data.datasets[0];
+        ds.borderColor = c.line; ds.pointBackgroundColor = c.line; ds.pointBorderColor = c.line; ds.backgroundColor = c.fill;
+        ['x', 'y'].forEach(function (axis) {
+          chart.options.scales[axis].ticks.color = c.text;
+          chart.options.scales[axis].grid.color = c.grid;
+        });
+      }
+
+      var initial = trendColours();
+      var trendChart = new Chart(document.getElementById('trendChart'), {
         type: 'line',
         data: {
           labels: {{ history_dates | safe }}.map(function (d) { return d.slice(0, 10); }),
           datasets: [{
             label: 'Risk score',
             data: {{ history_scores | safe }},
-            borderColor: '#a3d9b8',
-            backgroundColor: 'rgba(163, 217, 184, 0.12)',
+            borderColor: initial.line,
+            backgroundColor: initial.fill,
+            pointBackgroundColor: initial.line,
+            pointBorderColor: initial.line,
             tension: 0.25,
             fill: true,
-            pointRadius: 3,
-            pointBackgroundColor: '#a3d9b8'
+            pointRadius: 3
           }]
         },
         options: {
@@ -516,11 +538,17 @@
           animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined,
           plugins: { legend: { display: false } },
           scales: {
-            x: { ticks: { color: '#9fb0a5', maxRotation: 0 }, grid: { color: 'rgba(241, 240, 232, 0.06)' } },
-            y: { beginAtZero: true, ticks: { color: '#9fb0a5' }, grid: { color: 'rgba(241, 240, 232, 0.06)' } }
+            x: { ticks: { color: initial.text, maxRotation: 0 }, grid: { color: initial.grid } },
+            y: { beginAtZero: true, ticks: { color: initial.text }, grid: { color: initial.grid } }
           }
         }
       });
+      // A full update(), not update('none'): the 'none' mode keeps the
+      // points' cached colours, so they stayed in the old theme.
+      new MutationObserver(function () {
+        applyTrendColours(trendChart);
+        trendChart.update();
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     </script>
   {% endif %}
 {% endblock %}
