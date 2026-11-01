@@ -1,87 +1,111 @@
 {% extends "base.html" %}
 
-{% block title %}Scanning{% endblock %}
+{% set owner, _, name = job.repo.partition('/') %}
+{% set state = 'failed' if job.status == 'error' else ('done' if job.status == 'done' else ('queued' if job.position else 'running')) %}
+
+{% block title %}{{ 'Scan failed' if state == 'failed' else 'Scanning' }} {{ job.repo }}{% endblock %}
 
 {% block content %}
+<div class="scan-page">
 
-  <div class="mb-4">
-    <h1 class="mb-1">Scanning</h1>
-    <p class="text-muted mb-0">Safe to refresh or reopen this tab — the scan keeps running on the server.</p>
-  </div>
-
-  <div class="ledger-book" style="max-width: 640px;">
-    <div class="ledger-book__header">
-      <h2 class="h6 mb-0 font-monospace">{{ job.repo }}</h2>
+  <header class="case-header scan-page__header">
+    <div>
+      <p class="case-header__eyebrow scan-page__eyebrow scan-page__eyebrow--{{ state }}" id="scanEyebrow">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span id="scanEyebrowText">{{ {'failed': 'Scan failed', 'done': 'Scan complete', 'queued': 'Queued', 'running': 'Scan in progress'}[state] }}</span>
+      </p>
+      <h1 class="case-header__title">{% if name %}{{ owner }} / <strong>{{ name }}</strong>{% else %}<strong>{{ job.repo }}</strong>{% endif %}</h1>
+      <ul class="meta-chips">
+        <li><i class="bi bi-clock" aria-hidden="true"></i> Submitted {{ job.started_at.strftime('%d %b %Y, %H:%M') }}</li>
+        <li><a href="https://github.com/{{ job.repo }}" target="_blank" rel="noopener noreferrer"><i class="bi bi-github" aria-hidden="true"></i> View on GitHub<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+      </ul>
     </div>
-    <div class="p-4">
+  </header>
 
-      {% if job.status == 'error' %}
-        <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorText">{{ job.error }}</div>
-        <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
+  {% if job.status == 'error' %}
+    <section class="console-panel scan-failed" aria-labelledby="scanFailedTitle">
+      <h2 class="console-panel__title" id="scanFailedTitle">What went wrong</h2>
+      <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorText">{{ job.error }}</div>
+      <p class="scan-note">Check the repository is public and the name is spelled correctly, then try again.</p>
+      <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
+    </section>
 
-      {% elif job.status == 'done' %}
-        <p class="mb-0">Scan complete — redirecting to results…</p>
+  {% elif job.status == 'done' %}
+    <section class="console-panel">
+      <p class="mb-0">Scan complete. Opening the report…</p>
+    </section>
 
-      {% else %}
-        <div id="scanRunning">
-          {# Scans run one at a time so a large repo cannot starve the box of
-             memory, which means a visitor may genuinely be waiting behind
-             someone else. Saying so beats an unexplained spinner. #}
-          <p id="scanQueue" class="form-text mt-0 mb-3"{% if not job.position %} style="display: none;"{% endif %}>
-            Waiting behind <span id="scanQueuePos">{{ job.position }}</span> other scan(s) — scans run one at a time.
-          </p>
+  {% else %}
+    <div class="scan-grid" id="scanRunning">
 
-          {# The server already reports each of these by name as it reaches
-             it, and this page already polls for them. Showing the sequence
-             turns "something is happening" into "four of six engines have
-             finished" -- the same information the spinner was withholding.
+      <section class="console-panel scan-now" aria-labelledby="scanNowTitle">
+        <h2 class="console-panel__title" id="scanNowTitle">Now</h2>
 
-             data-stage values must match scanner.py's report() strings
-             exactly; the script maps the live stage onto this list by that
-             string and falls back to a plain label if it ever sees one it
-             does not recognise. #}
-          <ol class="scan-track" id="scanTrack" aria-label="Scan progress">
-            <li class="scan-track__rail" aria-hidden="true"><span id="scanRail"></span></li>
+        {# The live stage, as large as anything on the page: it is the one
+           thing a visitor came here to read. role=status announces each
+           change. It also stays the fallback for a stage the track below
+           does not know. #}
+        <p class="scan-now__stage" role="status" aria-live="polite"><span id="scanStage">{{ job.stage }}</span></p>
+        <p class="scan-now__meta">
+          <span id="scanStepWrap"{% if state == 'queued' %} hidden{% endif %}>Step <span id="scanStepN">–</span> of <span id="scanStepTotal">13</span> · </span><span id="scanElapsed">0:00</span> <span id="scanElapsedLabel">{{ 'waiting' if state == 'queued' else 'elapsed' }}</span>
+        </p>
 
-            <li class="scan-track__phase">Prepare</li>
-            <li class="scan-track__step" data-stage="Fetching repository info"><span></span>Repository info</li>
-            <li class="scan-track__step" data-stage="Cloning repository"><span></span>Clone</li>
-            <li class="scan-track__step" data-stage="Extracting archives"><span></span>Archives</li>
-
-            <li class="scan-track__phase">Analyse</li>
-            <li class="scan-track__step" data-stage="Running Bandit"><span></span>Bandit</li>
-            <li class="scan-track__step" data-stage="Running Semgrep"><span></span>Semgrep</li>
-            <li class="scan-track__step" data-stage="Running YARA"><span></span>YARA</li>
-            <li class="scan-track__step" data-stage="Running ClamAV"><span></span>ClamAV</li>
-            <li class="scan-track__step" data-stage="Running GuardDog"><span></span>GuardDog</li>
-            <li class="scan-track__step" data-stage="Checking dependencies"><span></span>Dependencies</li>
-
-            <li class="scan-track__phase">Decide</li>
-            <li class="scan-track__step" data-stage="Filtering results"><span></span>Filter noise</li>
-            <li class="scan-track__step" data-stage="Scoring findings"><span></span>Score findings</li>
-            <li class="scan-track__step" data-stage="Calculating risk score"><span></span>Risk verdict</li>
-            <li class="scan-track__step" data-stage="Saving results"><span></span>Save</li>
-          </ol>
-
-          {# Kept as the accessible announcement and the fallback for a stage
-             the track does not know about. #}
-          <p class="scan-track__now" role="status" aria-live="polite">
-            <span id="scanStage">{{ job.stage }}</span>
-          </p>
-
-          <p class="form-text mb-0">
-            Submitted {{ job.started_at.strftime('%d %b %Y, %H:%M:%S') }}. A scan can take several minutes.
-          </p>
+        {# Scans run one at a time so a large repo cannot starve the box of
+           memory, which means a visitor may genuinely be waiting behind
+           someone else. Saying so, plainly and prominently, beats an
+           unexplained spinner. #}
+        <div class="scan-queue" id="scanQueue"{% if not job.position %} hidden{% endif %}>
+          <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+          <p><strong><span id="scanQueuePos">{{ job.position }}</span> <span id="scanQueueNoun">{{ 'scan' if job.position == 1 else 'scans' }}</span> ahead of yours.</strong>
+             Scans run one at a time, so yours starts as soon as the one before it finishes.</p>
         </div>
-        <div id="scanError" style="display: none;">
-          <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorTextLive"></div>
-          <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
-        </div>
-      {% endif %}
 
+        <p class="scan-note">
+          <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+          Safe to refresh or close this tab. The scan keeps running on the server, and this page opens the report when it is done. Most scans take a few minutes; large repositories can take longer.
+        </p>
+      </section>
+
+      <section class="console-panel" aria-labelledby="scanTrackTitle">
+        <h2 class="console-panel__title" id="scanTrackTitle">Progress</h2>
+        {# data-stage values must match scanner.py's report() strings
+           exactly; the script maps the live stage onto this list by that
+           string and falls back to the plain label above if it ever sees
+           one it does not recognise. #}
+        <ol class="scan-track" id="scanTrack" aria-label="Scan progress">
+          <li class="scan-track__rail" aria-hidden="true"><span id="scanRail"></span></li>
+
+          <li class="scan-track__phase">Prepare</li>
+          <li class="scan-track__step" data-stage="Fetching repository info"><span></span>Repository info</li>
+          <li class="scan-track__step" data-stage="Cloning repository"><span></span>Clone</li>
+          <li class="scan-track__step" data-stage="Extracting archives"><span></span>Archives</li>
+
+          <li class="scan-track__phase">Analyse</li>
+          <li class="scan-track__step" data-stage="Running Bandit"><span></span>Bandit</li>
+          <li class="scan-track__step" data-stage="Running Semgrep"><span></span>Semgrep</li>
+          <li class="scan-track__step" data-stage="Running YARA"><span></span>YARA</li>
+          <li class="scan-track__step" data-stage="Running ClamAV"><span></span>ClamAV</li>
+          <li class="scan-track__step" data-stage="Running GuardDog"><span></span>GuardDog</li>
+          <li class="scan-track__step" data-stage="Checking dependencies"><span></span>Dependencies</li>
+
+          <li class="scan-track__phase">Decide</li>
+          <li class="scan-track__step" data-stage="Filtering results"><span></span>Filter noise</li>
+          <li class="scan-track__step" data-stage="Scoring findings"><span></span>Score findings</li>
+          <li class="scan-track__step" data-stage="Calculating risk score"><span></span>Risk verdict</li>
+          <li class="scan-track__step" data-stage="Saving results"><span></span>Save</li>
+        </ol>
+      </section>
     </div>
-  </div>
 
+    <section class="console-panel scan-failed" id="scanError" hidden aria-labelledby="scanErrorTitle">
+      <h2 class="console-panel__title" id="scanErrorTitle">What went wrong</h2>
+      <div class="alert app-alert alert-danger-ledger mb-3" role="alert" id="scanErrorTextLive"></div>
+      <p class="scan-note">Check the repository is public and the name is spelled correctly, then try again.</p>
+      <a href="{{ url_for('index') }}#scan" class="btn btn-ribbon btn-pill">Try another scan</a>
+    </section>
+  {% endif %}
+
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -95,10 +119,18 @@
       var errorEl     = document.getElementById('scanError');
       var errorText   = document.getElementById('scanErrorTextLive');
       var stageEl     = document.getElementById('scanStage');
+      var stepWrap    = document.getElementById('scanStepWrap');
+      var stepNEl     = document.getElementById('scanStepN');
+      var elapsedEl   = document.getElementById('scanElapsed');
+      var elapsedLbl  = document.getElementById('scanElapsedLabel');
       var queueEl     = document.getElementById('scanQueue');
       var queuePosEl  = document.getElementById('scanQueuePos');
+      var queueNoun   = document.getElementById('scanQueueNoun');
+      var eyebrow     = document.getElementById('scanEyebrow');
+      var eyebrowText = document.getElementById('scanEyebrowText');
       var railEl      = document.getElementById('scanRail');
       var steps       = [].slice.call(document.querySelectorAll('.scan-track__step'));
+      document.getElementById('scanStepTotal').textContent = steps.length;
 
       // Stage strings come straight from scanner.py's report() calls. An
       // unrecognised one leaves the track exactly as it was rather than
@@ -115,12 +147,56 @@
           steps[j].classList.toggle('is-done', j < at);
           steps[j].classList.toggle('is-live', j === at);
         }
-        // The rail is the continuity: one line that advances rather than
-        // thirteen things blinking independently.
-        if (railEl) {
-          railEl.style.height = ((at / (steps.length - 1)) * 100).toFixed(2) + '%';
-        }
+        stepNEl.textContent = at + 1;
+        liveAt = at;
+        layoutRail();
       }
+
+      // The rail is the continuity: one line that advances rather than
+      // thirteen things blinking independently. It is laid out from the
+      // markers' measured centres -- not from at/(steps-1) -- because the
+      // phase labels make the gaps uneven, and a percentage then stops the
+      // fill short of the live marker.
+      var liveAt = -1;
+      var railBox = railEl ? railEl.parentNode : null;
+      var trackEl = document.getElementById('scanTrack');
+      function centreY(el) {
+        var r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      }
+      function layoutRail() {
+        if (!railEl || !steps.length) { return; }
+        var origin = trackEl.getBoundingClientRect().top;
+        var first = centreY(steps[0]) - origin;
+        var last = centreY(steps[steps.length - 1]) - origin;
+        railBox.style.top = first + 'px';
+        railBox.style.bottom = 'auto';
+        railBox.style.height = (last - first) + 'px';
+        railEl.style.height = liveAt < 0 ? '0px'
+          : (centreY(steps[liveAt]) - origin - first) + 'px';
+      }
+      window.addEventListener('resize', layoutRail);
+
+      function setState(queued) {
+        eyebrow.classList.toggle('scan-page__eyebrow--queued', queued);
+        eyebrow.classList.toggle('scan-page__eyebrow--running', !queued);
+        eyebrowText.textContent = queued ? 'Queued' : 'Scan in progress';
+        stepWrap.hidden = queued;
+        elapsedLbl.textContent = queued ? 'waiting' : 'elapsed';
+      }
+
+      // Elapsed time is the server's figure (elapsed_s), re-synced on every
+      // poll; between polls it only counts up locally, so the visitor's own
+      // clock never enters into it.
+      var elapsed = {{ job.elapsed_s | tojson }};
+      var syncedAt = Date.now();
+      function showElapsed() {
+        var s = elapsed + Math.floor((Date.now() - syncedAt) / 1000);
+        var m = Math.floor(s / 60), r = s % 60;
+        elapsedEl.textContent = m + ':' + (r < 10 ? '0' : '') + r;
+      }
+      showElapsed();
+      setInterval(showElapsed, 1000);
 
       paint(stageEl.textContent.trim());
 
@@ -131,20 +207,25 @@
             if (data.status === 'done') {
               window.location.href = '/detail/' + data.repo_id;
             } else if (data.status === 'error') {
-              runningEl.style.display = 'none';
-              errorEl.style.display = '';
+              runningEl.hidden = true;
+              errorEl.hidden = false;
               errorText.textContent = data.error;
+              eyebrow.className = 'case-header__eyebrow scan-page__eyebrow scan-page__eyebrow--failed';
+              eyebrowText.textContent = 'Scan failed';
+              document.title = document.title.replace(/^Scanning/, 'Scan failed');
             } else {
               stageEl.textContent = data.stage;
               paint(data.stage);
-              // Hide the queue line the moment this job starts, so the page
-              // does not keep claiming a wait that is over.
-              if (data.position > 0) {
+              elapsed = data.elapsed_s; syncedAt = Date.now();
+              // Hide the queue notice the moment this job starts, so the
+              // page does not keep claiming a wait that is over.
+              var queued = data.position > 0;
+              if (queued) {
                 queuePosEl.textContent = data.position;
-                queueEl.style.display = '';
-              } else {
-                queueEl.style.display = 'none';
+                queueNoun.textContent = data.position === 1 ? 'scan' : 'scans';
               }
+              queueEl.hidden = !queued;
+              setState(queued);
               setTimeout(poll, 2000);
             }
           })

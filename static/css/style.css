@@ -1340,10 +1340,18 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
    away. The authored moment is the rail: one line advancing, rather than
    thirteen markers blinking independently. */
 .scan-track {
+  /* One axis for the rail and every marker: --track-axis is the distance
+     from the track's left edge to the centre line. The rail and the
+     markers are both placed from it, so they are centred on each other by
+     construction instead of by two hand-tuned offsets (which had drifted
+     ~5px apart, leaving the rail along the markers' left edges). */
+  --track-axis: 0.6rem;
+  --track-indent: 1.6rem;
+  --marker: 0.72rem;
   position: relative;
   list-style: none;
   margin: 0 0 1.25rem;
-  padding: 0 0 0 1.6rem;
+  padding: 0 0 0 var(--track-indent);
 }
 
 /* The unfilled rail, and inside it the filled portion. Height is animated
@@ -1351,7 +1359,10 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
    where a growing line is the point, and 13 steps of it is cheap. */
 .scan-track__rail {
   position: absolute;
-  left: 0.33rem;
+  left: calc(var(--track-axis) - 1px);
+  /* Fallback extent only: the page script sets top/height from the first
+     and last markers' measured centres, so the rail starts and ends on
+     them whatever the phase labels do to the spacing. */
   top: 1.45rem;
   bottom: 0.7rem;
   width: 2px;
@@ -1362,7 +1373,7 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
   display: block;
   width: 100%;
   height: 0;
-  background: var(--green);
+  background: var(--signal);
   border-radius: 1px;
   transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1390,9 +1401,9 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 /* The marker. Sized and positioned to sit centred on the rail. */
 .scan-track__step > span {
   position: absolute;
-  left: -1.27rem;
-  width: 0.72rem;
-  height: 0.72rem;
+  left: calc(var(--track-axis) - var(--track-indent) - var(--marker) / 2);
+  width: var(--marker);
+  height: var(--marker);
   border-radius: 50%;
   background: var(--surface);
   border: 2px solid var(--line);
@@ -1404,8 +1415,8 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 
 .scan-track__step.is-done { color: var(--ink); }
 .scan-track__step.is-done > span {
-  background: var(--green);
-  border-color: var(--green);
+  background: var(--signal);
+  border-color: var(--signal);
 }
 
 .scan-track__step.is-live {
@@ -1414,7 +1425,7 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 }
 .scan-track__step.is-live > span {
   background: var(--surface);
-  border-color: var(--green);
+  border-color: var(--signal);
   transform: scale(1.25);
   /* The only looping animation on the page, and it is load-bearing: it is
      what says the scan is still alive during a four-minute Semgrep run. */
@@ -1422,14 +1433,62 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 }
 
 @keyframes scan-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(31, 95, 67, 0.35); }
-  50%      { box-shadow: 0 0 0 5px rgba(31, 95, 67, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--signal-ring); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
 }
 
-.scan-track__now {
-  margin: 0 0 0.6rem;
-  font-size: 0.82rem;
+.scan-track { margin-bottom: 0; }
+
+/* Scan status page: the report page's header over two panels -- what is
+   happening now (large, because it is what the visitor came to read) and
+   the track. Reuses .case-header / .console-panel / .meta-chips so a scan
+   and its report look like one product. */
+.scan-page { max-width: 960px; margin: 0 auto; }
+.scan-page__header { margin-bottom: 1.25rem; }
+.scan-page__eyebrow--queued  { color: var(--medium-text); }
+.scan-page__eyebrow--queued .live-dot { background: var(--medium); box-shadow: 0 0 0 4px color-mix(in srgb, var(--medium) 22%, transparent); }
+.scan-page__eyebrow--failed  { color: var(--critical-text); }
+.scan-page__eyebrow--failed .live-dot { background: var(--critical); box-shadow: 0 0 0 4px color-mix(in srgb, var(--critical) 22%, transparent); }
+.scan-page__eyebrow--running .live-dot { animation: scan-pulse 1.8s ease-in-out infinite; }
+
+.scan-grid { display: grid; gap: 1rem; }
+@media (min-width: 768px) { .scan-grid { grid-template-columns: 1.15fr 1fr; align-items: start; } }
+
+.scan-now__stage {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3.4vw, 2.1rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0.4rem 0 0.35rem;
+}
+.scan-now__meta {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 1.25rem;
+}
+.scan-queue {
+  display: flex; gap: 0.75rem; align-items: flex-start;
+  padding: 0.85rem 1rem; margin-bottom: 1.25rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--medium) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--medium) 40%, transparent);
+  color: var(--ink); font-size: 0.92rem; line-height: 1.5;
+}
+.scan-queue p { margin: 0; }
+.scan-queue .bi { color: var(--medium-text); font-size: 1.1rem; line-height: 1.4; }
+.scan-note {
+  display: flex; gap: 0.6rem; align-items: flex-start;
+  margin: 0; padding-top: 1rem; border-top: 1px solid var(--line);
+  font-size: 0.86rem; line-height: 1.55; color: var(--muted);
+}
+.scan-failed .scan-note { border-top: 0; padding-top: 0; margin-bottom: 1rem; }
+.scan-failed { max-width: 640px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-page__eyebrow--running .live-dot { animation-duration: 4s; }
 }
 
 @media (prefers-reduced-motion: reduce) {
