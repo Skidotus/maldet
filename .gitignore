@@ -31,3 +31,16 @@ __pycache__/
 
 # Built extension bundles — regenerate with extension/build.sh
 extension/dist/
+
+# Screenshots and exported bundles for the report/deck — not app source.
+# Root-anchored so static/downloads/*.zip (served by the site) stays tracked.
+/Product Shots/
+/*.zip
+
+# Design references and one-off outputs, kept locally but not published
+/image_reference_UI/
+/design/dashboard-concept.html
+/design/font-options.html
+/rescan_requires_login.txt
+/rescan_stale_july.txt
+/summary_eval_overnight.json
