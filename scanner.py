@@ -417,29 +417,61 @@ def run_yara(path):
 
 #ClamAV
 
+# clamscan loads ~3.6M signatures (~39s, see NOTES.md) before it reads a
+# single file, so the timeout has to cover that as well as the scan itself.
+CLAMAV_TIMEOUT = int(os.environ.get("MALDET_CLAMAV_TIMEOUT", "300"))
+
+
 def run_clamav(path):
+    """Scan with clamscan. Exit codes: 0 clean, 1 virus found, 2 error.
+
+    Every way of not scanning is reported as such rather than as "0 threats".
+    The commonest is a missing signature database (a Docker deployment with
+    SKIP_FRESHCLAM=1): clamscan then exits 2 on the first line, and parsing
+    only the FOUND lines used to turn that into a clean result on every scan.
+    """
     print("  Running ClamAV...")
     findings = []
     try:
         result = subprocess.run(
             ["clamscan", "-r", path, "--no-summary"],
-            capture_output=True, text=True, timeout=120
+            capture_output=True, text=True, timeout=CLAMAV_TIMEOUT
         )
-        for line in result.stdout.strip().split("\n"):
-            if "FOUND" in line:
-                parts    = line.split(":")
-                filename = parts[0].replace(path, "").strip()
-                virus    = parts[1].replace("FOUND", "").strip()
-                findings.append({
-                    "tool":         "clamav",
-                    "severity":     "high",
-                    "issue_text":   f"ClamAV detected: {virus}",
-                    "filename":     filename,
-                    "line_number":  0,
-                    "code_snippet": ""
-                })
+    except FileNotFoundError:
+        print("    ClamAV SKIPPED: clamscan is not installed")
+        return findings
+    except subprocess.TimeoutExpired:
+        print(f"    ClamAV DID NOT FINISH: timed out after {CLAMAV_TIMEOUT}s "
+              "(raise MALDET_CLAMAV_TIMEOUT)")
+        return findings
     except Exception as e:
         print(f"    ClamAV error: {e}")
+        return findings
+
+    for line in result.stdout.strip().split("\n"):
+        if line.endswith(" FOUND"):
+            # "<path>: <signature> FOUND" -- split on the last ": " so a
+            # colon inside the file path cannot shift the fields.
+            file_part, _, sig = line.rpartition(": ")
+            findings.append({
+                "tool":         "clamav",
+                "severity":     "high",
+                "issue_text":   f"ClamAV detected: {sig[:-len(' FOUND')].strip()}",
+                "filename":     file_part.replace(path, "").strip(),
+                "line_number":  0,
+                "code_snippet": ""
+            })
+
+    if result.returncode == 2 and not findings:
+        reason = next((l.strip() for l in result.stderr.splitlines() if l.strip()),
+                      "unknown error")
+        if "database" in reason.lower():
+            reason += " -- signatures missing; run freshclam (or SKIP_FRESHCLAM=0)"
+        print(f"    ClamAV DID NOT RUN: {reason}")
+        return findings
+    if result.returncode == 2:
+        # Some files could not be read, but the scan itself ran.
+        print("    ClamAV finished with errors on some files")
     print(f"    ClamAV found {len(findings)} threats")
     return findings
 
