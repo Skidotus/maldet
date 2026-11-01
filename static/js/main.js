@@ -89,3 +89,65 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 });
+
+// Verdict resolve — the one authored entrance on the site.
+//
+// The scale lays itself out left to right, the verdict lands on its step,
+// and the scores count up to meet it. It marks the thing this product
+// exists to produce, which is why it appears on the hero card and on the
+// detail page's verdict panels and nowhere else.
+//
+// Runs once per element, on first sight. Numbers are already correct in the
+// markup, so a failed script or a reduced-motion preference leaves a card
+// that is right and still rather than a card full of zeroes.
+(function () {
+  var targets = document.querySelectorAll('[data-resolve]');
+  if (!targets.length) { return; }
+
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function countUp(el, to, duration) {
+    var start = null;
+    function frame(now) {
+      if (start === null) { start = now; }
+      var t = Math.min((now - start) / duration, 1);
+      // Exponential ease-out: most of the distance is covered early, so the
+      // number settles rather than crawling to its value.
+      var eased = t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+      el.textContent = Math.round(to * eased);
+      if (t < 1) { window.requestAnimationFrame(frame); }
+      else { el.textContent = to; }
+    }
+    window.requestAnimationFrame(frame);
+  }
+
+  function resolve(el) {
+    el.classList.add('is-resolved');
+    if (reduce) { return; }
+
+    var nums = el.querySelectorAll('[data-score]');
+    for (var i = 0; i < nums.length; i++) {
+      var target = parseInt(nums[i].getAttribute('data-score'), 10);
+      // A zero needs no count, and a non-number should keep whatever the
+      // server rendered.
+      if (!isFinite(target) || target === 0) { continue; }
+      nums[i].textContent = '0';
+      countUp(nums[i], target, 900);
+    }
+  }
+
+  if (reduce || !('IntersectionObserver' in window) || !window.requestAnimationFrame) {
+    for (var i = 0; i < targets.length; i++) { targets[i].classList.add('is-resolved'); }
+    return;
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) { return; }
+      io.unobserve(entry.target);
+      resolve(entry.target);
+    });
+  }, { threshold: 0.4 });
+
+  for (var j = 0; j < targets.length; j++) { io.observe(targets[j]); }
+})();

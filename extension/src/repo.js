@@ -71,5 +71,65 @@ var MalDetRepo = (() => {
     return `scanned ${years} year${years === 1 ? "" : "s"} ago`;
   }
 
-  return { isValid, fromPath, fromUrl, humanAge, RESERVED_OWNERS };
+  /* ------------------------------------------------------------- icons */
+
+  /*
+   * Drawn, not typed. The glyphs these replace -- a circled bullet standing
+   * in for the mark, a text star for the rating -- inherit whatever font the
+   * host page happens to have, render at different weights on every
+   * platform, and are read aloud by screen readers as "circled bullet".
+   *
+   * Built with createElementNS rather than innerHTML: a content script
+   * assembling markup from strings is the pattern AMO reviewers look for,
+   * and there is no reason to use it for a fixed shape.
+   *
+   * 16px grid, 1.5 stroke, round caps -- matching the Bootstrap Icons set
+   * the website already uses, so the extension and the site look drawn by
+   * the same hand.
+   */
+  var SVG_NS = "http://www.w3.org/2000/svg";
+
+  var PATHS = {
+    // The mark: a reticle over a lens, echoing the magnifier in the logo.
+    mark: [
+      { el: "circle", attrs: { cx: 7, cy: 7, r: 4.25 } },
+      { el: "path", attrs: { d: "M10.2 10.2 L13.5 13.5" } },
+      { el: "path", attrs: { d: "M7 4.6 V9.4 M4.6 7 H9.4", opacity: "0.55" } }
+    ],
+    star: [
+      { el: "path", attrs: {
+        d: "M8 1.9 9.78 5.5 13.75 6.08 10.88 8.88 11.55 12.83 8 10.96 4.45 12.83 5.13 8.88 2.25 6.08 6.22 5.5 Z",
+        fill: "currentColor", stroke: "none" } }
+    ]
+  };
+
+  function icon(name, size) {
+    var spec = PATHS[name];
+    if (!spec) { return null; }
+
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", size || 14);
+    svg.setAttribute("height", size || 14);
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.5");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+
+    for (var i = 0; i < spec.length; i++) {
+      var node = document.createElementNS(SVG_NS, spec[i].el);
+      for (var key in spec[i].attrs) {
+        if (Object.prototype.hasOwnProperty.call(spec[i].attrs, key)) {
+          node.setAttribute(key, spec[i].attrs[key]);
+        }
+      }
+      svg.appendChild(node);
+    }
+    return svg;
+  }
+
+  return { isValid, fromPath, fromUrl, humanAge, icon, RESERVED_OWNERS };
 })();
