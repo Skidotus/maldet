@@ -369,7 +369,13 @@
           <li class="event{{ ' event--noise' if noise else '' }}" data-sev="{{ sev }}" data-tool="{{ f.tool }}"
               data-noise="{{ 1 if noise else 0 }}">
             <button type="button" class="event__row" aria-expanded="false" aria-controls="ev-{{ loop.index }}">
-              <span class="event__sev"><span class="seal-badge seal-{{ sev }}">{{ sev }}</span></span>
+              {# Severity is "how bad if real"; confidence is "how likely real".
+                 A full-colour HIGH next to "probably noise" reads as a
+                 contradiction, so on noise rows the badge drops to a quiet
+                 outline. It still says the severity, because the classifier
+                 can be wrong, and the details below spell out both. #}
+              <span class="event__sev"><span class="seal-badge seal-{{ sev }}"
+                {% if noise %}title="{{ sev | capitalize }} if real; rated likely noise"{% endif %}>{{ sev }}</span></span>
               <span class="event__tool">{{ engine_name(f.tool) }}</span>
               <span class="event__text">{{ f.issue_text }}</span>
               <span class="event__loc">{% if f.filename %}{{ f.filename }}{% if f.line_number %}:{{ f.line_number }}{% endif %}{% else %}&mdash;{% endif %}</span>
@@ -385,6 +391,9 @@
             <div class="event__detail" id="ev-{{ loop.index }}" hidden>
               <dl class="event__facts">
                 <div><dt>Engine</dt><dd>{{ engine_name(f.tool) }}{% if f.tool in engines %} <span class="text-muted">&middot; {{ engines[f.tool][2] }}</span>{% endif %}</dd></div>
+                <div><dt>Severity</dt><dd>
+                  {{ sev | capitalize }}{% if noise %} if real. Rated likely noise, so it counts for little in the risk score{% endif %}
+                </dd></div>
                 <div><dt>Counts towards</dt><dd>{{ engines[f.tool][1] if f.tool in engines else '—' }}</dd></div>
                 <div><dt>File</dt><dd class="mono">{{ f.filename or '—' }}{% if f.line_number %} <span class="text-muted">line {{ f.line_number }}</span>{% endif %}</dd></div>
                 <div><dt>Likely real</dt><dd>
