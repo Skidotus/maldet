@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, R
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR
+from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category
 import job_queue
 
 app = Flask(__name__)
@@ -779,6 +779,13 @@ def detail(repo_id):
         # Group findings by tool for display
         tools = {}
         for f in findings:
+            # Which verdict this finding counts towards, for the log's
+            # Vulnerability / Malicious filter. scanner.finding_category()
+            # is the same split the two verdict panels are scored with
+            # (dep_checker CVEs are vulnerabilities, the rest of
+            # dep_checker is malicious-pattern), so the filter and the
+            # verdicts can never disagree about a finding.
+            f['category'] = finding_category(f)
             tool = f['tool']
             if tool not in tools:
                 tools[tool] = []

@@ -342,6 +342,20 @@
           <input type="search" id="eventSearch" placeholder="Search description or file…" autocomplete="off">
         </label>
 
+        {# Which verdict a finding counts towards -- the same split as the two
+           verdict panels above (scanner.finding_category()). #}
+        <div class="seg" role="group" aria-label="Finding type">
+          {% set n_vuln = findings | selectattr('category', 'equalto', 'vulnerability') | list | length %}
+          {% set n_mal = findings | selectattr('category', 'equalto', 'malicious_pattern') | list | length %}
+          <button type="button" class="seg__btn is-on" data-cat="all" aria-pressed="true">All types</button>
+          <button type="button" class="seg__btn" data-cat="vulnerability" aria-pressed="false"{% if n_vuln == 0 %} disabled{% endif %}
+                  title="Bandit, Semgrep and dependency CVEs: weaknesses an attacker could exploit">
+            <i class="bi bi-bug" aria-hidden="true"></i>Vulnerability <span>{{ n_vuln }}</span></button>
+          <button type="button" class="seg__btn" data-cat="malicious_pattern" aria-pressed="false"{% if n_mal == 0 %} disabled{% endif %}
+                  title="YARA, ClamAV, GuardDog and supply-chain checks: signs the code may be trying to cause harm">
+            <i class="bi bi-shield-exclamation" aria-hidden="true"></i>Malicious <span>{{ n_mal }}</span></button>
+        </div>
+
         <div class="seg" role="group" aria-label="Severity">
           {% set sev_all = findings | length %}
           <button type="button" class="seg__btn is-on" data-sev="all" aria-pressed="true">All <span>{{ sev_all }}</span></button>
@@ -376,7 +390,7 @@
         {% for f in findings %}
           {% set sev = (f.severity or 'low') | lower %}
           {% set noise = f.confidence is not none and f.confidence < 0.3 %}
-          <li class="event{{ ' event--noise' if noise else '' }}" data-sev="{{ sev }}" data-tool="{{ f.tool }}"
+          <li class="event{{ ' event--noise' if noise else '' }}" data-sev="{{ sev }}" data-tool="{{ f.tool }}" data-cat="{{ f.category }}"
               data-noise="{{ 1 if noise else 0 }}">
             <button type="button" class="event__row" aria-expanded="false" aria-controls="ev-{{ loop.index }}">
               {# Severity is "how bad if real"; confidence is "how likely real".
@@ -448,7 +462,9 @@
     var search  = document.getElementById('eventSearch');
     var toolSel = document.getElementById('eventTool');
     var noise   = document.getElementById('eventNoise');
-    var segs    = Array.prototype.slice.call(document.querySelectorAll('.seg__btn'));
+    var segs    = Array.prototype.slice.call(document.querySelectorAll('.seg__btn[data-sev]'));
+    var cats    = Array.prototype.slice.call(document.querySelectorAll('.seg__btn[data-cat]'));
+    var cat = 'all';
     var countEl = document.getElementById('eventCount');
     var noneEl  = document.getElementById('eventNone');
     var moreBtn = document.getElementById('eventMore');
@@ -462,6 +478,7 @@
       var matched = 0;
       items.forEach(function (li) {
         var ok = (sev === 'all' || li.dataset.sev === sev) &&
+                 (cat === 'all' || li.dataset.cat === cat) &&
                  (tool === 'all' || li.dataset.tool === tool) &&
                  !(hideNoise && li.dataset.noise === '1') &&
                  (!q || li._text.indexOf(q) !== -1);
@@ -489,9 +506,17 @@
         refilter();
       });
     });
+    cats.forEach(function (b) {
+      b.addEventListener('click', function () {
+        cat = b.dataset.cat;
+        cats.forEach(function (o) { var on = o === b; o.classList.toggle('is-on', on); o.setAttribute('aria-pressed', String(on)); });
+        refilter();
+      });
+    });
     moreBtn.addEventListener('click', function () { limit += PAGE; apply(); });
     document.getElementById('eventReset').addEventListener('click', function () {
       search.value = ''; toolSel.value = 'all'; noise.setAttribute('aria-pressed', 'false');
+      cats[0].click();
       segs[0].click();
     });
 

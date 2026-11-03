@@ -288,7 +288,11 @@ reload. The track's `data-stage` values must match `scanner.py`'s
 `history_dates`/`history_scores` (JSON for the chart), plus the two below.
 Laid out as a security console: verdict panels, summary / engine / trend
 row, then a findings log filtered client-side and paged 50 at a time.
-`findings` caps only Bandit and Semgrep at 200 each (`app.py`
+Each finding carries `category` (`scanner.finding_category()`, the same
+split the two verdicts are scored with), which drives the log's All types /
+Vulnerability / Malicious filter; the filter's button groups are selected
+by `[data-cat]` / `[data-sev]`, not bare `.seg__btn`, so they stay
+independent. `findings` caps only Bandit and Semgrep at 200 each (`app.py`
 `UNCAPPED_TOOLS` lists the malware engines, which are always listed in
 full, since a hidden malicious finding is the failure that matters); the
 log names each truncated engine and how many it left out, and links
