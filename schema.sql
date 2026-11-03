@@ -111,6 +111,15 @@ CREATE TABLE IF NOT EXISTS scan_results (
     filename      VARCHAR(500),
     line_number   INT DEFAULT 0,
     code_snippet  TEXT,
+    -- The detector's OWN confidence in the match ('low'/'medium'/'high'),
+    -- as reported by Bandit (issue_confidence) and by Semgrep rules that
+    -- carry metadata.confidence. NULL for other tools, for Semgrep rules
+    -- without it, and for rows scanned before the column existed. A
+    -- classifier feature, unlike `confidence` above which is its output.
+    -- On an existing database:
+    --   ALTER TABLE scan_results ADD COLUMN tool_confidence VARCHAR(10) NULL;
+    -- then restart worker.py (scanner.py checks for the column once).
+    tool_confidence VARCHAR(10) NULL,
     FOREIGN KEY (repo_id) REFERENCES repositories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

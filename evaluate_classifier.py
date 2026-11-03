@@ -48,7 +48,42 @@ if not reviewed:
 # sets f["p_real"], and it falls back to 1.0 for every finding if the model
 # artifact is missing — which would make the classifier look perfectly
 # recalled and useless, so say so rather than silently reporting it.
-score_findings(reviewed)
+#
+# Each sampled finding is scored *alongside the rest of its repo's stored
+# findings*, not on its own: the tool-agreement features count how many
+# other detectors flagged the same line/file, and scoring the 168 samples in
+# isolation would make every one of them look like a lone detection. If the
+# sample's row has since been replaced by a rescan, the sample is added to
+# the repo's current findings; if the database is unreachable, samples are
+# scored alone and the agreement features are understated.
+def score_in_repo_context(samples):
+    try:
+        import db_connect
+        import pymysql
+        conn = db_connect.connect(cursorclass=pymysql.cursors.DictCursor)
+    except Exception as e:
+        print(f"WARNING: database unreachable ({e}); scoring samples without\n"
+              f"         their repo's other findings -- tool agreement is understated.\n")
+        score_findings(samples)
+        return
+    try:
+        by_repo = {}
+        for d in samples:
+            by_repo.setdefault(d["repo_id"], []).append(d)
+        for repo_id, group in by_repo.items():
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM scan_results WHERE repo_id = %s", (repo_id,))
+                context = list(cur.fetchall())
+            present = {row["id"] for row in context}
+            context += [d for d in group if d["id"] not in present]
+            score_findings(context)
+            p_by_id = {row["id"]: row["p_real"] for row in context}
+            for d in group:
+                d["p_real"] = p_by_id[d["id"]]
+    finally:
+        conn.close()
+
+score_in_repo_context(reviewed)
 if all(d.get("p_real") == 1.0 for d in reviewed):
     print("WARNING: every finding scored exactly 1.0, which is score_findings()'s\n"
           "         no-model fallback. model/risk_classifier.pkl is probably missing —\n"

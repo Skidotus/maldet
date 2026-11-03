@@ -20,7 +20,7 @@ with conn.cursor() as cur:
     vuln_scores, malware_scores = [], []
     for rid in repo_ids:
         cur.execute("""
-            SELECT tool, severity, issue_text, filename, code_snippet
+            SELECT *  -- line_number + tool_confidence feed the classifier
             FROM scan_results WHERE repo_id = %s
         """, (rid,))
         findings = cur.fetchall()

@@ -168,7 +168,10 @@ def run_bandit(path):
                 "issue_text":   issue["issue_text"],
                 "filename":     issue["filename"].replace(path, ""),
                 "line_number":  issue.get("line_number", 0),
-                "code_snippet": issue.get("code", "").strip()
+                "code_snippet": issue.get("code", "").strip(),
+                # Bandit's own estimate of how likely the match is a real
+                # problem rather than a pattern coincidence.
+                "tool_confidence": normalize_tool_confidence(issue.get("issue_confidence")),
             })
     except json.JSONDecodeError:
         print("    Bandit: no Python files found")
@@ -189,6 +192,14 @@ def normalize_severity(severity):
         return "low"
     else:
         return "low"
+
+
+def normalize_tool_confidence(value):
+    """Bandit and Semgrep both rate their own matches LOW/MEDIUM/HIGH.
+    Anything else -- missing, or a tool that has no such rating -- is None,
+    which the classifier sees as "unknown"."""
+    value = (value or "").strip().lower()
+    return value if value in ("low", "medium", "high") else None
 
 # dep_checker's issue_text always embeds the specific package/version/CVE id
 # (e.g. "Loose version constraint: 'requests>=2.0'"), so no two are ever
@@ -295,6 +306,40 @@ def is_ignored_path(filename):
             or bool(IGNORE_FILENAME_RE.match(basename)))
 
 
+# Directories that hold code the repository's author copied in rather than
+# wrote: vendored libraries, installed packages, and build output. Same
+# whole-segment matching as IGNORE_PATH_SEGMENTS, for the same reason.
+VENDOR_PATH_SEGMENTS = frozenset({
+    "vendor", "vendors", "third_party", "thirdparty", "third-party",
+    "node_modules", "bower_components", "site-packages",
+    "dist", "build",
+})
+
+# Minified or bundled files: machine-generated, one enormous line, and
+# almost always a copy of somebody else's library.
+VENDOR_FILENAME_RE = re.compile(
+    r"[.-]min\.(?:js|css|mjs)$|\.bundle\.(?:js|mjs)$", re.IGNORECASE
+)
+
+
+def is_vendored_path(filename):
+    """True if this finding sits in code the repo copied in, not code its
+    author wrote. Unlike is_ignored_path() this never drops a finding: a
+    committed node_modules is a classic place to hide a payload, so
+    filter_noise() only lowers the severity of *vulnerability* findings here
+    and leaves the malware detectors alone. Shared with train_classifier.py
+    as a feature, so scan-time and training-time cannot disagree."""
+    parts = [p for p in (filename or "").lower().replace("\\", "/").split("/") if p]
+    if not parts:
+        return False
+    if any(p in VENDOR_PATH_SEGMENTS for p in parts[:-1]):
+        return True
+    return bool(VENDOR_FILENAME_RE.search(parts[-1]))
+
+
+SEVERITY_ONE_STEP_DOWN = {"high": "medium", "medium": "low", "low": "low"}
+
+
 def filter_noise(findings):
     filtered = []
 
@@ -314,6 +359,13 @@ def filter_noise(findings):
         # Downgrade chmod from high to medium
         if "Chmod" in f["issue_text"] or "chmod" in f["issue_text"]:
             f["severity"] = "medium"
+
+        # Copied-in library code: a coding flaw there is the library's, not
+        # this author's, so vulnerability findings drop one step. Malware
+        # findings keep their severity -- see is_vendored_path().
+        if is_vendored_path(f["filename"]) and finding_category(f) == "vulnerability":
+            sev = normalize_severity(f.get("severity") or "low")
+            f["severity"] = SEVERITY_ONE_STEP_DOWN[sev]
 
         # YARA severities used to be hardcoded in run_yara() and manually
         # downgraded here for the noisy ones (detect_downloader,
@@ -363,7 +415,11 @@ def run_semgrep(path):
                 "issue_text":   issue.get("extra", {}).get("message", ""),
                 "filename":     issue.get("path", "").replace(path, ""),
                 "line_number":  issue.get("start", {}).get("line", 0),
-                "code_snippet": issue.get("extra", {}).get("lines", "").strip()
+                "code_snippet": issue.get("extra", {}).get("lines", "").strip(),
+                # Registry rules carry the rule author's confidence in their
+                # metadata; many older rules omit it (stored as NULL).
+                "tool_confidence": normalize_tool_confidence(
+                    issue.get("extra", {}).get("metadata", {}).get("confidence")),
             })
     except json.JSONDecodeError:
         print("    Semgrep: no output")
@@ -593,11 +649,69 @@ def _load_model_artifact():
     return _model_artifact or None
 
 
+# The columns the classifier is trained on, in order. Models saved before
+# tool_confidence / is_vendored / tool agreement existed have no
+# "feature_cols" entry and fall back to LEGACY_FEATURE_COLUMNS, so an old
+# risk_classifier.pkl keeps scoring correctly until it is retrained.
+LEGACY_FEATURE_COLUMNS = ["tool", "severity_norm", "repo_frequency",
+                          "snippet_length", "issue_text"]
+FEATURE_COLUMNS = LEGACY_FEATURE_COLUMNS + [
+    "tool_confidence", "is_vendored", "tools_on_line", "tools_on_file",
+]
+
+
+def add_finding_features(df):
+    """Adds every per-finding classifier feature except repo_frequency (which
+    needs the whole corpus, or the saved lookup) to a DataFrame of findings.
+    The one definition used by both train_classifier.py and score_findings(),
+    so training and live scoring cannot compute a feature differently.
+
+    tools_on_line / tools_on_file count how many *different* detectors
+    flagged the same line / file in the same repo. Two independent tools
+    agreeing is far more likely to be a real problem than one rule firing
+    alone. Findings with no line number (YARA, ClamAV, manifest checks) count
+    as 1 on the line, and are judged by the file-level count instead.
+    Without a repo_id column (a live scan, which is one repo) all rows are
+    treated as the same repo."""
+    import pandas as pd
+
+    for col, default in (("repo_id", 0), ("filename", ""), ("code_snippet", ""),
+                         ("line_number", 0), ("tool_confidence", None)):
+        if col not in df:
+            df[col] = default
+
+    df["tool"]         = df["tool"].fillna("")
+    df["issue_text"]   = df["issue_text"].fillna("")
+    df["filename"]     = df["filename"].fillna("")
+    df["code_snippet"] = df["code_snippet"].fillna("")
+    df["severity_norm"]  = df["severity"].fillna("low").apply(normalize_severity)
+    df["snippet_length"] = df["code_snippet"].str.len()
+    df["tool_confidence"] = (df["tool_confidence"]
+                             .apply(normalize_tool_confidence).fillna("unknown"))
+    df["is_vendored"] = df["filename"].apply(is_vendored_path).astype(int)
+
+    # Tools disagree on a leading slash ("/requirements.txt" vs
+    # "requirements.txt"), which would stop them ever matching.
+    k = pd.DataFrame({
+        "_repo": df["repo_id"],
+        "_file": df["filename"].str.lstrip("/"),
+        "_line": pd.to_numeric(df["line_number"], errors="coerce").fillna(0).astype(int),
+        "_tool": df["tool"],
+    }, index=df.index)
+    df["tools_on_file"] = k.groupby(["_repo", "_file"])["_tool"].transform("nunique")
+    on_line = k.groupby(["_repo", "_file", "_line"])["_tool"].transform("nunique")
+    df["tools_on_line"] = on_line.where(k["_line"] > 0, 1)
+    return df
+
+
 def score_findings(findings):
     """Attaches f["p_real"] = P(real issue, not noise) to each finding using
     the trained classifier. Falls back to p_real=1.0 (no discount, same as
     the old count-everything-equally behavior) if the model hasn't been
-    trained yet, so scanning still works without it."""
+    trained yet, so scanning still works without it.
+
+    `findings` must be one repo's findings (or carry repo_id), since the
+    tool-agreement features compare each finding to the others passed in."""
     if not findings:
         return findings
 
@@ -611,21 +725,25 @@ def score_findings(findings):
     pipeline          = artifact["pipeline"]
     freq_lookup       = artifact["frequency_lookup"]
     default_frequency = artifact["default_frequency"]
+    feature_cols      = artifact.get("feature_cols", LEGACY_FEATURE_COLUMNS)
 
-    rows = []
-    for f in findings:
-        tool       = f["tool"]
-        issue_text = f.get("issue_text") or ""
-        key        = (tool, frequency_key(tool, issue_text))
-        rows.append({
-            "tool":           tool,
-            "severity_norm":  normalize_severity(f.get("severity", "low")),
-            "repo_frequency": freq_lookup.get(key, default_frequency),
-            "snippet_length": len(f.get("code_snippet") or ""),
-            "issue_text":     issue_text,
-        })
+    df = pd.DataFrame([{
+        "repo_id":         f.get("repo_id", 0),
+        "tool":            f["tool"],
+        "severity":        f.get("severity", "low"),
+        "issue_text":      f.get("issue_text") or "",
+        "filename":        f.get("filename") or "",
+        "line_number":     f.get("line_number") or 0,
+        "code_snippet":    f.get("code_snippet") or "",
+        "tool_confidence": f.get("tool_confidence"),
+    } for f in findings])
+    df = add_finding_features(df)
+    df["repo_frequency"] = [
+        freq_lookup.get((t, frequency_key(t, txt)), default_frequency)
+        for t, txt in zip(df["tool"], df["issue_text"])
+    ]
 
-    probs = pipeline.predict_proba(pd.DataFrame(rows))[:, 1]
+    probs = pipeline.predict_proba(df[feature_cols])[:, 1]
     for f, p in zip(findings, probs):
         f["p_real"] = round(float(p), 4)
     return findings
@@ -771,6 +889,31 @@ def _fit_varchar(value, max_chars):
 FINDING_INSERT_BATCH = 500
 
 
+_tool_confidence_column = None
+
+def _has_tool_confidence_column(cursor):
+    """Whether scan_results has the tool_confidence column (schema.sql).
+    Checked rather than assumed because columns here are added by hand with
+    ALTER TABLE: a deployment that has not run it yet keeps scanning, just
+    without storing the tools' confidence, instead of every save failing on
+    an unknown column. Cached per process; restart the worker after the
+    ALTER to start storing it."""
+    global _tool_confidence_column
+    if _tool_confidence_column is None:
+        cursor.execute("""
+            SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'scan_results' AND COLUMN_NAME = 'tool_confidence'
+        """)
+        row = cursor.fetchone()
+        n = row["n"] if isinstance(row, dict) else row[0]
+        _tool_confidence_column = bool(n)
+        if not _tool_confidence_column:
+            print("    Note: scan_results.tool_confidence missing -- see schema.sql; "
+                  "tool confidence not stored")
+    return _tool_confidence_column
+
+
 def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk,
                llm_text=None, llm_status=None):
     db     = get_db()
@@ -823,6 +966,7 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
         # is now held open across all of them, and the largest repo in the
         # corpus has ~157k findings -- one round trip each would hold it open
         # for minutes. The batch size bounds the packet, not the transaction.
+        with_conf = _has_tool_confidence_column(cursor)
         rows = [
             (repo_id,
              _fit_varchar(f["tool"], 50),
@@ -832,15 +976,22 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
              _fit_varchar(f["filename"], 500),
              f.get("line_number", 0),
              _fit_text(f.get("code_snippet", "")))
+            + ((f.get("tool_confidence"),) if with_conf else ())
             for f in findings
         ]
-        for start in range(0, len(rows), FINDING_INSERT_BATCH):
-            cursor.executemany("""
+        insert_sql = ("""
+                INSERT INTO scan_results
+                    (repo_id, tool, severity, confidence, issue_text,
+                     filename, line_number, code_snippet, tool_confidence)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """ if with_conf else """
                 INSERT INTO scan_results
                     (repo_id, tool, severity, confidence, issue_text,
                      filename, line_number, code_snippet)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, rows[start:start + FINDING_INSERT_BATCH])
+            """)
+        for start in range(0, len(rows), FINDING_INSERT_BATCH):
+            cursor.executemany(insert_sql, rows[start:start + FINDING_INSERT_BATCH])
 
         # Save risk score — high_count/medium_count/low_count/final_score/
         # risk_level stay as the blended "overall" figure (kept only for

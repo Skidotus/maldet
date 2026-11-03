@@ -19,7 +19,7 @@ with conn.cursor() as cur:
     results = []
     for r in repos:
         cur.execute("""
-            SELECT tool, severity, issue_text, filename, code_snippet
+            SELECT *  -- line_number + tool_confidence feed the classifier
             FROM scan_results WHERE repo_id = %s
         """, (r["id"],))
         findings = cur.fetchall()

@@ -94,7 +94,23 @@ by `worker.py` (not inside the web request):
    `run_bandit`, `run_semgrep`, `run_yara` (rules in `rules.yar`), `run_clamav`,
    `run_guarddog`, `check_dependencies` (from `dep_checker.py`)
 5. `filter_noise()` — drops low-value Bandit rules and anything under
-   test/docs/example/migration/locale paths; downgrades some high findings to medium
+   test/docs/example/migration/locale paths; downgrades some high findings to medium.
+   Vulnerability findings (Bandit/Semgrep/CVEs) in copied-in code
+   (`is_vendored_path()`: `vendor/`, `node_modules/`, `dist/`, `*.min.js`…)
+   drop one severity step; malware detectors there are never downgraded,
+   since a committed `node_modules` is a place to hide a payload
+5a. `score_findings()` — the Random Forest's P(real). Features come from
+   `add_finding_features()`, shared with `train_classifier.py` so training
+   and scan time cannot drift: tool, severity, rule text, rule frequency,
+   snippet length, plus the detector's own confidence
+   (`scan_results.tool_confidence`, Bandit and Semgrep only), whether the
+   file is vendored, and how many different tools flagged the same
+   line/file. The saved model lists its own `feature_cols`; a model without
+   that key uses the original five. Measured 2026-11-03 against
+   `eval_sample.json` over five training splits, the added features did not
+   change accuracy (AUC 0.79 either way), so the shipped model was not
+   replaced — rule-derived training labels limit what any feature can add.
+   `tool_confidence` cannot be judged until rescans populate it.
 6. `calculate_risk()` — weights high/medium(capped 30)/low(capped 20) into a score,
    maps score to `Safe/Low/Medium/High/Critical`
 7. `save_to_db()` — upserts into `repositories`, replaces `scan_results` and
