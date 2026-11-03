@@ -335,14 +335,17 @@ def main():
                 continue
             vuln    = {"level": r["vuln_level"],    "score": r["vuln_score"]}
             malware = {"level": r["malware_level"], "score": r["malware_score"]}
+            # Same about-text the summary is generated from, so a number or
+            # word the model took from the README is not judged fabricated.
+            about   = llm_summary.fetch_repo_about(r["full_name"])
             prompt  = llm_summary._compose_prompt(r["full_name"], groups, total,
-                                                  vuln, malware)
+                                                  vuln, malware, about)
             if args.stored:
                 text, took = r["llm_summary"], 0.0
             else:
                 t0 = time.time()
                 text = llm_summary.summarize_groups(r["full_name"], groups, total,
-                                                    vuln, malware)
+                                                    vuln, malware, about)
                 took = time.time() - t0
 
             if not text:

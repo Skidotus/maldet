@@ -228,10 +228,15 @@ def summarize_one(cur, repo):
                        WHERE repo_id = %s""", (repo["id"],))
         return None
 
+    # The repository's own description, so the summary can say what the
+    # project is for and whether its findings fit that. None if GitHub is
+    # unreachable or the repo is gone -- the summary is written without it.
+    about = llm_summary.fetch_repo_about(repo["full_name"])
     text = llm_summary.summarize_groups(
         repo["full_name"], groups, total,
         {"level": repo["vuln_level"],    "score": repo["vuln_score"]},
         {"level": repo["malware_level"], "score": repo["malware_score"]},
+        about,
     )
 
     if text:
