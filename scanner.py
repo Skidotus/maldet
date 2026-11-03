@@ -197,8 +197,16 @@ def normalize_severity(severity):
 def normalize_tool_confidence(value):
     """Bandit and Semgrep both rate their own matches LOW/MEDIUM/HIGH.
     Anything else -- missing, or a tool that has no such rating -- is None,
-    which the classifier sees as "unknown"."""
-    value = (value or "").strip().lower()
+    which the classifier sees as "unknown".
+
+    Anything that is not a string counts as missing. In a DataFrame mixing
+    Bandit/Semgrep findings (which have a confidence) with YARA or
+    dep_checker ones (which do not), pandas stores the gaps as NaN -- a
+    float, which is truthy, so `(value or "").strip()` crashed every real
+    scan at the scoring step."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lower()
     return value if value in ("low", "medium", "high") else None
 
 # dep_checker's issue_text always embeds the specific package/version/CVE id
