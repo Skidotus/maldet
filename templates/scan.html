@@ -16,6 +16,19 @@
     <div class="alert app-alert alert-danger-ledger mb-4" role="alert">{{ error }}</div>
   {% endif %}
 
+  {# Shown when GitHub reports the repository over app.py REPO_WARN_MB.
+     Nothing is queued until the visitor presses "Scan anyway", which
+     resubmits this form with confirm_large=1. #}
+  {% if large_repo %}
+    <div class="alert app-alert alert-danger-ledger mb-4" role="alert">
+      <strong>This is a large repository.</strong>
+      {{ large_repo.repo }} is about {{ "{:,}".format(large_repo.size_mb) }} MB on GitHub
+      (the warning starts at {{ "{:,}".format(large_repo.warn_mb) }} MB). The scan may take a long time,
+      and some engines may stop at their time limit, in which case the report marks those
+      results as incomplete. Scans run one at a time, so other visitors wait behind it.
+    </div>
+  {% endif %}
+
   <div class="ledger-book" style="max-width: 640px;">
     <form method="POST" action="{{ url_for('scan') }}" class="p-4" id="scanForm">
       <div class="mb-3">
@@ -36,12 +49,13 @@
           Archive password <span class="text-muted text-normal">(optional)</span>
         </label>
         <input type="text" class="form-control form-control-ledger" id="archive_password" name="archive_password"
-               value="infected" aria-describedby="archiveHelp">
+               value="{{ archive_password or 'infected' }}" aria-describedby="archiveHelp">
         <div class="form-text" id="archiveHelp">Used to extract password-protected .zip, .7z and .rar archives found in the repository.</div>
       </div>
 
+      {% if large_repo %}<input type="hidden" name="confirm_large" value="1">{% endif %}
       <button type="submit" class="btn btn-ribbon btn-pill" id="scanSubmitBtn">
-        <i class="bi bi-search me-1" aria-hidden="true"></i>Run scan
+        <i class="bi bi-search me-1" aria-hidden="true"></i>{{ "Scan anyway" if large_repo else "Run scan" }}
       </button>
       <p class="form-text mt-3 mb-0">
         Scans are queued and run one at a time. You will be taken to a progress page,

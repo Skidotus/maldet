@@ -331,6 +331,41 @@ def index():
 
 #Scan repo
 
+# Repository size limits, from GitHub's own `size` (the whole history, in KB;
+# the shallow clone a scan takes is smaller, but the two move together).
+# Calibrated 2026-11-04 against the corpus: requests/flask ~12MB, django
+# 277MB, artcraft 1.3GB and mlflow 1.5GB all scan normally;
+# vxunderground/MalwareSourceCode (2.2GB) ran YARA out of time, and WebKit
+# (12.9GB) could not be cloned at all. Above WARN the visitor is told the
+# scan will be slow and may be partial, and confirms; above MAX it is
+# refused, since on the 4GB VPS it would hold the one scan slot for an hour
+# and still not finish.
+REPO_WARN_MB = int(os.environ.get("MALDET_REPO_WARN_MB", "1000"))
+REPO_MAX_MB  = int(os.environ.get("MALDET_REPO_MAX_MB", "5000"))
+
+
+def _repo_size_mb(repo):
+    """GitHub's size for owner/repo in MB, or None if it cannot be had. None
+    never blocks a scan: the check is a courtesy, and a GitHub API hiccup
+    must not stop every scan from being queued."""
+    try:
+        import requests
+        from scanner import HEADERS
+        resp = requests.get(f"https://api.github.com/repos/{repo}", headers=HEADERS, timeout=8)
+        if resp.status_code != 200:
+            return None
+        return round(resp.json().get("size", 0) / 1024)
+    except Exception:
+        return None
+
+
+def _size_refusal(repo, size_mb):
+    return (f"{repo} is about {size_mb:,} MB on GitHub, which is over this server's "
+            f"{REPO_MAX_MB:,} MB limit. Repositories this large cannot be cloned and "
+            f"scanned in a reasonable time here, and a partial scan would look more "
+            f"complete than it is.")
+
+
 @app.route('/scan', methods=['GET', 'POST'])
 def scan():
     # If this visitor already has a scan queued or running, land back on its
@@ -361,6 +396,19 @@ def scan():
     if not repo:
         return render_template('scan.html',
             error="Invalid GitHub URL. Example: https://github.com/owner/repo")
+
+    size_mb = _repo_size_mb(repo)
+    if size_mb is not None and size_mb >= REPO_MAX_MB:
+        return render_template('scan.html', error=_size_refusal(repo, size_mb),
+                               prefill_repo=repo)
+    if (size_mb is not None and size_mb >= REPO_WARN_MB
+            and request.form.get('confirm_large') != '1'):
+        # Same form, with the warning and a hidden confirm flag, so "Scan
+        # anyway" is one click and nothing is queued until it is pressed.
+        return render_template('scan.html', prefill_repo=repo,
+                               archive_password=archive_password,
+                               large_repo={"repo": repo, "size_mb": size_mb,
+                                           "warn_mb": REPO_WARN_MB})
 
     job_id = _start_scan_job(repo, archive_password)
     return _redirect_to_job(job_id)
@@ -912,6 +960,14 @@ def rescan(repo_id):
     own_job_id = _visitor_job_id()
     if own_job_id:
         return _redirect_to_job(own_job_id)
+
+    # Same hard limit as the scan form. A repo that was scannable once may
+    # have grown past it, and Rescan should say so rather than queue a scan
+    # that cannot finish.
+    size_mb = _repo_size_mb(repo_slug)
+    if size_mb is not None and size_mb >= REPO_MAX_MB:
+        return render_template('scan.html', error=_size_refusal(repo_slug, size_mb),
+                               prefill_repo=repo_slug)
 
     job_id = _start_scan_job(repo_slug, "infected")
     return _redirect_to_job(job_id)

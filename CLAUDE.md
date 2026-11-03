@@ -261,7 +261,15 @@ rather than offering a link to a file that is not there.
 
 **`scan.html`** — nothing, or `error` on a bad URL. The form normally lives
 in `index.html#scan`; this page is what the server renders on a rejected
-URL, so the error sits next to a form that can be corrected.
+URL, so the error sits next to a form that can be corrected. Also given
+`large_repo` (`repo`, `size_mb`, `warn_mb`) and `archive_password` when
+GitHub reports the repo at or over `MALDET_REPO_WARN_MB` (default 1000):
+the page warns, the button becomes "Scan anyway", and a hidden
+`confirm_large=1` is the only thing that queues it. At or over
+`MALDET_REPO_MAX_MB` (default 5000) both `/scan` and `/rescan` refuse with
+`error`. A GitHub API failure skips the check rather than blocking scans.
+Calibrated on the corpus: django 277MB and mlflow 1.5GB scan fine,
+MalwareSourceCode 2.2GB ran YARA out of time, WebKit 12.9GB never cloned.
 
 **`scan_status.html`** — `job` and `job_id`. `job` is shaped by
 `app.py:_job_payload()`, not the raw `scan_jobs` row: `status`, `stage`,
