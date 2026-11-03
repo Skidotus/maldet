@@ -1102,6 +1102,7 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .console-panel--events { padding: 0; overflow: hidden; }
 .events-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 0.5rem 1rem; padding: 1.25rem 1.25rem 0.75rem; }
 .events-head__hint { font-size: 0.88rem; color: var(--muted); margin: 0.35rem 0 0; }
+.events-head__csv { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.5rem; color: var(--green-text); white-space: nowrap; }
 .events-count { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); margin: 0; }
 .events-cap { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0 1.25rem 0.75rem; padding: 0.6rem 0.8rem; font-size: 0.82rem; color: var(--muted); background: var(--well); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .events-cap .bi { color: var(--green-text); margin-top: 2px; }

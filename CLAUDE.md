@@ -104,7 +104,13 @@ by `worker.py` (not inside the web request):
    connected (nested or on adjacent lines), not merely in the same file —
    the file-wide versions fired in up to 55% of repos. Changing a rule's
    description changes its `issue_text`, which is the classifier's
-   rule-frequency key, so retrain after editing descriptions
+   rule-frequency key, so retrain after editing descriptions.
+   Each rule set has `MALDET_YARA_TIMEOUT` (default 300s). A timeout keeps
+   the matches found so far (yara runs under `stdbuf -oL`; without it the
+   kill discards yara's whole output buffer) and adds a medium "YARA scan
+   incomplete" finding, because a timed-out scan used to save zero YARA
+   findings and look clean — it happened to WebKit and to a malware
+   collection
 5. `filter_noise()` — drops low-value Bandit rules and anything under
    test/docs/example/migration/locale paths; downgrades some high findings to medium.
    Vulnerability findings (Bandit/Semgrep/CVEs) in copied-in code
@@ -282,8 +288,13 @@ reload. The track's `data-stage` values must match `scanner.py`'s
 `history_dates`/`history_scores` (JSON for the chart), plus the two below.
 Laid out as a security console: verdict panels, summary / engine / trend
 row, then a findings log filtered client-side and paged 50 at a time.
-`findings` is capped at 200 per engine, so the log says so when it is
-truncated. It follows the light/dark theme like every other page. It used
+`findings` caps only Bandit and Semgrep at 200 each (`app.py`
+`UNCAPPED_TOOLS` lists the malware engines, which are always listed in
+full, since a hidden malicious finding is the failure that matters); the
+log names each truncated engine and how many it left out, and links
+`GET /detail/<id>/findings.csv`, every finding uncapped. That export
+escapes cells starting with `= + - @` because snippets come from untrusted
+repositories (CSV injection). Scores always count every finding. It follows the light/dark theme like every other page. It used
 to be dark in both, which left the theme toggle visibly doing nothing
 there; don't reintroduce a page-level palette (`body.console-page` now
 only sets the page's ground and width). Its console colours are the

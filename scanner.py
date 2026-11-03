@@ -434,6 +434,56 @@ def run_semgrep(path):
 
 YARA_MATCH_LINE = re.compile(r"^(\S+)\s+\[(.*?)\]\s+(.+)$")
 
+# Per rule set. The previous 120s/180s limits were exceeded by the two
+# largest repos in the corpus (WebKit; vxunderground/MalwareSourceCode, a
+# malware collection), and a timeout used to discard everything YARA had
+# already printed -- the repo then showed no YARA findings at all, which
+# reads exactly like a clean result.
+YARA_TIMEOUT = int(os.environ.get("MALDET_YARA_TIMEOUT", "300"))
+
+
+def _run_yara_capture(cmd, timeout=None):
+    """Run yara and return (stdout, timed_out). On a timeout the matches
+    printed before the kill are kept rather than thrown away; a final line
+    cut off mid-write is dropped, since it may name a truncated path.
+
+    stdbuf -oL makes yara write each match as it finds it. Without it, yara
+    block-buffers stdout into the pipe and a kill loses the whole buffer --
+    measured: 0 of the matches already found survived a timeout without
+    stdbuf, versus all of them with it."""
+    if shutil.which("stdbuf"):
+        cmd = ["stdbuf", "-oL"] + cmd
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=timeout or YARA_TIMEOUT)
+        if result.returncode != 0 and result.stderr.strip():
+            print(f"    YARA stderr: {result.stderr.strip()[:200]}")
+        return result.stdout, False
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout or ""
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", errors="replace")
+        if out and not out.endswith("\n"):
+            out = out[:out.rfind("\n") + 1]
+        return out, True
+
+
+def yara_incomplete_finding(rule_set, seconds):
+    """A visible marker for a YARA run that hit its time limit, so a partial
+    scan can never pass for a clean one."""
+    return {
+        "tool":         "yara",
+        "severity":     "medium",
+        "issue_text":   (f"YARA scan incomplete: the {rule_set} rules stopped after the "
+                         f"{seconds}s time limit on this repository, so YARA results are "
+                         f"partial. Matches found before the limit are listed; the rest "
+                         f"of the repository was not checked by these rules."),
+        "filename":     "",
+        "line_number":  0,
+        "code_snippet": "",
+    }
+
+
 def run_yara(path):
     print("  Running YARA...")
     rules_file = os.path.join(os.path.dirname(__file__), "rules.yar")
@@ -445,11 +495,11 @@ def run_yara(path):
         # -m prints each rule's meta (severity, description) alongside the
         # match, so severity lives in rules.yar itself — adding a rule
         # there doesn't need a code change here.
-        result = subprocess.run(
-            ["yara", "-m", "-r", rules_file, path],
-            capture_output=True, text=True, timeout=120
-        )
-        for line in result.stdout.strip().split("\n"):
+        stdout, timed_out = _run_yara_capture(["yara", "-m", "-r", rules_file, path])
+        if timed_out:
+            print(f"    YARA: timed out after {YARA_TIMEOUT}s, keeping partial results")
+            findings.append(yara_incomplete_finding("MalDet behaviour", YARA_TIMEOUT))
+        for line in stdout.strip().split("\n"):
             if not line:
                 continue
             match = YARA_MATCH_LINE.match(line)
@@ -532,13 +582,11 @@ def run_yara_forge(path):
         meta = _load_forge_meta()
         # -w: Forge rules trip YARA's performance warnings by the hundred,
         # which would bury any real error on stderr.
-        result = subprocess.run(
-            ["yara", "-w", "-r", FORGE_RULES_PATH, path],
-            capture_output=True, text=True, timeout=180
-        )
-        if result.returncode != 0:
-            print(f"    YARA Forge error: {result.stderr.strip()[:200]}")
-        for line in result.stdout.splitlines():
+        stdout, timed_out = _run_yara_capture(["yara", "-w", "-r", FORGE_RULES_PATH, path])
+        if timed_out:
+            print(f"    YARA Forge: timed out after {YARA_TIMEOUT}s, keeping partial results")
+            findings.append(yara_incomplete_finding("YARA Forge", YARA_TIMEOUT))
+        for line in stdout.splitlines():
             rule_name, _, filename = line.partition(" ")
             if not filename:
                 continue

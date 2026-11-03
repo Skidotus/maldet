@@ -311,7 +311,9 @@
     <header class="events-head">
       <div>
         <h2 class="console-panel__title" id="eventsTitle">Findings</h2>
-        <p class="events-head__hint">Highest severity first. Select a finding to see the code and what it means.</p>
+        <p class="events-head__hint">Highest severity first. Select a finding to see the code and what it means.
+          <a href="{{ url_for('findings_csv', repo_id=repo.id) }}" class="events-head__csv">
+            <i class="bi bi-download" aria-hidden="true"></i>Download all (CSV)</a></p>
       </div>
       <p class="events-count" id="eventCount" aria-live="polite"></p>
     </header>
@@ -320,9 +322,17 @@
       {% set capped = [] %}
       {% for tool, items in tools.items() %}{% if tool_totals[tool] > items|length %}{% set _ = capped.append(tool) %}{% endif %}{% endfor %}
       {% if capped %}
+        {# Only Bandit and Semgrep are ever capped (app.py UNCAPPED_TOOLS):
+           every malware-engine finding is always listed. Say exactly what
+           was cut, per engine, and where the rest are. #}
         <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
-          Large result: showing the top {{ findings|length }} of {{ "{:,}".format(finding_counts.total) }} findings
-          (up to 200 per engine, most severe and most likely real first). Totals above include everything.</p>
+          <span>Large result: showing {{ "{:,}".format(findings|length) }} of {{ "{:,}".format(finding_counts.total) }} findings.
+          {% for tool in capped -%}
+            {{ engine_name(tool) }}: {{ "{:,}".format(tool_totals[tool] - tools[tool]|length) }} more not shown
+            (only its top 200 are listed, most severe and most likely real first){{ "; " if not loop.last else "." }}
+          {%- endfor %}
+          Malware engines are always listed in full, and every score counts everything.
+          <a href="{{ url_for('findings_csv', repo_id=repo.id) }}">Download all findings (CSV)</a></span></p>
       {% endif %}
 
       <div class="events-toolbar" role="search" aria-label="Filter findings">

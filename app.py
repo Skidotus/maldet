@@ -621,6 +621,71 @@ def report_pdf(repo_id):
     })
 
 
+# Engines whose findings the report page always lists in full: everything
+# except the two code-quality linters. See detail().
+UNCAPPED_TOOLS = ("yara", "clamav", "guarddog", "dep_checker", "virustotal")
+
+# A spreadsheet treats a cell starting with one of these as a formula. The
+# findings CSV carries code snippets and file names from untrusted
+# repositories, so without this an attacker's repo could plant a formula
+# that runs when an analyst opens the export ("CSV injection").
+_CSV_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value):
+    if value is None:
+        return ""
+    text = str(value)
+    return "'" + text if text.startswith(_CSV_FORMULA_START) else text
+
+
+@app.route('/detail/<int:repo_id>/findings.csv')
+def findings_csv(repo_id):
+    """Every finding for a repository, uncapped -- the report page lists at
+    most 200 per code-quality engine, and this is where the rest are."""
+    import csv
+    import io
+
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT owner, repo_name FROM repositories WHERE id = %s", (repo_id,))
+        repo = cursor.fetchone()
+        if not repo:
+            return "Repository not found", 404
+        cursor.execute("""
+            SELECT tool, severity, confidence, issue_text, filename, line_number, code_snippet
+            FROM scan_results WHERE repo_id = %s
+            ORDER BY CASE severity
+                WHEN 'high' THEN 3 WHEN 'error' THEN 3 WHEN 'critical' THEN 3
+                WHEN 'medium' THEN 2 WHEN 'warning' THEN 2 ELSE 1 END DESC,
+                confidence DESC, tool ASC, id ASC
+        """, (repo_id,))
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        db.close()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["engine", "severity", "likely_real_confidence", "finding",
+                     "file", "line", "code_snippet"])
+    for r in rows:
+        writer.writerow([
+            _csv_cell(r["tool"]), _csv_cell(r["severity"]),
+            "" if r["confidence"] is None else f'{r["confidence"]:.4f}',
+            _csv_cell(r["issue_text"]), _csv_cell(r["filename"]),
+            r["line_number"] or "", _csv_cell(r["code_snippet"]),
+        ])
+    # GitHub owner/repo names are [A-Za-z0-9._-] only, so safe in a filename.
+    name = f"maldet-{repo['owner']}-{repo['repo_name']}-findings.csv"
+    return Response(
+        "﻿" + buf.getvalue(),   # BOM so Excel reads the file as UTF-8
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 @app.route('/detail/<int:repo_id>')
 def detail(repo_id):
     db     = get_db()
@@ -655,6 +720,12 @@ def detail(repo_id):
         # each tool at FINDINGS_PER_TOOL_LIMIT rather than rendering
         # everything — the template shows a "N more not shown" note.
         FINDINGS_PER_TOOL_LIMIT = 200
+        # Only the code-quality engines are capped. They are where the volume
+        # is (Bandit reaches 33,603 findings in one repo), while the malware
+        # engines never exceed a few hundred -- and a malicious-code finding
+        # is exactly what must never be hidden by a display limit.
+        # Everything, capped or not, is in findings.csv.
+        uncapped = ", ".join(["%s"] * len(UNCAPPED_TOOLS))
         SEVERITY_RANK = """
             CASE severity
                 WHEN 'high' THEN 3 WHEN 'error' THEN 3 WHEN 'critical' THEN 3
@@ -691,9 +762,9 @@ def detail(repo_id):
                 FROM scan_results
                 WHERE repo_id = %s
             ) ranked
-            WHERE rn <= %s
+            WHERE rn <= %s OR tool IN ({uncapped})
             ORDER BY {SEVERITY_RANK} DESC, confidence DESC, tool ASC
-        """, (repo_id, FINDINGS_PER_TOOL_LIMIT))
+        """, (repo_id, FINDINGS_PER_TOOL_LIMIT, *UNCAPPED_TOOLS))
         findings = cursor.fetchall()
 
         # Get scan history for trend chart
