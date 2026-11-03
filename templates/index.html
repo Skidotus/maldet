@@ -81,6 +81,17 @@
                 <span class="preview-card__owner">{{ latest.owner }} /</span>
                 <span class="preview-card__name">{{ latest.repo_name }}</span>
               </div>
+              {% set lt = trust_for(latest) %}
+              {% if lt %}
+                <div class="preview-card__trust">
+                  <span class="preview-card__trust-label">Trust score</span>
+                  <span class="trust-chip score-{{ lt.level | lower }}">{{ lt.trust }}<small>/100</small></span>
+                </div>
+                <div class="trust-meter preview-card__meter" role="img"
+                     aria-label="Trust {{ lt.trust }} out of 100, in the {{ lt.level }} risk band">
+                  <span class="trust-meter__fill trust-meter__fill--{{ lt.level | lower }}" style="width: {{ lt.trust }}%"></span>
+                </div>
+              {% endif %}
               <div class="preview-card__axes">
                 <div class="axis-panel">
                   <div class="axis-panel__head">
@@ -442,6 +453,7 @@
                 <tr>
                   <th scope="col">Repository</th>
                   <th scope="col">Language</th>
+                  <th scope="col">Trust</th>
                   <th scope="col">Vulnerability</th>
                   <th scope="col">Malicious pattern</th>
                   <th scope="col">Scanned</th>
@@ -456,6 +468,7 @@
                       <span class="repo-owner d-block">{{ repo.owner }} &middot; <i class="bi bi-star-fill" aria-hidden="true"></i> {{ repo.stars }}</span>
                     </td>
                     <td class="td-hide-sm">{% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                    {% set t = trust_for(repo) %}<td data-label="Trust">{% if t %}<span class="trust-chip score-{{ t.level | lower }}" title="Trust score out of 100 (not a probability)">{{ t.trust }}<small>/100</small></span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                     <td data-label="Vulnerability"><span class="axis-cell">
                       <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
                       <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | default(0, true) | round | int }}</span>

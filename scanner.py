@@ -918,6 +918,83 @@ CATEGORY_THRESHOLDS = {
     "malicious_pattern": (15, 35, 100),
 }
 
+# --- Trust score (0-100) -----------------------------------------------------
+#
+# A bounded, monotonic restatement of the two risk scores, for people who
+# want one number. It is deliberately NOT a probability ("73% likely
+# malicious" would need a calibrated repo-level model and labelled repos,
+# which MalDet does not have) -- it is a score out of 100, like a credit
+# score, where 100 means nothing of note was found.
+#
+# Each axis maps its unbounded risk score into the band of its risk level,
+# interpolating within the level's threshold range, so the number can never
+# disagree with the level the page shows next to it:
+#     Safe 100 | Low 99-70 | Medium 69-50 | High 49-25 | Critical 24-0
+# Critical decays as 24 * high_max / score, so it approaches 0 but every
+# extra finding still lowers it.
+#
+# The headline combines the axes asymmetrically: vulnerability findings can
+# lower trust no further than VULN_TRUST_FLOOR, and only malicious-pattern
+# findings can take it below. Vulnerability volume grows with codebase size
+# (django is Critical on that axis) and says "badly written", not
+# "hostile"; without the floor, django scored 17 while a repository of live
+# malware samples scored 39.
+TRUST_BANDS = {"Low": (99, 70), "Medium": (69, 50), "High": (49, 25)}
+VULN_TRUST_FLOOR = 40
+
+
+def axis_trust(score, thresholds):
+    score = float(score or 0)
+    if score <= 0:
+        return 100
+    low_max, med_max, high_max = thresholds
+    level = _level_for(score, thresholds)
+    if level == "Critical":
+        return max(0, min(24, round(24 * high_max / score)))
+    lo, hi = {"Low": (0, low_max), "Medium": (low_max, med_max),
+              "High": (med_max, high_max)}[level]
+    top, bottom = TRUST_BANDS[level]
+    return round(top - (score - lo) / (hi - lo) * (top - bottom))
+
+
+def trust_level(trust):
+    """The risk level whose band a trust score sits in -- for colour and
+    wording, so a trust of 40 reads as High risk wherever it appears."""
+    if trust >= 100: return "Safe"
+    if trust >= 70:  return "Low"
+    if trust >= 50:  return "Medium"
+    if trust >= 25:  return "High"
+    return "Critical"
+
+
+def trust_score(vuln_score, malware_score):
+    """Trust out of 100 from the two stored axis scores. Returns None when
+    there is no score at all (a scan that died before scoring), rather than
+    a 100 that would read as "checked, nothing found"."""
+    if vuln_score is None and malware_score is None:
+        return None
+    vuln = axis_trust(vuln_score, CATEGORY_THRESHOLDS["vulnerability"])
+    malware = axis_trust(malware_score, CATEGORY_THRESHOLDS["malicious_pattern"])
+    vuln_effect = max(vuln, VULN_TRUST_FLOOR)
+    trust = min(malware, vuln_effect)
+    if trust >= 100:
+        limited_by = None
+    elif malware <= vuln_effect:
+        limited_by = "malicious_pattern"
+    else:
+        limited_by = "vulnerability"
+    return {
+        "trust": trust,
+        "level": trust_level(trust),
+        "vuln": vuln,
+        "malware": malware,
+        "limited_by": limited_by,
+        # True when the vulnerability axis alone would have scored lower
+        # and the floor held it up -- the page says so instead of hiding it.
+        "vuln_floored": vuln < VULN_TRUST_FLOOR,
+    }
+
+
 def calculate_category_risk(findings):
     """Same weighted-score math as calculate_risk(), computed separately
     per detection category instead of blended into one number."""

@@ -1037,6 +1037,33 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .console-panel__foot { font-size: 0.8rem; color: var(--muted); margin: 0.9rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--line); line-height: 1.5; }
 .console-empty { color: var(--muted); font-size: 0.9rem; margin: 0.5rem 0; }
 
+/* Trust score (detail page): one full-width panel above the verdicts.
+   Colours come from the level tokens, so both themes are covered. */
+.trust-panel { display: grid; gap: 0.75rem 1.5rem; margin-bottom: 1rem; }
+@media (min-width: 768px) {
+  .trust-panel { grid-template-columns: minmax(9rem, auto) 1fr; align-items: center; }
+  .trust-panel__foot { grid-column: 1 / -1; }
+}
+.trust-panel__score .verdict__score { margin: 0.4rem 0 0; }
+.trust-panel__number { font-size: 3rem; }
+.trust-panel__why { font-size: 0.92rem; color: var(--ink); margin: 0.75rem 0 0.35rem; line-height: 1.5; }
+.trust-panel__axes { font-size: 0.82rem; color: var(--muted); margin: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+.trust-meter { position: relative; height: 0.6rem; border-radius: 999px; background: var(--line); overflow: hidden; }
+.trust-meter__fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
+.trust-meter__fill--safe     { background: var(--safe); }
+.trust-meter__fill--low      { background: var(--low); }
+.trust-meter__fill--medium   { background: var(--medium); }
+.trust-meter__fill--high     { background: var(--high); }
+.trust-meter__fill--critical { background: var(--critical); }
+.trust-meter__tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--surface); opacity: 0.8; }
+.preview-card__trust { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin: 0.75rem 0 0.4rem; font-size: 0.85rem; }
+.preview-card__trust-label { color: var(--muted); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.72rem; }
+.preview-card__trust .trust-chip { font-size: 1.15rem; }
+.preview-card__meter { margin-bottom: 0.9rem; }
+/* Compact form for tables and the landing card. */
+.trust-chip { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trust-chip small { color: var(--muted); font-weight: 400; }
+
 .verdict__question { color: var(--ink); font-size: 0.95rem; margin: 0 0 0.75rem; }
 .verdict__score { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem; }
 .verdict__number { font-family: var(--font-mono); font-size: 2.5rem; font-weight: 500; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--ink); }

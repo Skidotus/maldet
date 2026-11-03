@@ -33,6 +33,7 @@
               <th>Owner</th>
               <th>Language</th>
               <th>Stars</th>
+              <th>Trust</th>
               <th>Vulnerability</th>
               <th>Malicious Pattern</th>
               <th>Scanned</th>
@@ -48,6 +49,7 @@
                   {% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
                 </td>
                 <td class="td-hide-sm"><i class="bi bi-star-fill text-muted me-1" aria-hidden="true"></i>{{ repo.stars }}</td>
+                {% set t = trust_for(repo) %}<td data-label="Trust">{% if t %}<span class="trust-chip score-{{ t.level | lower }}" title="Trust score out of 100 (not a probability)">{{ t.trust }}<small>/100</small></span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                 <td data-label="Vulnerability"><span class="axis-cell">
                   <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
                   <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | round | int }}</span>
@@ -63,7 +65,7 @@
               </tr>
             {% endfor %}
             <tr id="registerNoMatches" style="display: none;">
-              <td colspan="8" class="text-center text-muted py-4 td-full">No repositories match your filter.</td>
+              <td colspan="9" class="text-center text-muted py-4 td-full">No repositories match your filter.</td>
             </tr>
           </tbody>
         </table>

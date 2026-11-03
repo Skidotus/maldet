@@ -222,6 +222,21 @@ this before changing a template: two pages have state that only makes sense
 with the backend behaviour behind it, and both are easy to break by
 "simplifying" a branch that looks redundant.
 
+**Trust score (all pages).** Every template has `trust_for(row)` (an
+`app.py` context processor over `scanner.trust_score()`), which turns any
+row carrying `vuln_score` / `malware_score` into `{trust, level, vuln,
+malware, limited_by, vuln_floored}`. It is computed at render time, never
+stored, so changing the mapping needs no migration. Each axis maps into its
+risk level's band (Safe 100, Low 99–70, Medium 69–50, High 49–25, Critical
+24–0, interpolated inside the level's thresholds), so the number can never
+contradict the level beside it. The headline is
+`min(malware, max(vuln, VULN_TRUST_FLOOR=40))`: code-quality findings scale
+with codebase size (django is Critical on that axis), so they can lower
+trust only to 40, and only malicious-pattern findings go below. Shown as
+"n / 100", never as a percentage — it is not a probability, and the pages
+say so. The detail page explains which axis is holding it down, including
+when the floor is. Not added to the browser extension.
+
 **`index.html`** — the one-page landing site (welcome, tools, scan form,
 recent scans, about). Given `repos` (10 most recent), `total`, the per-level
 counts `safe`/`low`/`medium`/`high`/`critical`, `total_findings` (a

@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, R
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import scan_repo
+from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR
 import job_queue
 
 app = Flask(__name__)
@@ -17,6 +17,19 @@ app = Flask(__name__)
 # so without this Flask serves it as a generic download and the one-click
 # install silently becomes "a file appeared in your Downloads folder".
 mimetypes.add_type("application/x-xpinstall", ".xpi")
+
+
+@app.context_processor
+def _trust_helpers():
+    """trust_for(row) -> scanner.trust_score() for any row carrying
+    vuln_score / malware_score (repository lists, the detail page's risk
+    row). Computed at render time from the stored scores rather than stored
+    itself, so changing the mapping never needs a migration or a rescan."""
+    def trust_for(row):
+        if not row:
+            return None
+        return trust_score(row.get("vuln_score"), row.get("malware_score"))
+    return {"trust_for": trust_for, "vuln_trust_floor": VULN_TRUST_FLOOR}
 
 
 @app.context_processor

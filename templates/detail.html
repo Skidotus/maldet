@@ -135,6 +135,56 @@
      something malicious" (the author's intent). Different threat
      models, so scored and shown separately.
      --------------------------------------------------------- #}
+  {# ---------------------------------------------------------
+     Trust score: one number out of 100 for people who want one, derived
+     from the two verdicts below by scanner.trust_score(). Shown as a score,
+     never as a percentage or a probability -- MalDet has no calibrated
+     model that could back "73% likely malicious". The sentence underneath
+     says which axis is holding it down, including when the vulnerability
+     floor is doing so, so the number is never unexplained.
+     --------------------------------------------------------- #}
+  {% set t = trust_for(risk) %}
+  {% if t %}
+  <section class="console-panel trust-panel" data-resolve aria-label="Trust score">
+    <div class="trust-panel__score">
+      <span class="console-panel__title">Trust score</span>
+      <div class="verdict__score">
+        <span class="verdict__number trust-panel__number score-{{ t.level | lower }}"
+              data-score="{{ t.trust }}">{{ t.trust }}</span>
+        <span class="verdict__unit">/ 100</span>
+      </div>
+    </div>
+    <div class="trust-panel__body">
+      <div class="trust-meter" role="img"
+           aria-label="Trust {{ t.trust }} out of 100, in the {{ t.level }} risk band">
+        <span class="trust-meter__fill trust-meter__fill--{{ t.level | lower }}" style="width: {{ t.trust }}%"></span>
+        {% for edge in [25, 50, 70] %}<span class="trust-meter__tick" style="left: {{ edge }}%"></span>{% endfor %}
+      </div>
+      <p class="trust-panel__why">
+        {% if t.limited_by is none %}
+          No engine found anything of note.
+        {% elif t.limited_by == "malicious_pattern" %}
+          Held down by <strong>malicious-pattern</strong> findings: signs the code may be trying to cause harm.
+        {% elif t.vuln_floored %}
+          Vulnerability findings alone would put this at {{ t.vuln }}. Code-quality problems can lower trust
+          only to {{ vuln_trust_floor }}; going below that takes signs of malicious intent.
+        {% else %}
+          Held down by <strong>vulnerability</strong> findings: weaknesses an attacker could exploit.
+        {% endif %}
+      </p>
+      <p class="trust-panel__axes">
+        Vulnerability <span class="score-{{ risk.vuln_level | lower }}">{{ t.vuln }}/100</span>
+        <span aria-hidden="true">·</span>
+        Malicious pattern <span class="score-{{ risk.malware_level | lower }}">{{ t.malware }}/100</span>
+      </p>
+    </div>
+    <p class="console-panel__foot trust-panel__foot">
+      A score out of 100, not a probability. 100 means nothing of note was found; the bands
+      match the risk levels (Low 70&ndash;99, Medium 50&ndash;69, High 25&ndash;49, Critical below 25).
+    </p>
+  </section>
+  {% endif %}
+
   <div class="console-grid console-grid--verdicts">
     {{ verdict_panel("Vulnerability", "Could an attacker exploit mistakes in this code?",
                      risk.vuln_level, risk.vuln_score, risk.vuln_high, risk.vuln_medium, risk.vuln_low,
