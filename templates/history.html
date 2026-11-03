@@ -29,10 +29,12 @@
         <table class="table table-ledger table-stack align-middle mb-0" id="registerTable">
           <thead>
             <tr>
-              <th>Repo Name</th>
-              <th>Owner</th>
-              <th>Language</th>
-              <th>Stars</th>
+              {# Owner and stars live under the name (as on the landing page's
+                 table) so the Trust column fits without pushing the View
+                 button off the edge of the card. #}
+              <th>Repository</th>
+              {# Language is the column given up below 1200px, so the View button never clips. #}
+              <th class="d-none d-xl-table-cell">Language</th>
               <th>Trust</th>
               <th>Vulnerability</th>
               <th>Malicious Pattern</th>
@@ -43,12 +45,13 @@
           <tbody>
             {% for repo in repos %}
               <tr>
-                <td class="repo-name td-full">{{ repo.repo_name }}</td>
-                <td class="repo-owner td-full">{{ repo.owner }}</td>
-                <td class="td-hide-sm">
+                <td class="td-full">
+                  <span class="repo-name">{{ repo.repo_name }}</span>
+                  <span class="repo-owner d-block">{{ repo.owner }} &middot; <i class="bi bi-star-fill" aria-hidden="true"></i> {{ repo.stars }}</span>
+                </td>
+                <td class="td-hide-sm d-none d-xl-table-cell">
                   {% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
                 </td>
-                <td class="td-hide-sm"><i class="bi bi-star-fill text-muted me-1" aria-hidden="true"></i>{{ repo.stars }}</td>
                 {% set t = trust_for(repo) %}<td data-label="Trust">{% if t %}<span class="trust-chip score-{{ t.level | lower }}" title="Trust score out of 100 (not a probability)">{{ t.trust }}<small>/100</small></span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                 <td data-label="Vulnerability"><span class="axis-cell">
                   <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
@@ -58,14 +61,14 @@
                   <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
                   <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | round | int }}</span>
                 </span></td>
-                <td class="text-muted td-date">{{ repo.scanned_at.strftime('%d %b %Y, %H:%M') if repo.scanned_at else '—' }}</td>
+                <td class="text-muted td-date text-nowrap">{% if repo.scanned_at %}{{ repo.scanned_at.strftime('%d %b %Y') }}<span class="d-block small">{{ repo.scanned_at.strftime('%H:%M') }}</span>{% else %}&mdash;{% endif %}</td>
                 <td class="text-end">
                   <a href="{{ url_for('detail', repo_id=repo.id) }}" class="btn btn-sm btn-outline-parchment btn-pill row-action">View</a>
                 </td>
               </tr>
             {% endfor %}
             <tr id="registerNoMatches" style="display: none;">
-              <td colspan="9" class="text-center text-muted py-4 td-full">No repositories match your filter.</td>
+              <td colspan="7" class="text-center text-muted py-4 td-full">No repositories match your filter.</td>
             </tr>
           </tbody>
         </table>

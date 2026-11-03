@@ -452,7 +452,7 @@
               <thead>
                 <tr>
                   <th scope="col">Repository</th>
-                  <th scope="col">Language</th>
+                  <th scope="col" class="d-none d-xl-table-cell">Language</th>
                   <th scope="col">Trust</th>
                   <th scope="col">Vulnerability</th>
                   <th scope="col">Malicious pattern</th>
@@ -467,7 +467,7 @@
                       <span class="repo-name">{{ repo.repo_name }}</span>
                       <span class="repo-owner d-block">{{ repo.owner }} &middot; <i class="bi bi-star-fill" aria-hidden="true"></i> {{ repo.stars }}</span>
                     </td>
-                    <td class="td-hide-sm">{% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                    <td class="td-hide-sm d-none d-xl-table-cell">{% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                     {% set t = trust_for(repo) %}<td data-label="Trust">{% if t %}<span class="trust-chip score-{{ t.level | lower }}" title="Trust score out of 100 (not a probability)">{{ t.trust }}<small>/100</small></span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                     <td data-label="Vulnerability"><span class="axis-cell">
                       <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
