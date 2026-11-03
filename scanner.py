@@ -469,6 +469,94 @@ def run_yara(path):
     except Exception as e:
         print(f"    YARA error: {e}")
     print(f"    YARA found {len(findings)} matches")
+
+    forge = run_yara_forge(path)
+    return findings + forge
+
+
+# YARA Forge (https://github.com/YARAHQ/yara-forge): ~5,000 curated public
+# rules that fingerprint KNOWN malware families and hacking tools, alongside
+# rules.yar's behaviour rules (which are what catch new code). Measured
+# 2026-11-03 over 174 scanned repos: hits in 15, every one a malware sample
+# collection or offensive tool, none in ordinary code; 97 files flagged that
+# ClamAV and rules.yar both missed. Refreshed by update_yara_forge.py; see
+# rules/forge/README.md for version and licensing (per-rule, attribution
+# required).
+FORGE_RULES_PATH = os.path.join(os.path.dirname(__file__), "rules", "forge", "yara-rules-core.yar")
+_forge_meta = None
+
+# Forge carries a 0-100 `score` instead of rules.yar's severity. Core only
+# contains rules scoring 65+, and 75 is by far the most common.
+FORGE_HIGH_SCORE = 75
+
+
+def _load_forge_meta():
+    """rule name -> {score, description}, parsed once from the rules file.
+    Read from the file rather than via `yara -m` because Forge descriptions
+    contain brackets and quotes that the one-line -m output cannot be split
+    on reliably."""
+    global _forge_meta
+    if _forge_meta is None:
+        _forge_meta = {}
+        with open(FORGE_RULES_PATH, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        for m in re.finditer(r"^rule\s+(\w+)[^{]*\{\s*meta:(.*?)\n\s*(?:strings|condition)\s*:",
+                             text, re.S | re.M):
+            body = m.group(2)
+            score = re.search(r"\bscore\s*=\s*(\d+)", body)
+            desc = re.search(r'\bdescription\s*=\s*"((?:[^"\\]|\\.)*)"', body)
+            _forge_meta[m.group(1)] = {
+                "score": int(score.group(1)) if score else FORGE_HIGH_SCORE,
+                "description": desc.group(1).replace('\\"', '"') if desc else "",
+            }
+    return _forge_meta
+
+
+def forge_severity(rule_name, score):
+    """Hacking tools (HKTL_ in the rule name, the signature-base convention)
+    are medium whatever their score: red-team frameworks and pentest
+    references legitimately contain them, and that is a different claim
+    from "this repository is malware"."""
+    if "HKTL_" in rule_name:
+        return "medium"
+    return "high" if score >= FORGE_HIGH_SCORE else "medium"
+
+
+def run_yara_forge(path):
+    print("  Running YARA Forge rules...")
+    findings = []
+    if not os.path.exists(FORGE_RULES_PATH):
+        print("    YARA Forge: rules/forge/yara-rules-core.yar not found, skipping")
+        return findings
+    try:
+        meta = _load_forge_meta()
+        # -w: Forge rules trip YARA's performance warnings by the hundred,
+        # which would bury any real error on stderr.
+        result = subprocess.run(
+            ["yara", "-w", "-r", FORGE_RULES_PATH, path],
+            capture_output=True, text=True, timeout=180
+        )
+        if result.returncode != 0:
+            print(f"    YARA Forge error: {result.stderr.strip()[:200]}")
+        for line in result.stdout.splitlines():
+            rule_name, _, filename = line.partition(" ")
+            if not filename:
+                continue
+            m = meta.get(rule_name, {"score": FORGE_HIGH_SCORE, "description": ""})
+            label = " [hacking tool]" if "HKTL_" in rule_name else ""
+            findings.append({
+                "tool":         "yara",
+                "severity":     forge_severity(rule_name, m["score"]),
+                # Stable per rule (no file name or score in it), because
+                # the FP classifier keys its rule-frequency lookup on this.
+                "issue_text":   f"YARA Forge rule matched: {rule_name}{label} — {m['description']}",
+                "filename":     filename.replace(path, ""),
+                "line_number":  0,
+                "code_snippet": "",
+            })
+    except Exception as e:
+        print(f"    YARA Forge error: {e}")
+    print(f"    YARA Forge found {len(findings)} matches")
     return findings
 
 #ClamAV

@@ -91,8 +91,20 @@ by `worker.py` (not inside the web request):
    are often password-protected to dodge automated scanning
 4. Runs detectors in sequence, each returning a list of findings dicts with the
    shape `{tool, severity, issue_text, filename, line_number, code_snippet}`:
-   `run_bandit`, `run_semgrep`, `run_yara` (rules in `rules.yar`), `run_clamav`,
-   `run_guarddog`, `check_dependencies` (from `dep_checker.py`)
+   `run_bandit`, `run_semgrep`, `run_yara`, `run_clamav`,
+   `run_guarddog`, `check_dependencies` (from `dep_checker.py`).
+   `run_yara` runs two rule sets, both reported as tool `yara`: MalDet's own
+   **behaviour** rules in `rules.yar` (decode-then-exec, download-then-exec,
+   persistence — what catches new code) and then `run_yara_forge()`, the
+   **YARA Forge core** fingerprints of known malware and hacking tools in
+   `rules/forge/` (release in `VERSION`, refresh with
+   `update_yara_forge.py`, measurements and licensing in its README). Forge
+   score maps to severity (75+ high), `HKTL_` rules are medium and labelled
+   `[hacking tool]`. The `rules.yar` rules require their two halves to be
+   connected (nested or on adjacent lines), not merely in the same file —
+   the file-wide versions fired in up to 55% of repos. Changing a rule's
+   description changes its `issue_text`, which is the classifier's
+   rule-frequency key, so retrain after editing descriptions
 5. `filter_noise()` — drops low-value Bandit rules and anything under
    test/docs/example/migration/locale paths; downgrades some high findings to medium.
    Vulnerability findings (Bandit/Semgrep/CVEs) in copied-in code
