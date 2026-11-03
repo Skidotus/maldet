@@ -370,10 +370,9 @@
               data-noise="{{ 1 if noise else 0 }}">
             <button type="button" class="event__row" aria-expanded="false" aria-controls="ev-{{ loop.index }}">
               {# Severity is "how bad if real"; confidence is "how likely real".
-                 A full-colour HIGH next to "probably noise" reads as a
-                 contradiction, so on noise rows the badge drops to a quiet
-                 outline. It still says the severity, because the classifier
-                 can be wrong, and the details below spell out both. #}
+                 The badge keeps its colour on noise rows (a user call: a badge
+                 that fades reads as the severity changing); the tooltip and
+                 the Severity line in the details explain the two together. #}
               <span class="event__sev"><span class="seal-badge seal-{{ sev }}"
                 {% if noise %}title="{{ sev | capitalize }} if real; rated likely noise"{% endif %}>{{ sev }}</span></span>
               <span class="event__tool">{{ engine_name(f.tool) }}</span>
