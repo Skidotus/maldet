@@ -152,3 +152,48 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     INDEX idx_status_queued (status, queued_at),
     FOREIGN KEY (repo_id) REFERENCES repositories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Indicators of compromise, one row per (ioc_type, value) per scan. scan_id is
+-- scan_history.id, the only per-scan record this schema has: scan_results and
+-- risk_scores are keyed by repo and replaced on every scan. ON DELETE CASCADE
+-- so dedupe_repositories.py can go on deleting history rows.
+--
+-- On an existing database, apply this whole file (every statement here is
+-- IF NOT EXISTS, so it is safe to re-run) and restart worker.py:
+--   mysql -u <user> -p <database> < schema.sql
+-- Until then scans still save; they just store no IOCs.
+CREATE TABLE IF NOT EXISTS iocs (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    scan_id     INT NOT NULL,
+    -- sha256, discord_webhook, telegram_bot_token, btc_wallet, eth_wallet,
+    -- url, ipv4 or domain
+    ioc_type    VARCHAR(32) NOT NULL,
+    -- Binary collation: wallets, tokens and URL paths are case-sensitive, and
+    -- the default collation would merge two different values into one.
+    value       VARCHAR(2048) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    -- The first file it was seen in, alphabetically, and how many in total.
+    file_path   VARCHAR(500),
+    file_count  INT NOT NULL DEFAULT 1,
+    -- When this repository first contained it; carried forward across rescans.
+    first_seen  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- abuse.ch verdict, NULL when there was no match. Whether NULL means "no
+    -- match" or "never asked" is in ioc_runs.ti_status.
+    ti_match    VARCHAR(255) NULL,
+    ti_source   VARCHAR(32)  NULL,
+    INDEX idx_iocs_scan (scan_id, ioc_type),
+    FOREIGN KEY (scan_id) REFERENCES scan_history(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Whether extraction ran for a scan and how it went. Without this, no rows in
+-- iocs means any of "nothing found", "extraction crashed" or "scanned before
+-- this feature existed", and the page could only claim the first: the same
+-- false clean that scanner.py's save_to_db() comments warn about.
+CREATE TABLE IF NOT EXISTS ioc_runs (
+    scan_id       INT PRIMARY KEY,
+    status        VARCHAR(12) NOT NULL,            -- done, partial, failed
+    ti_status     VARCHAR(12) NOT NULL DEFAULT 'off',  -- off, done, partial, failed
+    files_scanned INT NOT NULL DEFAULT 0,
+    files_hashed  INT NOT NULL DEFAULT 0,
+    note          VARCHAR(255) NULL,
+    FOREIGN KEY (scan_id) REFERENCES scan_history(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
