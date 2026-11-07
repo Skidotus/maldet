@@ -1170,6 +1170,10 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .iocs-foot { font-size: 0.8rem; color: var(--muted); margin: 0; padding: 0.75rem 1.25rem; border-top: 1px solid var(--line); }
 .console-panel--iocs .console-empty { padding: 1.5rem 1.25rem; margin: 0; text-align: center; }
 .ioc-table td { font-size: 0.88rem; }
+@media (min-width: 768px) {
+  .ioc-table td:nth-child(3) { min-width: 15rem; }
+  .ioc-table td:nth-child(4) { min-width: 11rem; }
+}
 .ioc-type { white-space: nowrap; font-weight: 600; }
 .ioc-value, .ioc-file { font-family: var(--font-mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .ioc-file, .ioc-more, .ioc-muted { color: var(--muted); }

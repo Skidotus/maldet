@@ -192,7 +192,8 @@
                      "Bandit, Semgrep, pip-audit") }}
     {{ verdict_panel("Malicious pattern", "Does this code look like it is trying to cause harm?",
                      risk.malware_level, risk.malware_score, risk.malware_high, risk.malware_medium, risk.malware_low,
-                     "YARA, ClamAV, GuardDog, dependency checker") }}
+                     "YARA, ClamAV, GuardDog, dependency checker"
+                     ~ (", threat intelligence" if tool_totals.get("threat_intel") else "")) }}
 
     {% set fc = finding_counts %}
     {% set uncertain = fc.total - fc.likely_real - fc.likely_noise %}
