@@ -504,6 +504,26 @@ class ThreatIntelTests(unittest.TestCase):
         self.assertEqual(post.call_count, 1)
         self.assertNotIn(self.KEY, out.getvalue())
 
+    def test_rate_limit_stops_all_further_lookups(self):
+        rows = [row("url", f"{FAKE_URL}{i}") for i in range(5)]
+        out = io.StringIO()
+        with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(status=429)) as post, \
+             contextlib.redirect_stdout(out):
+            status = ioc.enrich_with_threat_intel(rows, key=self.KEY)
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(status, "failed")
+        self.assertIn("rate limit", out.getvalue())
+
+    def test_rate_limit_mid_scan_keeps_earlier_answers(self):
+        rows = [row("url", f"{FAKE_URL}{i}") for i in range(3)]
+        side = [FakeResponse({"query_status": "ok", "threat": "malware_download"}), FakeResponse(status=429)]
+        with mock.patch.object(ioc.requests, "post", side_effect=side) as post, \
+             contextlib.redirect_stdout(io.StringIO()):
+            status = ioc.enrich_with_threat_intel(rows, key=self.KEY)
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(status, "partial")
+        self.assertEqual(rows[0]["ti_source"], "URLhaus")
+
     def test_lookup_cap_reports_partial(self):
         rows = [row("url", f"{FAKE_URL}{i}") for i in range(ioc.TI_MAX_LOOKUPS + 1)]
         response = FakeResponse({"query_status": "no_results"})

@@ -559,6 +559,12 @@ class _TiRejected(Exception):
     """The API refused the key, so every further lookup would fail too."""
 
 
+class _TiRateLimited(Exception):
+    """abuse.ch said to slow down. Its Fair Use Policy limits heavy accounts for
+    up to 72 hours and restricts repeat offenders for longer, so carrying on with
+    the rest of this scan's lookups is exactly the wrong response."""
+
+
 def _ti_post(url, data, key, deadline):
     """Parsed JSON, or None if this one lookup failed. Never logs the exception
     text or the request: the key is in the headers and stays out of the output."""
@@ -572,6 +578,8 @@ def _ti_post(url, data, key, deadline):
         return None
     if response.status_code in (401, 403):
         raise _TiRejected()
+    if response.status_code == 429:
+        raise _TiRateLimited()
     if response.status_code != 200:
         return None
     try:
@@ -635,6 +643,8 @@ def enrich_with_threat_intel(iocs, key=None, time_budget=TI_TIME_BUDGET):
                 ioc["ti_match"], ioc["ti_source"] = match, source
     except _TiRejected:
         print("    Threat intel: abuse.ch rejected ABUSECH_AUTH_KEY, skipping lookups")
+    except _TiRateLimited:
+        print("    Threat intel: abuse.ch rate limit reached, skipping the remaining lookups")
     if answered == wanted:
         return "done"
     return "partial" if answered else "failed"

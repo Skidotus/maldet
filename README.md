@@ -385,7 +385,10 @@ strings, and project metadata such as homepage links, authors and maintainers.
 
 **Threat intel:** with `ABUSECH_AUTH_KEY` set, file hashes are checked against
 MalwareBazaar and URLs against URLhaus. Hashes and URLs from the scanned repository
-are sent to abuse.ch. Up to 50 of each are checked per scan, within 30 seconds.
+are sent to abuse.ch. Up to 50 of each are checked per scan, within 30 seconds, and
+lookups stop for that scan if abuse.ch answers with a rate limit. abuse.ch can limit
+heavy accounts for up to 72 hours under its Fair Use Policy, so leave the key unset
+for bulk runs such as `batch_scan.py`.
 
 | Match | Added to the score | Malware verdict |
 |---|---|---|
