@@ -23,6 +23,7 @@
   "guarddog":    ("GuardDog",           "Malicious pattern", "Supply-chain attack heuristics"),
   "virustotal":  ("VirusTotal",         "Malicious pattern", "Multi-engine file reputation"),
   "dep_checker": ("Dependency checker", "Supply chain",      "CVEs, typosquats and risky installs"),
+  "threat_intel": ("Threat intelligence", "Malicious pattern", "Files and URLs already listed by abuse.ch"),
 } %}
 {% macro engine_name(tool) -%}{{ engines[tool][0] if tool in engines else tool }}{%- endmacro %}
 
@@ -303,6 +304,83 @@
       </section>
     {% endif %}
   </div>
+
+  {# ---------------------------------------------------------
+     Indicators of compromise. Values come from untrusted repositories, so
+     they stay plain escaped text: never a link anyone could open by accident.
+     An empty list only says "none found" when extraction finished (see
+     app.py _load_iocs), because anything else would be a false clean.
+     --------------------------------------------------------- #}
+  {% set ioc_labels = {
+    "sha256": "SHA-256", "discord_webhook": "Discord webhook", "telegram_bot_token": "Telegram token",
+    "btc_wallet": "BTC wallet", "eth_wallet": "ETH wallet", "url": "URL", "ipv4": "IPv4", "domain": "Domain",
+  } %}
+  <section class="console-panel console-panel--iocs" id="iocs" aria-labelledby="iocsTitle">
+    <header class="iocs-head">
+      <div>
+        <h2 class="console-panel__title" id="iocsTitle">Indicators of compromise</h2>
+        <p class="events-head__hint">From files ClamAV or YARA flagged, and from install scripts.</p>
+      </div>
+      {% if iocs.state != 'none' %}
+        <div class="iocs-head__actions">
+          <a href="{{ url_for('iocs_csv', repo_id=repo.id) }}" class="btn btn-outline-parchment btn-pill btn-sm">
+            <i class="bi bi-download me-1" aria-hidden="true"></i>Download IOCs (CSV)</a>
+          <a href="{{ url_for('iocs_json', repo_id=repo.id) }}" class="btn btn-outline-parchment btn-pill btn-sm">
+            <i class="bi bi-download me-1" aria-hidden="true"></i>Download IOCs (JSON)</a>
+        </div>
+      {% endif %}
+    </header>
+
+    {% if iocs.state == 'partial' %}
+      <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>Incomplete: extraction {{ iocs.note or 'stopped early' }}, so this list may not be everything.</span></p>
+    {% endif %}
+    {% if iocs.total > iocs.rows|length %}
+      <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>Showing {{ "{:,}".format(iocs.rows|length) }} of {{ "{:,}".format(iocs.total) }}. The downloads include all of them.</span></p>
+    {% endif %}
+
+    {% if iocs.rows %}
+      <div class="table-responsive">
+        <table class="table table-ledger table-stack align-middle mb-0 ioc-table">
+          <thead>
+            <tr><th scope="col">Type</th><th scope="col">Value</th><th scope="col">File</th><th scope="col">Threat intel</th></tr>
+          </thead>
+          <tbody>
+            {% for i in iocs.rows %}
+              <tr>
+                <td data-label="Type" class="ioc-type">{{ ioc_labels.get(i.ioc_type, i.ioc_type) }}</td>
+                <td data-label="Value" class="td-full"><span class="ioc-value">{{ i.value }}</span></td>
+                <td data-label="File" class="td-full"><span class="ioc-file">{{ i.file_path }}</span>
+                  {%- if i.file_count > 1 %} <span class="ioc-more">+{{ i.file_count - 1 }} more</span>{% endif %}</td>
+                <td data-label="Threat intel">
+                  {%- if i.ti_match %}
+                    <span class="ioc-hit"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                      {{ i.ti_source }}: {{ i.ti_match }}</span>
+                  {%- elif i.ioc_type not in ('sha256', 'url') %}<span class="ioc-muted">Not applicable</span>
+                  {%- elif iocs.ti_status == 'done' %}<span class="ioc-muted">No match</span>
+                  {%- else %}<span class="ioc-muted">Not checked</span>
+                  {%- endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="iocs-foot">Shown as plain text on purpose. These may be live malicious addresses, so do not open them.</p>
+    {% elif iocs.state == 'done' %}
+      <div class="empty-state empty-state--compact">
+        <i class="bi bi-shield-check empty-state__icon" aria-hidden="true"></i>
+        <h3 class="h5">No indicators of compromise found</h3>
+      </div>
+    {% elif iocs.state == 'partial' %}
+      <p class="console-empty">No indicators in the files read before extraction stopped.</p>
+    {% elif iocs.state == 'failed' %}
+      <p class="console-empty">Indicator extraction failed on this scan, so nothing can be said either way. Rescan to try again.</p>
+    {% else %}
+      <p class="console-empty">Indicators were not extracted for this scan. Rescan to extract them.</p>
+    {% endif %}
+  </section>
 
   {# ---------------------------------------------------------
      Event log

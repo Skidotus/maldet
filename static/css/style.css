@@ -1163,6 +1163,22 @@ button.tool-section__header { width: 100%; background: none; border: none; curso
 .console-panel--events .console-empty { padding: 1.5rem 1.25rem; margin: 0; text-align: center; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--green-text); text-decoration: underline; cursor: pointer; font: inherit; }
 
+/* Indicators of compromise. Uses only tokens, so it follows the theme. */
+.console-panel--iocs { padding: 0; overflow: hidden; margin-bottom: 1rem; }
+.iocs-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 1.1rem 1.25rem; }
+.iocs-head__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.iocs-foot { font-size: 0.8rem; color: var(--muted); margin: 0; padding: 0.75rem 1.25rem; border-top: 1px solid var(--line); }
+.console-panel--iocs .console-empty { padding: 1.5rem 1.25rem; margin: 0; text-align: center; }
+.ioc-table td { font-size: 0.88rem; }
+.ioc-type { white-space: nowrap; font-weight: 600; }
+.ioc-value, .ioc-file { font-family: var(--font-mono); font-size: 0.82rem; overflow-wrap: anywhere; }
+.ioc-file, .ioc-more, .ioc-muted { color: var(--muted); }
+.ioc-more { font-size: 0.8rem; white-space: nowrap; }
+.ioc-hit { color: var(--critical-text); font-weight: 600; overflow-wrap: anywhere; }
+.empty-state--compact { padding: 1.75rem 1.5rem; }
+.empty-state--compact .empty-state__icon { font-size: 1.75rem; margin-bottom: 0.5rem; }
+.empty-state--compact h3 { margin: 0; }
+
 /* Below lg the log turns into stacked cards: severity + engine on top,
    the finding underneath, location and confidence last. */
 @media (max-width: 991.98px) {

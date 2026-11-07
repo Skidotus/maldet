@@ -8,6 +8,7 @@ import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
 from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category
+from ioc_extractor import IOC_TYPES
 import job_queue
 
 app = Flask(__name__)
@@ -455,6 +456,7 @@ TOOL_PURPOSE = {
     "guarddog":    "Malicious package and install-time behaviour",
     "dep_checker": "Vulnerable, unpinned or typosquatted dependencies",
     "virustotal":  "Known malware signatures (legacy scans)",
+    "threat_intel": "Files and URLs already listed by abuse.ch as malicious",
 }
 
 
@@ -671,7 +673,7 @@ def report_pdf(repo_id):
 
 # Engines whose findings the report page always lists in full: everything
 # except the two code-quality linters. See detail().
-UNCAPPED_TOOLS = ("yara", "clamav", "guarddog", "dep_checker", "virustotal")
+UNCAPPED_TOOLS = ("yara", "clamav", "guarddog", "dep_checker", "virustotal", "threat_intel")
 
 # A spreadsheet treats a cell starting with one of these as a formula. The
 # findings CSV carries code snippets and file names from untrusted
@@ -730,6 +732,114 @@ def findings_csv(repo_id):
     return Response(
         "﻿" + buf.getvalue(),   # BOM so Excel reads the file as UTF-8
         mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+# The report page lists this many indicators; the downloads have them all.
+IOC_DISPLAY_LIMIT = 500
+
+
+def _load_iocs(cursor, repo_id, limit=None):
+    """The indicators from this repository's latest extraction, and how far to
+    trust an empty list. `state` is:
+      none       extraction never ran here: scanned before the feature existed,
+                 or this database has not had the new tables added
+      failed     it ran and did not finish, so nothing can be said
+      partial    it stopped early; the rows are real but may not be all of them
+      done       it finished, and an empty list really does mean nothing found
+    """
+    empty = {"state": "none", "rows": [], "total": 0, "ti_status": "off", "note": None}
+    try:
+        cursor.execute("""
+            SELECT r.* FROM ioc_runs r
+            JOIN scan_history h ON h.id = r.scan_id
+            WHERE h.repo_id = %s
+            ORDER BY r.scan_id DESC LIMIT 1
+        """, (repo_id,))
+        run = cursor.fetchone()
+        if not run:
+            return empty
+        cursor.execute("SELECT COUNT(*) AS n FROM iocs WHERE scan_id = %s", (run["scan_id"],))
+        total = cursor.fetchone()["n"]
+        placeholders = ", ".join(["%s"] * len(IOC_TYPES))
+        cursor.execute(f"""
+            SELECT ioc_type, value, file_path, file_count, first_seen, ti_match, ti_source
+            FROM iocs WHERE scan_id = %s
+            ORDER BY ti_match IS NULL, FIELD(ioc_type, {placeholders}), value
+            {'LIMIT %s' if limit else ''}
+        """, (run["scan_id"], *IOC_TYPES, *((limit,) if limit else ())))
+        rows = cursor.fetchall()
+    except pymysql.MySQLError as e:
+        # 1146: the tables are not there yet. Never let this cost the whole report.
+        print(f"IOC lookup failed for repo {repo_id}: {e}")
+        return empty
+    return {"state": run["status"], "rows": rows, "total": total,
+            "ti_status": run["ti_status"], "note": run["note"]}
+
+
+def _iocs_for_export(repo_id):
+    """(repo, iocs) for a download, with repo None if there is no such repository."""
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT owner, repo_name FROM repositories WHERE id = %s", (repo_id,))
+        repo = cursor.fetchone()
+        return repo, (_load_iocs(cursor, repo_id) if repo else None)
+    finally:
+        cursor.close()
+        db.close()
+
+
+@app.route('/detail/<int:repo_id>/iocs.csv')
+def iocs_csv(repo_id):
+    import csv
+    import io
+
+    repo, iocs = _iocs_for_export(repo_id)
+    if not repo:
+        return "Repository not found", 404
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["type", "value", "file", "file_count", "first_seen",
+                     "threat_intel_match", "threat_intel_source"])
+    for r in iocs["rows"]:
+        writer.writerow([_csv_cell(r["ioc_type"]), _csv_cell(r["value"]), _csv_cell(r["file_path"]),
+                         r["file_count"], r["first_seen"], _csv_cell(r["ti_match"]),
+                         _csv_cell(r["ti_source"])])
+    name = f"maldet-{repo['owner']}-{repo['repo_name']}-iocs.csv"
+    return Response(
+        "\ufeff" + buf.getvalue(),   # BOM so Excel reads the file as UTF-8
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@app.route('/detail/<int:repo_id>/iocs.json')
+def iocs_json(repo_id):
+    repo, iocs = _iocs_for_export(repo_id)
+    if not repo:
+        return "Repository not found", 404
+    body = {
+        "repository":   f"{repo['owner']}/{repo['repo_name']}",
+        # Without this an empty list reads as "clean" whether or not it ran.
+        "status":       iocs["state"],
+        "note":         iocs["note"],
+        "threat_intel": iocs["ti_status"],
+        "iocs": [{
+            "type":                r["ioc_type"],
+            "value":               r["value"],
+            "file":                r["file_path"],
+            "file_count":          r["file_count"],
+            "first_seen":          r["first_seen"].isoformat() if r["first_seen"] else None,
+            "threat_intel_match":  r["ti_match"],
+            "threat_intel_source": r["ti_source"],
+        } for r in iocs["rows"]],
+    }
+    name = f"maldet-{repo['owner']}-{repo['repo_name']}-iocs.json"
+    return Response(
+        json.dumps(body, indent=2),
+        mimetype="application/json",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
 
@@ -894,7 +1004,8 @@ def detail(repo_id):
                 "likely_noise": int(summary_counts["likely_noise"] or 0),
             },
             history_dates  = json.dumps(history_dates),
-            history_scores = json.dumps(history_scores)
+            history_scores = json.dumps(history_scores),
+            iocs           = _load_iocs(cursor, repo_id, IOC_DISPLAY_LIMIT),
         )
 
     finally:

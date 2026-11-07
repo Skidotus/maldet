@@ -57,7 +57,7 @@ OUTPUT_PATH = "summary_eval.json"
 
 # Detector names the model could plausibly claim. Checked against the prompt,
 # so naming one that did not fire here counts as fabricated.
-KNOWN_TOOLS = ["bandit", "semgrep", "yara", "clamav", "guarddog",
+KNOWN_TOOLS = ["bandit", "semgrep", "yara", "clamav", "guarddog", "threat_intel",
                "pip-audit", "virustotal", "dependabot", "snyk", "sonarqube",
                "trivy", "codeql", "checkmarx", "veracode"]
 
