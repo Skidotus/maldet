@@ -48,6 +48,10 @@ class RegexTests(unittest.TestCase):
     def test_url_strips_trailing_punctuation(self):
         self.assertEqual(of_type(f"see ({FAKE_URL}).", "url"), {FAKE_URL})
 
+    def test_url_stopping_at_a_shell_variable_drops_the_dollar(self):
+        self.assertEqual(of_type(f"curl http://{FAKE_DOMAIN}/repos/${{ARCH}}/x", "url"),
+                         {f"http://{FAKE_DOMAIN}/repos/"})
+
     def test_url_keeps_balanced_parenthesis(self):
         url = f"http://{FAKE_DOMAIN}/a_(b)"
         self.assertEqual(of_type(f"{url} ", "url"), {url})

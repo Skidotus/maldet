@@ -174,10 +174,11 @@ def valid_btc_bech32(address):
 
 def normalize_url(raw):
     """(url, host) for a usable URL, or None. Placeholders such as
-    http://$HOST/ or http://%s fail the host check, which is the point."""
-    url = raw.rstrip(".,:;!?'\"")
+    http://$HOST/ or http://%s fail the host check, which is the point. The $ is
+    what URL_RE leaves behind when a path stops at a ${VARIABLE}."""
+    url = raw.rstrip(".,:;!?'\"$")
     while url.endswith((")", "]")) and url.count(url[-1]) > url.count({")": "(", "]": "["}[url[-1]]):
-        url = url[:-1].rstrip(".,:;!?'\"")
+        url = url[:-1].rstrip(".,:;!?'\"$")
     try:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower().rstrip(".")
