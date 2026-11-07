@@ -117,6 +117,9 @@ services:
       DB_USER: ${DB_USER:-fypuser}
       DB_PASSWORD: ${DB_PASSWORD:-maldet-dev}
       SKIP_FRESHCLAM: ${SKIP_FRESHCLAM:-0}
+      # Optional abuse.ch lookups for IOCs; the value lives only in .env.
+      ABUSECH_AUTH_KEY: ${ABUSECH_AUTH_KEY:-}
+      MALDET_IOC_TIMEOUT: ${MALDET_IOC_TIMEOUT:-60}
       # Semgrep's own ceiling. 1500MB leaves room for clamscan (~1GB peak)
       # and MySQL on a 4GB host.
       MALDET_SEMGREP_MAX_MEMORY: ${MALDET_SEMGREP_MAX_MEMORY:-1500}
