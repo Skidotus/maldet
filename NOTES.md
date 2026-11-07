@@ -653,6 +653,36 @@ failed for three, and only one of the three is fixable.
   credentials, so consider masking them if that becomes a concern.
 - Existing scans have no IOCs until rescanned.
 
+## Evaluated, not adopted (2026-11-07 — Kaspersky KVRT as a second AV)
+
+An industry contact said one AV is not enough. VirusTotal was rejected over its API
+limits, so KVRT for Linux 24.0.6.0 was run locally, report-only, as a normal user, over
+the same files as `rules.yar`, YARA Forge and ClamAV. Counts are distinct flagged files
+outside `is_ignored_path()`, with the corrected `rules.yar`.
+
+| | KVRT | rules.yar | Forge | ClamAV |
+|---|---|---|---|---|
+| 23 clean repos (75,086 files): flagged files | 0 | 34 | 0 | 0 |
+| 20 offensive repos (7,968 files): flagged files | 604 | 215 | 114 | 293 |
+| Offensive repos with any hit | 13 | 14 | 10 | 10 |
+
+- **Files, not repos.** KVRT flagged 293 files no other engine did, but no repo that the
+  others all missed: 15 of 20 had a hit with or without it. Other engines flagged 219
+  files it missed, such as all 28 in `merlin`.
+- **Cost:** 4-36s per repo, 348-514MB peak. Far cheaper than ClamAV, which took 1,068s
+  for the whole set in one pass.
+- **Read with care.** 456 of the 604 are heuristic labels (`HEUR:...`). Nobody checked
+  that flagged files are really malicious, so this measures agreement, not accuracy. Zero
+  on clean repos is over popular projects only. Archives were not extracted first, which
+  `scan_repo()` would do, so samples in password-protected archives were not seen.
+- **Why it is not adopted:** the only licence readable before running it was the 2015
+  Windows one, which covers protecting "Your Computer"; nothing confirms that a public
+  scanning site is allowed. Suspicious files may go to Kaspersky through KSN, signatures
+  need a 164MB re-download, and it exits 0 even when it finds threats.
+
+This also corrects the note above that ClamAV has produced zero real hits: on these
+repos it flagged 293 files, and none in the clean set.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
