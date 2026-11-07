@@ -52,9 +52,13 @@ looks like a clean scan — verify it runs rather than assuming.
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
-Tests cover IOC extraction only: `python3 -m unittest discover -s tests -t .`
-(stdlib, needs no database or network; `test_ioc_scoring.py` imports `scanner.py`,
-so `config.py` must exist). There is no lint config.
+Tests cover IOC extraction and two YARA rules so far:
+`python3 -m unittest discover -s tests -t .` (stdlib, needs no database or network;
+`test_ioc_scoring.py` imports `scanner.py`, so `config.py` must exist, and
+`test_yara_rules.py` skips if `yara` is not installed). When changing a rule, test
+both directions: the first fix to `detect_downloader` passed its tests and still
+lost a real `curl.exe` download, found only by comparing hits across real repos.
+There is no lint config.
 
 ## Architecture
 

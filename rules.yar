@@ -39,8 +39,12 @@ rule detect_reverse_shell {
         $f = "os.dup2(s.fileno()"
         $g = "pty.spawn(\"/bin/"
         $h = "pty.spawn('/bin/"
+        // "#!/bin/bash -i" only asks for an interactive script: it is not a
+        // reverse shell. Counted so that a header alone does not fire, while
+        // the same text anywhere else in the file still does.
+        $shebang = /#![ \t]*\/bin\/(ba)?sh -i/
     condition:
-        any of them
+        any of ($a, $b, $c, $f, $g, $h) or (#d + #e) > #shebang
 }
 
 rule detect_base64_exec {
@@ -100,7 +104,9 @@ rule detect_downloader {
         severity = "low"
         description = "Downloads an executable or script file (.exe, .dll, .sh, .ps1, .jar...) - low signal alone; see detect_download_and_execute"
     strings:
-        $a = /(urlretrieve|requests\.get|urlopen|wget|curl|DownloadFile|Invoke-WebRequest|iwr|fetch)[^\n]{0,250}\.(exe|dll|scr|bat|cmd|ps1|vbs|hta|msi|jar|apk|elf|bin|so|sh)['"\s)]/ nocase
+        // The keyword must be used like a command or a call. Without this,
+        // an emoji stylesheet listing "curl,.cmd" and "curly_loop,.cmd" counted.
+        $a = /\b(urlretrieve|requests\.get|urlopen|wget|curl|DownloadFile|Invoke-WebRequest|iwr|fetch)(\.exe)?[ \t("'][^\n]{0,250}\.(exe|dll|scr|bat|cmd|ps1|vbs|hta|msi|jar|apk|elf|bin|so|sh)['"\s)]/ nocase
     condition:
         $a
 }
