@@ -9,6 +9,7 @@ import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
 from dep_checker import check_dependencies
+import ioc_extractor
 import llm_summary
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
@@ -779,6 +780,8 @@ def run_guarddog(path):
 
 #False-positive classifier (train_classifier.py)
 
+THREAT_INTEL_TOOL = ioc_extractor.THREAT_INTEL_TOOL
+
 MODEL_ARTIFACT_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
 _model_artifact = None
 
@@ -855,15 +858,24 @@ def score_findings(findings):
     trained yet, so scanning still works without it.
 
     `findings` must be one repo's findings (or carry repo_id), since the
-    tool-agreement features compare each finding to the others passed in."""
+    tool-agreement features compare each finding to the others passed in.
+
+    A threat-intel match skips the classifier and stays at 1.0: it is an exact
+    lookup rather than a heuristic, the model has never seen the tool, and it
+    is the one kind of finding that noise-scoring should never talk down."""
+    for f in findings:
+        if f["tool"] == THREAT_INTEL_TOOL:
+            f["p_real"] = 1.0
+    all_findings = findings
+    findings = [f for f in all_findings if f["tool"] != THREAT_INTEL_TOOL]
     if not findings:
-        return findings
+        return all_findings
 
     artifact = _load_model_artifact()
     if artifact is None:
         for f in findings:
             f["p_real"] = 1.0
-        return findings
+        return all_findings
 
     import pandas as pd
     pipeline          = artifact["pipeline"]
@@ -890,11 +902,34 @@ def score_findings(findings):
     probs = pipeline.predict_proba(df[feature_cols])[:, 1]
     for f, p in zip(findings, probs):
         f["p_real"] = round(float(p), 4)
-    return findings
+    return all_findings
 
 #Risk Score calcualtor
 
 SEVERITY_WEIGHT = {"high": 10, "medium": 3, "low": 1}
+
+# A confirmed threat-intel match is worth more than one heuristic "high", which
+# at 10 points reads as only Low on the malware axis. The thresholds themselves
+# are untouched; these are chosen to land just past them (malware axis: over 100
+# is Critical, over 35 is High).
+#   MalwareBazaar: this exact file is a known malware sample. 101 = Critical.
+#   URLhaus: a URL here is known to have served malware, which is strong but
+#   does not prove this repository is the attacker: a security tool or a blocklist
+#   can legitimately contain one. 36 = High, capped at 72 so it stays there.
+# Worked out from the stored tool and source, not attached to the finding, so
+# recompute_scores.py reaches the same number from scan_results alone.
+TI_HASH_POINTS = 101
+TI_URL_POINTS = 36
+TI_URL_POINTS_CAP = 72
+
+
+def _threat_intel_points(findings):
+    matches = [f for f in findings if f["tool"] == THREAT_INTEL_TOOL]
+    hashes = sum((f.get("issue_text") or "").startswith(ioc_extractor.SOURCE_MALWAREBAZAAR)
+                 for f in matches)
+    urls = len(matches) - hashes
+    return hashes * TI_HASH_POINTS + min(urls * TI_URL_POINTS, TI_URL_POINTS_CAP)
+
 
 def _score_findings(findings):
     high   = sum(1 for f in findings if f["severity"] == "high")
@@ -907,8 +942,8 @@ def _score_findings(findings):
     # fix for the same false-positive-flooding problem this solves directly.
     weighted_score = sum(
         SEVERITY_WEIGHT.get(f["severity"], 1) * f.get("p_real", 1.0)
-        for f in findings
-    )
+        for f in findings if f["tool"] != THREAT_INTEL_TOOL
+    ) + _threat_intel_points(findings)
     return high, medium, low, round(weighted_score)
 
 
@@ -943,6 +978,7 @@ TOOL_CATEGORY = {
     "dep_checker": "malicious_pattern",
     "guarddog":    "malicious_pattern",
     "virustotal":  "malicious_pattern",  # legacy tool name from old scans
+    THREAT_INTEL_TOOL: "malicious_pattern",
 }
 
 def finding_category(f):
@@ -1135,8 +1171,61 @@ def _has_tool_confidence_column(cursor):
     return _tool_confidence_column
 
 
+def _save_iocs(cursor, scan_id, repo_id, result):
+    """Stores one scan's IOCs inside save_to_db()'s transaction, behind a
+    savepoint: a problem here (above all a database that has not had the new
+    tables added) loses the IOCs and never the scan. Being in that transaction
+    also means a failed scan leaves no IOCs pointing at it."""
+    cursor.execute("SAVEPOINT save_iocs")
+    try:
+        # first_seen survives a rescan: "when did this repo start containing
+        # that" is the question the column answers, not "when was it last read".
+        cursor.execute("""
+            SELECT i.ioc_type, i.value, MIN(i.first_seen) AS first_seen
+            FROM iocs i JOIN scan_history h ON h.id = i.scan_id
+            WHERE h.repo_id = %s
+            GROUP BY i.ioc_type, i.value
+        """, (repo_id,))
+        earlier = {(r["ioc_type"], r["value"]): r["first_seen"] for r in cursor.fetchall()}
+        cursor.execute("SELECT NOW() AS now")
+        now = cursor.fetchone()["now"]
+
+        rows = [(scan_id, i["ioc_type"], i["value"], _fit_varchar(i["file_path"], 500),
+                 i["file_count"], earlier.get((i["ioc_type"], i["value"]), now),
+                 i["ti_match"], i["ti_source"])
+                for i in result["iocs"]]
+        for start in range(0, len(rows), FINDING_INSERT_BATCH):
+            cursor.executemany("""
+                INSERT INTO iocs
+                    (scan_id, ioc_type, value, file_path, file_count, first_seen,
+                     ti_match, ti_source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, rows[start:start + FINDING_INSERT_BATCH])
+        cursor.execute("""
+            INSERT INTO ioc_runs (scan_id, status, ti_status, files_scanned, files_hashed, note)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (scan_id, result["status"], result["ti_status"], result["files_scanned"],
+              result["files_hashed"], _fit_varchar(result["note"], 255) if result["note"] else None))
+    except Exception as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT save_iocs")
+        if isinstance(e, pymysql.MySQLError) and e.args and e.args[0] == 1146:
+            print("    IOCs not saved: the iocs tables are missing. Apply schema.sql to "
+                  "this database (safe to re-run) and restart the worker.")
+            return
+        print(f"    IOCs not saved: {type(e).__name__}: {e}")
+        # Say so, or the page goes on showing the previous scan's indicators
+        # as if they were this one's.
+        try:
+            cursor.execute("""
+                INSERT INTO ioc_runs (scan_id, status, ti_status, files_scanned, files_hashed, note)
+                VALUES (%s, 'failed', 'off', 0, 0, 'could not save indicators')
+            """, (scan_id,))
+        except pymysql.MySQLError:
+            pass
+
+
 def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk,
-               llm_text=None, llm_status=None):
+               llm_text=None, llm_status=None, ioc_result=None):
     db     = get_db()
     cursor = db.cursor()
 
@@ -1252,6 +1341,9 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
             VALUES (%s, %s, %s)
         """, (repo_id, level, score))
 
+        if ioc_result is not None:
+            _save_iocs(cursor, cursor.lastrowid, repo_id, ioc_result)
+
         db.commit()
         return repo_id
 
@@ -1261,6 +1353,33 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
     finally:
         cursor.close()
         db.close()
+
+#IOC extraction
+
+
+def run_ioc_extraction(path, findings):
+    """Indicators of compromise for this scan. Like every other engine it can
+    only ever lose its own results: any failure comes back as status 'failed',
+    which the detail page reports rather than showing "none found". Lookups have
+    their own try, so a threat-intel problem cannot cost the extraction."""
+    print("  Extracting IOCs...")
+    try:
+        result = ioc_extractor.extract_iocs(path, findings, is_ignored=is_ignored_path)
+    except Exception as e:
+        print(f"    IOC extraction error: {type(e).__name__}: {e}")
+        return {"iocs": [], "status": "failed", "note": "extraction failed",
+                "files_scanned": 0, "files_hashed": 0, "ti_status": "off"}
+    try:
+        result["ti_status"] = ioc_extractor.enrich_with_threat_intel(result["iocs"])
+    except Exception as e:
+        # Type only: this path has the API key in scope.
+        print(f"    Threat intel error: {type(e).__name__}")
+        result["ti_status"] = "failed"
+    print(f"    IOCs: {len(result['iocs'])} indicators from {result['files_scanned']} files "
+          f"read and {result['files_hashed']} hashed ({result['status']}, "
+          f"threat intel {result['ti_status']})")
+    return result
+
 
 #main Scan function
 
@@ -1305,6 +1424,12 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         findings = filter_noise(findings)
         print(f"  Findings after filter: {len(findings)}")
 
+        # After filter_noise so IOCs come from the same flagged files the
+        # report lists; before scoring so a threat-intel match counts.
+        report("Extracting IOCs")
+        ioc_result = run_ioc_extraction(path, findings)
+        findings += ioc_extractor.threat_intel_findings(ioc_result["iocs"])
+
         report("Scoring findings")
         findings = score_findings(findings)
 
@@ -1320,7 +1445,8 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         # worker.py and app.py's /api/summary route).
         report("Saving results")
         repo_id = save_to_db(repo_info, findings,
-                             high, medium, low, score, level, category_risk)
+                             high, medium, low, score, level, category_risk,
+                             ioc_result=ioc_result)
 
     finally:
         # clear temp folder
