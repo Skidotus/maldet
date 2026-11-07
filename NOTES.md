@@ -675,10 +675,17 @@ outside `is_ignored_path()`, with the corrected `rules.yar`.
   that flagged files are really malicious, so this measures agreement, not accuracy. Zero
   on clean repos is over popular projects only. Archives were not extracted first, which
   `scan_repo()` would do, so samples in password-protected archives were not seen.
-- **Why it is not adopted:** the only licence readable before running it was the 2015
-  Windows one, which covers protecting "Your Computer"; nothing confirms that a public
-  scanning site is allowed. Suspicious files may go to Kaspersky through KSN, signatures
-  need a 164MB re-download, and it exits 0 even when it finds threats.
+- **Why it is not adopted yet:** the licence is the open question, not a clear ban. The
+  2024 Linux EULA ships inside `bin/libKvrtGui.so`. It never mentions public sites or
+  services, and it does not restrict publishing results. Clause 2.1 allows use "within the
+  scope of functionality" in the manual, and 2.2 allows distribution and some commercial
+  use. The risk is 5.3: "You shall not use the Software in the creation of data or
+  software used for detection, blocking or treating threats". MalDet is detection
+  software, and `train_classifier.py` learns from `scan_results`, so KVRT findings stored
+  there could fall under it. 5.2 also bars renting or leasing it to third parties. Get
+  Kaspersky's answer in writing, and keep KVRT output away from rule tuning and classifier
+  training until then. Separately: suspicious files may go to Kaspersky through KSN,
+  signatures need a 164MB re-download, and it exits 0 even when it finds threats.
 
 This also corrects the note above that ClamAV has produced zero real hits: on these
 repos it flagged 293 files, and none in the clean set.
