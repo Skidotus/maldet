@@ -610,6 +610,49 @@ failed for three, and only one of the three is fixable.
   Both paths now build a byte-identical prompt for 161 of 162 repos and
   select the same top 15 for all 162.
 
+## What's improved (2026-11-07 — IOC extraction)
+
+- **Indicators of compromise on every new scan.** `ioc_extractor.py` reads files
+  ClamAV or YARA flagged plus install scripts, hashes the flagged files, and stores
+  the results in `iocs` and `ioc_runs`. The report page lists them as plain text,
+  with CSV and JSON downloads. abuse.ch lookups are optional and off without
+  `ABUSECH_AUTH_KEY`.
+- **Why metadata is skipped, not just safe-listed.** The requested safe-domain list
+  was not enough: Flask's `pyproject.toml` names `palletsprojects.com` and
+  `discord.gg`, and Django's names `djangoproject.com`. Those are an author's own
+  links and no list can keep up, so install scripts are parsed and only their
+  working parts searched. Measured on the root install scripts of 23 well-known
+  Python and npm projects: 0 indicators. A real Flask scan: 0 indicators, 62s.
+- **Flagged files are noisier, and that is known.** They are searched whole, by
+  design. `kserve/kserve`, a legitimate project with 39 YARA findings, gave 43
+  indicators (19 hashes, 15 URLs, 9 domains), all harmless: `astral.sh` from
+  `curl | sh` in Dockerfiles that `detect_pipe_to_shell` flagged, plus documentation
+  links in comments. Each is true, but none means compromise. Read an IOC as "this
+  address is in a suspicious file", not as a verdict. If it proves too noisy, the
+  first things to try are skipping comments in flagged files, or not counting files
+  flagged only at low severity.
+- **Why `ioc_runs` exists.** An empty `iocs` could mean nothing found, extraction
+  failed, or a scan from before this feature. Only the first may say "No indicators
+  of compromise found"; older scans say they were not extracted.
+- **Threat-intel weights** (thresholds unchanged): MalwareBazaar 101 points, which
+  is Critical on the malware axis; URLhaus 36 each, capped at 72, which is High. Both
+  skip the classifier. They are judgement calls set to land just past the existing
+  thresholds, and have not been calibrated against the corpus.
+
+**Limitations to state in the report:**
+- The abuse.ch calls have only been tested against mocked responses shaped like the
+  documented API, because no key was available. Run one real scan with a key before
+  claiming they work.
+- Safe-listing `github.com` and `githubusercontent.com` means a payload hosted on
+  GitHub produces no URL indicator. That was requested to keep clean projects quiet,
+  and it is a real blind spot, since attackers do host there.
+- Filtered paths are skipped too, so malware under `tests/` or `docs/` gets no IOCs,
+  matching `filter_noise()`.
+- Discord webhooks and Telegram tokens are shown in full, including on the public
+  site. They are already public in the scanned repository, but they are live
+  credentials, so consider masking them if that becomes a concern.
+- Existing scans have no IOCs until rescanned.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
