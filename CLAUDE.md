@@ -52,7 +52,9 @@ looks like a clean scan — verify it runs rather than assuming.
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
-No test suite or lint config exists in this repo currently.
+Tests cover IOC extraction only: `python3 -m unittest discover -s tests -t .`
+(stdlib, needs no database or network; `test_ioc_scoring.py` imports `scanner.py`,
+so `config.py` must exist). There is no lint config.
 
 ## Architecture
 
@@ -129,6 +131,8 @@ by `worker.py` (not inside the web request):
    change accuracy (AUC 0.79 either way), so the shipped model was not
    replaced — rule-derived training labels limit what any feature can add.
    `tool_confidence` cannot be judged until rescans populate it.
+   After filtering, `run_ioc_extraction()` (see `ioc_extractor.py` below) adds any
+   threat-intel matches to the findings as `tool="threat_intel"`.
 6. `calculate_risk()` — weights high/medium(capped 30)/low(capped 20) into a score,
    maps score to `Safe/Low/Medium/High/Critical`
 7. `save_to_db()` — upserts into `repositories`, replaces `scan_results` and
@@ -172,6 +176,22 @@ five minutes — on a memory-tight machine that idle residency is what triggers
 the OOM killer. Tune via `MALDET_OLLAMA_MODEL` / `MALDET_OLLAMA_HOST` /
 `MALDET_OLLAMA_TIMEOUT`, or set `MALDET_OLLAMA_DISABLE=1` to skip it.
 
+**`ioc_extractor.py`** — indicators of compromise from files ClamAV or YARA flagged
+and from install scripts, plus the optional abuse.ch lookups. Only runs after
+`filter_noise()`, so it sees the same flagged files the report lists. Three rules
+hold it together. Install scripts are parsed, never executed, and only their working
+parts are searched, because project metadata would otherwise report every author's
+own website (Flask's `pyproject.toml` alone gives `palletsprojects.com` and
+`discord.gg`). Symlinks and paths outside the clone are refused, because a link named
+`setup.py` pointing at `config.py` would publish its contents on a public page. And
+it can only lose its own results: failures become `status='failed'`, and
+`_save_iocs()` writes behind a savepoint, so a database without the new tables still
+saves the scan. Threat-intel points are derived from the stored tool and the source
+at the start of `issue_text`, in `_threat_intel_points()`, because
+`recompute_scores.py` only has `scan_results` to work from. Do not change the
+wording of that prefix without changing the weighting. `ABUSECH_AUTH_KEY` must never
+reach a log: print exception types there, not messages.
+
 **Adding a new detector**: write a `run_x(path)` function in `scanner.py` returning
 findings in the standard dict shape, call it inside `scan_repo()` and append its
 output to `findings` before `filter_noise()` runs.
@@ -213,7 +233,9 @@ sample, `--stored` to score what is in the database, `--rescore` to re-judge
 a saved run after fixing a check. Last run: 17 of 19 clean.
 
 **Database**: MySQL, `pymysql` with `DictCursor`. Tables (defined in `schema.sql`):
-`repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`.
+`repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`,
+`iocs`, `ioc_runs`. `iocs.scan_id` is `scan_history.id`, the only per-scan record,
+and `iocs.value` is `utf8mb4_bin` because wallets and tokens are case-sensitive.
 `repositories.source_status` and `risk_scores.llm_summary_status` both drive
 UI state — see the frontend contract below.
 Update `schema.sql` whenever the schema changes — it's the source of truth for a
@@ -284,7 +306,7 @@ showing an unexplained spinner. The page polls `/api/scan-status/<job_id>`
 every 2s and must keep polling while `status` is `queued` *or* `running`; a
 queued job that is not polled looks frozen forever. Laid out like the report
 page (eyebrow + `owner / name` header, `console-panel`s): a "Now" panel
-with the live stage in large type, "Step n of 13 · m:ss elapsed" and the
+with the live stage in large type, "Step n of 14 · m:ss elapsed" and the
 queue notice, beside the progress track. The eyebrow, step counter and
 queue notice all switch with state (queued / running / failed) without a
 reload. The track's `data-stage` values must match `scanner.py`'s
@@ -336,6 +358,14 @@ Code snippets stay dark in both themes on purpose.
   findings cannot be refreshed and disables Rescan (it could only fail), on
   `renamed` it says these are the superseded original. Without this the page
   presents unverifiable months-old findings as current.
+
+- `iocs` — from `app.py:_load_iocs()`: `state`, `rows` (capped at
+  `IOC_DISPLAY_LIMIT`), `total`, `ti_status`, `note`. **Do not merge the states**:
+  `none` (extraction never ran, or no tables), `failed`, `partial` and `done`. Only
+  `done` with no rows may say "No indicators of compromise found"; the others would
+  be a false clean. Values stay plain escaped text, never links. `GET
+  /detail/<id>/iocs.csv` and `.json` download every row, and the CSV goes through
+  `_csv_cell()` because the values come from untrusted repositories.
 
 **JSON endpoints** (the first two exist because their work outlives a
 request):
