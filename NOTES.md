@@ -774,6 +774,79 @@ database, extension API and evaluation scripts key on it), so no saved scan chan
 The prompt change means the 17-of-19 summary evaluation predates it; re-run
 `evaluate_summaries.py --generate` before quoting it as current.
 
+## Ideas from FlatScan, not yet built (2026-11-09)
+
+FlatScan (https://github.com/Masriyan/FlatScan, MIT, Go, one maintainer) is a static
+analyser for **one finished file at a time** (an `.exe`, a script, an Android app).
+MalDet scans **whole source-code repositories**, so only some of its ideas carry over.
+Two are already built (hidden-payload decoding, and "Nothing found" instead of "Safe",
+above). The rest, most useful first. The first three are problems shown in MalDet's own
+data, not guesses.
+
+1. **Stop lists of bad things reading as bad things** (FlatScan `falsepositive.go`).
+   MalDet looks for suspicious text, and some honest files are full of it because they
+   *describe* threats: rule files, signature sets, blocklists. Shown in the local
+   database: **MalDet rates its own repository High**, because `rules.yar` matches 7 of
+   MalDet's own rules, and **AdguardTeam/HostlistsRegistry is Critical**, because its
+   blocklists name crypto-mining sites in order to block them. FlatScan's test is
+   breadth: real malware does one job, so one file that looks like ransomware, a miner,
+   a stealer and a reverse shell at once is a catalogue. It then caps the score and
+   treats the matches as references. A blocklist is a catalogue of one kind, so it needs
+   a second check (a file that is mostly a list of domains). FlatScan pins the guard with
+   tests in both directions so it can never quietly hide real malware; copy that too.
+
+2. **UTF-16 blind spot.** UTF-16 stores a zero byte beside every letter, and Windows
+   PowerShell scripts, attackers' favourite, are often saved that way. Tested: a reverse
+   shell and download command saved as UTF-8 fired two `rules.yar` rules; the same text
+   saved as UTF-16 fired **none**. `rules.yar` has no `wide` strings, and
+   `ioc_extractor._read_text()` (so also the payload decoder) skips any file with a zero
+   byte. Fix: add `ascii wide` to the rule strings, and decode UTF-16 (with or without a
+   byte-order mark) before reading text. Small, and a proven gap.
+
+3. **One clue should not raise a serious alarm** (FlatScan `correlation.go`). FlatScan
+   groups clues (credential dumping needs clues from several separate groups, not just
+   the word `lsass`), fires only when enough groups agree, and records how many did.
+   `rules.yar` already requires connected halves, and the classifier counts tools that
+   agree on a file. Missing: showing "flagged by N separate clues/engines" on the report,
+   and requiring more than one engine before a repo can reach High on the malware axis.
+
+4. **Disguised file names** (FlatScan `masquerade.go`). Three tricks honest projects
+   almost never use: a document extension followed by a program one
+   (`invoice.pdf.exe`); look-alike letters (`lnstaller` with a lowercase L, `Micros0ft`,
+   Cyrillic mixed into Latin); and invisible right-to-left characters that make
+   `annexe‮cod.exe` display as `annexe.exe.doc`. A cheap check over file names in a scan.
+
+5. **Tidier IOCs, and STIX export.** FlatScan labels each indicator as worth
+   investigating, benign infrastructure, build artefact or source path, and keeps the
+   noise out of exports. It also exports STIX 2.1, the standard format threat-intel
+   tools import. MalDet already exports IOCs as CSV and JSON; STIX would be small.
+
+6. **Label findings with MITRE ATT&CK techniques.** The industry's shared names for
+   attacker behaviour (download-and-run is T1105). Add an `attack` meta field to each
+   `rules.yar` rule and show it as a tag on the report. Low effort, and it ties MalDet
+   to the vocabulary examiners and security teams use.
+
+7. **A command-line / CI mode.** FlatScan has `--ci` with fixed exit codes (0 clean,
+   10 suspicious, 20 malicious), so a project's build fails when it finds something. A
+   small wrapper around `scan_repo()` with exit codes and SARIF output (the format
+   GitHub's Security tab reads) is realistic, or a good future-work item.
+
+8. **A verification table in the README.** FlatScan lists build, tests, lint and
+   vulnerability-check results in one table. MalDet has the numbers (test count,
+   classifier precision 0.52 / recall 0.62, summaries 17 of 19 clean); keep giving the
+   sample size behind each, which FlatScan does not ("Quality 10/10" is self-awarded).
+
+9. **Machine-generated domains** (FlatScan `dga.go`). Some malware invents random
+   domains (`xkqjzvbtr.com`) to stay hidden; FlatScan scores how random a name looks.
+   Could tag domains in the IOC list. Nice to have, low priority.
+
+**Not worth copying:** disassembly, `.exe` / ELF / Android / macOS parsers, naming
+malware families, similarity hashing, single-byte-XOR peeling (see above) and its PDF
+reports. All are for taking apart one compiled file, not a source repository.
+
+**Suggested order:** 2 (small, proven gap), then 1 (MalDet rating itself High is the
+kind of thing an examiner notices), then 6 and 4 (cheap), then the rest.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
