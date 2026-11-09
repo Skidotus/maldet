@@ -25,6 +25,13 @@ What it checks, and why each one is a real failure mode rather than a guess:
                        malicious. The prompt states the levels as settled and
                        forbids re-rating them, so this is the instruction
                        most worth testing.
+  claims_safety        Calling ANY repo safe or clean, or saying it "passed"
+                       the checks. A static scan cannot show that, and the
+                       page beside the summary says "Nothing found", never
+                       "Safe". Added 2026-11-09, when a run scored 18 of 20
+                       clean while 5 summaries said things like "completely
+                       safe", one of them about a collection of offensive
+                       tools: contradicts_risk only looked at High/Critical.
   format_*             3-5 sentences, one paragraph, no markdown. Stated in
                        the prompt, so a breach is instruction-following
                        failure -- and markdown renders literally on the
@@ -72,6 +79,14 @@ KNOWN_TOOLS = ["bandit", "semgrep", "yara", "clamav", "guarddog", "threat_intel"
 SAFE_CLAIMS = [
     "safe to use", "is safe", "no security issues", "poses no risk",
     "appears to be safe", "can be used safely", "no significant risk",
+]
+# A verdict of safety in any form, checked on every summary whatever the level
+# (claims_safety). Wider than SAFE_CLAIMS, which is about contradicting a
+# High/Critical level; this is about claiming more than a scan can know.
+SAFETY_VERDICTS = SAFE_CLAIMS + [
+    "completely safe", "found to be safe", "is clean", "appears clean",
+    "appears to be clean", "passed all", "has passed", "free of vulnerabilities",
+    "free from", "no issues detected", "safe from",
 ]
 # Deliberately assertive forms only. A bare "malicious intent" is useless as
 # a trigger: it occurs just as often in denials ("rather than malicious
@@ -188,6 +203,9 @@ def check(summary, prompt, vuln_level, malware_level):
         hit = _asserts(s, MALICE_CLAIMS)
         if hit:
             failures["contradicts_risk"] = f"malware={malware_level} but claims: {hit[:2]}"
+    hit = _asserts(s, SAFETY_VERDICTS)
+    if hit:
+        failures["claims_safety"] = hit[:2]
 
     sentences = [x for x in SENTENCE_SPLIT.split(summary.strip()) if x.strip()]
     if not 3 <= len(sentences) <= 5:

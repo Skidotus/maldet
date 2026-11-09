@@ -269,11 +269,16 @@ newest first, so a fresh scan (a demo, say) does not wait hours behind the
 backlog. The window is computed by MySQL (`NOW()` against
 `repositories.scanned_at`), never the laptop's clock.
 
-**`evaluate_summaries.py`** — scores summaries against eight mechanical
+**`evaluate_summaries.py`** — scores summaries against nine mechanical
 checks (fabricated numbers/files/advisory-ids/tools, invented score scales,
-risk-level contradiction, and four format rules). `--generate` for a fresh
-sample, `--stored` to score what is in the database, `--rescore` to re-judge
-a saved run after fixing a check. Last run: 17 of 19 clean.
+risk-level contradiction, `claims_safety`, and four format rules).
+`--generate` for a fresh sample, `--stored` to score what is in the database,
+`--rescore` to re-judge a saved run after fixing a check. Last run
+(2026-11-09, `summary_eval_2026-11-09b.json`): 15 of 20 clean, 2 safety
+claims. `claims_safety` fails any summary calling a repo safe/clean or
+"passed", at any level — the prompt forbids it, since a scan cannot show it.
+The older "17 of 19" used an earlier checker and re-scores to 9 of 19 today,
+so do not compare the two.
 
 **Database**: MySQL, `pymysql` with `DictCursor`. Tables (defined in `schema.sql`):
 `repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`,

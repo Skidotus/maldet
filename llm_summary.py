@@ -413,6 +413,7 @@ Write a short plain-English summary for a developer deciding whether this reposi
 - Use ONLY the findings and scores above. Do not invent findings, file names or CVE numbers.
 - The scores have no maximum. Quote a score as a plain number if you mention it; never write it as "out of" some total.
 - Do not re-rate the risk or disagree with the scores given; they were decided by a separate measured model.
+- Never call the repository safe or clean, and never say it passed the checks. A scan can only report what its rules recognise. Where a risk is "Nothing found", say the scan found nothing of that kind.
 - Write for someone who is not a security expert. Avoid jargon where a plain word works."""
 
 

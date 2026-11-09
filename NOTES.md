@@ -774,6 +774,33 @@ database, extension API and evaluation scripts key on it), so no saved scan chan
 The prompt change means the 17-of-19 summary evaluation predates it; re-run
 `evaluate_summaries.py --generate` before quoting it as current.
 
+**Re-run the same day, and it showed the label change was not enough.** The first run
+with "Nothing found" in the prompt scored 18 of 20 clean, but reading the summaries for
+the "Safe" repos, 5 still said things like "found to be completely safe" and "passed all
+major security checks", one of them about dasfreak/Backstabbers-Knife-Collection, a
+collection of offensive tools. The checker missed it because its safety check only ran
+for High/Critical repos. Two fixes: a ninth check, `claims_safety` (any summary calling
+a repo safe or clean, or saying it passed, fails, whatever the level), and a prompt rule
+("Never call the repository safe or clean, and never say it passed the checks…").
+Same 20 repos (the sample is a fixed order), qwen3.5:2b, all nine checks:
+
+| Prompt | Fully clean | Safety claims | Other failures |
+|---|---|---|---|
+| Label only (`summary_eval_2026-11-09.json`) | 13 of 20 (65%) | 6 | 2 sentence count |
+| Label + rule (`summary_eval_2026-11-09b.json`) | **15 of 20 (75%)** | **2** | 3 sentence count |
+
+The two left: "safe to use" mid-paragraph (aimeos/pagible) and "looks safe from known
+bugs" (the offensive-tools collection again). A 2B model does not follow every rule; the
+check keeps counting it. **Quote 15 of 20 (75%) with nine checks, not the old 89%:**
+re-scoring the October run (`summary_eval.json`) with today's checker gives 9 of 19,
+mostly `fabricated_numbers` (5), so the checker has changed since that figure was taken
+and the two are not comparable.
+
+*In plain words:* telling the AI the level is "Nothing found" was not enough; it still
+wrote "completely safe" in its own words. It now has an explicit rule against that, and
+the automatic checker now catches the claim, which brought it down from 6 summaries in
+20 to 2.
+
 ## Ideas from FlatScan, not yet built (2026-11-09)
 
 FlatScan (https://github.com/Masriyan/FlatScan, MIT, Go, one maintainer) is a static
@@ -871,7 +898,7 @@ data, not guesses.
 
 8. **A verification table in the README.** FlatScan lists build, tests, lint and
    vulnerability-check results in one table. MalDet has the numbers (test count,
-   classifier precision 0.52 / recall 0.62, summaries 17 of 19 clean); keep giving the
+   classifier precision 0.52 / recall 0.62, summaries 15 of 20 clean on nine checks); keep giving the
    sample size behind each, which FlatScan does not ("Quality 10/10" is self-awarded).
 
 9. **Machine-generated domains** (FlatScan `dga.go`). Some malware invents random
