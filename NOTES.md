@@ -847,6 +847,103 @@ reports. All are for taking apart one compiled file, not a source repository.
 **Suggested order:** 2 (small, proven gap), then 1 (MalDet rating itself High is the
 kind of thing an examiner notices), then 6 and 4 (cheap), then the rest.
 
+### In plain words: what was done on 2026-11-09, and what the ideas mean
+
+The sections above are written for someone already deep in the code. This is the same
+material explained simply, for reading back later or explaining to someone else.
+
+**What was built**
+
+- **Hidden-payload decoding.** Attackers often hide their code by scrambling it into a
+  long string of random-looking letters (base64 is the most common way). A scanner that
+  reads the file sees only gibberish, like a letter written in code. MalDet now
+  unscrambles those strings (up to three layers deep, because attackers often scramble
+  something that is already scrambled), and runs its malware scanners on what comes out.
+  If it finds something, the report points to the exact file and line where the
+  scrambled string sat, and shows what it said once unscrambled. Nothing unscrambled is
+  ever run. On the test set it found 17 files that no scanner had flagged before, all of
+  them known hacking tools, and raised no false alarms on 23 normal projects.
+- **"Nothing found" instead of "Safe".** A scan can only report what its rules
+  recognise. If nothing matches, that is not proof the code is safe: it may be new,
+  hidden in a way no rule knows, or only fetched when the program runs. So the lowest
+  level now says what actually happened, "Nothing found", and the report explains that
+  this is not a guarantee. The database still stores "Safe", so no old scans changed.
+- **Extra ClamAV signatures (tested, not switched on).** ClamAV is MalDet's antivirus
+  engine. Volunteer groups publish extra lists of malware patterns for it. Loading them
+  cost very little memory and raised no false alarms, but only found 47 more files in
+  projects that were already flagged, and no new projects. Small gain, so it is written
+  down rather than switched on.
+
+**The FlatScan ideas, explained**
+
+1. **Lists of bad things are not bad things.** MalDet hunts for suspicious text
+   patterns. Some honest files are full of them because they are *lists*: a rule file
+   describing what malware looks like, or a blocklist of dangerous websites. It is like
+   flagging a police "wanted" poster as a criminal because it shows a criminal's face.
+   That is why MalDet rates *itself* High (its rule file must contain the patterns it
+   looks for) and AdGuard's blocklist project Critical (it lists crypto-mining sites so
+   they can be *blocked*). FlatScan's trick: real malware usually does one job (steal
+   passwords, *or* mine crypto, *or* lock files). One file that seems to do five or six
+   unrelated jobs at once is almost certainly a list describing them.
+2. **Text saved in a different format.** Text can be stored in different ways. The
+   usual one (UTF-8) stores `hello` as five letters. Another (UTF-16) puts an empty byte
+   between every letter. Windows PowerShell scripts, which attackers love, are often
+   saved that way. MalDet caught a test attack saved normally, but missed the same
+   attack saved as UTF-16, so an attacker could slip past just by changing how the file
+   is saved. YARA (the pattern scanner) has a setting, `wide`, that makes a rule look
+   for both formats; it just needs adding.
+3. **Do not panic over one clue.** Some checks raise a serious alarm from a single word,
+   for example `lsass`, the Windows process that holds passwords, which plenty of honest
+   security code mentions. FlatScan works like a careful detective: it only raises a
+   serious alarm when several *separate* clues agree, and shows how many did, so a
+   reader can see how strong the case is.
+4. **Disguised file names.** Attackers often trick people with the name, not the
+   contents: `invoice.pdf.exe` looks like a PDF but is a program; `lnstaller` uses a
+   lowercase L in place of a capital I; a hidden "flip" character can make a name
+   display backwards, so `annexe‮cod.exe` *looks* like `annexe.exe.doc`. Honest projects
+   almost never contain these, so checking for them is cheap and rarely wrong.
+5. **Tidier lists of clues, in a standard format.** MalDet already collects suspicious
+   web and IP addresses (IOCs). FlatScan also sorts them into "worth investigating" and
+   "harmless background" (such as a link to official documentation), and exports them
+   in STIX, the format security teams use to share threat information.
+6. **Use the industry's names for attacks.** MITRE ATT&CK is a shared catalogue of
+   attacker behaviour, each with an ID (download-and-run is T1105). Tagging MalDet's
+   findings with those IDs makes the results speak the same language as security teams
+   and examiners.
+7. **Let other projects use MalDet automatically.** A command-line mode that ends with
+   a code meaning "clean", "suspicious" or "malicious" lets a project's automatic build
+   stop itself when MalDet finds something, the way a smoke alarm can cut the power.
+8. **Show the proof in one place.** A small table in the README listing how many tests
+   pass, how accurate the classifier is, and how many AI summaries were checked clean,
+   each with how many examples the number came from.
+9. **Spot random-looking web addresses.** Some malware makes up random addresses like
+   `xkqjzvbtr.com` so they are hard to block. FlatScan scores how random a name looks;
+   MalDet could tag such addresses in its list of clues. Nice to have.
+
+Most of FlatScan's other features are for taking apart **one finished program** (an
+`.exe`, an Android app). MalDet looks at **source-code projects**, so those do not fit.
+
+**Words used above**
+
+- **False positive / false alarm:** the scanner says "danger" when there is none.
+- **YARA:** a tool that searches files for text or byte patterns described in rule
+  files. MalDet's own rules are in `rules.yar`; YARA Forge is a large public rule set.
+- **ClamAV:** a free antivirus engine. **Signatures** are its fingerprints of known
+  malware.
+- **base64 / hex:** common ways of writing any data, even a whole program, as ordinary
+  letters and digits, so it can be pasted into a text file.
+- **zlib / gzip:** compression, like zipping a file; often used together with base64.
+- **Payload:** the harmful part of an attack, the bit that actually does damage.
+- **Reverse shell:** a command that hands a stranger remote control of your computer.
+- **IOC (indicator of compromise):** a clue such as a suspicious web address, IP address
+  or file fingerprint.
+- **UTF-8 / UTF-16:** two ways of storing text as bytes.
+- **STIX:** a standard file format for sharing threat information.
+- **SARIF:** a standard file format for scan results, which GitHub can display.
+- **MITRE ATT&CK:** a public catalogue of attacker techniques, each with an ID.
+- **CI (continuous integration):** the automatic checks that run every time a project's
+  code changes.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
