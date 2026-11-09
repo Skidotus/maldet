@@ -127,6 +127,10 @@ services:
       # box alongside semgrep. Off by default; the rule-based summary in
       # app.py renders instead and nothing fails. Set to 0 on a larger host.
       MALDET_OLLAMA_DISABLE: ${MALDET_OLLAMA_DISABLE:-1}
+      # Re-download ClamAV signatures every N hours while idle (worker.py).
+      # The worker only: the app container shares the volume, and two
+      # freshclams would race over it. 0 turns it off.
+      MALDET_CLAMAV_REFRESH_HOURS: ${MALDET_CLAMAV_REFRESH_HOURS:-24}
     volumes:
       - clamav_db:/var/lib/clamav
     # Scans are the memory-hungry half of this project; the cap makes the
