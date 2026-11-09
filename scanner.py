@@ -13,6 +13,7 @@ import ioc_extractor
 import llm_summary
 import payload_decoder
 import reference_files
+import filename_tricks
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
 # Not a hardcoded "/tmp/..." literal: gettempdir() honours TMPDIR, which is
@@ -845,6 +846,9 @@ def run_guarddog(path):
 #False-positive classifier (train_classifier.py)
 
 THREAT_INTEL_TOOL = ioc_extractor.THREAT_INTEL_TOOL
+FILENAME_TOOL = filename_tricks.TOOL
+# Findings that skip the noise classifier and keep p_real 1.0; see score_findings().
+EXACT_TOOLS = (THREAT_INTEL_TOOL, FILENAME_TOOL)
 
 MODEL_ARTIFACT_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
 _model_artifact = None
@@ -926,12 +930,15 @@ def score_findings(findings):
 
     A threat-intel match skips the classifier and stays at 1.0: it is an exact
     lookup rather than a heuristic, the model has never seen the tool, and it
-    is the one kind of finding that noise-scoring should never talk down."""
+    is the one kind of finding that noise-scoring should never talk down.
+    Disguised-file-name findings are treated the same way: four exact checks
+    that matched none of 171,791 ordinary file names, which the model has no
+    training data for either."""
     for f in findings:
-        if f["tool"] == THREAT_INTEL_TOOL:
+        if f["tool"] in EXACT_TOOLS:
             f["p_real"] = 1.0
     all_findings = findings
-    findings = [f for f in all_findings if f["tool"] != THREAT_INTEL_TOOL]
+    findings = [f for f in all_findings if f["tool"] not in EXACT_TOOLS]
     if not findings:
         return all_findings
 
@@ -1043,6 +1050,7 @@ TOOL_CATEGORY = {
     "guarddog":    "malicious_pattern",
     "virustotal":  "malicious_pattern",  # legacy tool name from old scans
     THREAT_INTEL_TOOL: "malicious_pattern",
+    FILENAME_TOOL: "malicious_pattern",
 }
 
 def finding_category(f):
@@ -1436,6 +1444,21 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
 #IOC extraction
 
 
+#Disguised file names — invoice.pdf.exe, look-alike letters, direction characters
+
+def run_filename_check(path):
+    """Disguised file names (see filename_tricks.py). Reads the directory
+    listing only. Like every engine it can only lose its own results."""
+    print("  Checking file names...")
+    try:
+        findings = filename_tricks.find_disguised_names(path, is_ignored=is_ignored_path)
+    except Exception as e:
+        print(f"    File name check error: {type(e).__name__}: {e}")
+        return []
+    print(f"    File name check found {len(findings)} disguised names")
+    return findings
+
+
 #Hidden payloads — decode encoded layers, then run the malware engines on them
 
 HIDDEN_PREFIX = "Hidden payload: "
@@ -1586,6 +1609,9 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
 
         report("Running GuardDog")
         findings += run_guarddog(path)
+
+        report("Checking file names")
+        findings += run_filename_check(path)
 
         report("Decoding hidden payloads")
         findings += run_decoded_payloads(path, findings)

@@ -24,6 +24,7 @@
   "virustotal":  ("VirusTotal",         "Malicious pattern", "Multi-engine file reputation"),
   "dep_checker": ("Dependency checker", "Supply chain",      "CVEs, typosquats and risky installs"),
   "threat_intel": ("Threat intelligence", "Malicious pattern", "Files and URLs already listed by abuse.ch"),
+  "filename":    ("File name check",    "Malicious pattern", "Disguised names: invoice.pdf.exe, look-alike letters, hidden direction characters"),
 } %}
 {% macro engine_name(tool) -%}{{ engines[tool][0] if tool in engines else tool }}{%- endmacro %}
 
@@ -197,6 +198,7 @@
     {{ verdict_panel("Malicious pattern", "Does this code look like it is trying to cause harm?",
                      risk.malware_level, risk.malware_score, risk.malware_high, risk.malware_medium, risk.malware_low,
                      "YARA, ClamAV, GuardDog, dependency checker"
+                     ~ (", file name check" if tool_totals.get("filename") else "")
                      ~ (", threat intelligence" if tool_totals.get("threat_intel") else "")) }}
 
     {% set fc = finding_counts %}
