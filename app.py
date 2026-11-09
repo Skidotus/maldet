@@ -2,8 +2,9 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, g
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
@@ -120,6 +121,51 @@ def get_db():
 # now only enqueues, so no amount of traffic can start a second semgrep --
 # which is the constraint that matters on a small VPS, where one semgrep
 # peaks near 2GB against 4GB of RAM.
+
+
+# CSRF: a "double-submit cookie". Every form that starts work carries a
+# random token both in a cookie and in a hidden field, and the POST is refused
+# unless the two match. Another website can make a visitor's browser submit a
+# form here, and the browser would attach this site's cookies to it, but that
+# site can neither read those cookies nor set them, so it cannot put the same
+# value in the form. No server-side state and no secret key needed, which
+# matters because the app has neither. Before 2026-11-09 /scan and /rescan
+# accepted any POST, so any page on the web could queue scans through its
+# visitors and hold the single scan slot.
+CSRF_COOKIE = "maldet_csrf"
+CSRF_FIELD = "csrf_token"
+CSRF_REFUSED = ("This form had expired, or your browser did not send its security cookie. "
+                "Please submit it again; if this keeps happening, allow cookies for this site.")
+
+
+def csrf_token():
+    """The token to put in a form's hidden field, issuing one if needed."""
+    token = request.cookies.get(CSRF_COOKIE, "")
+    if len(token) < 32:
+        token = g.get("new_csrf_token") or secrets.token_urlsafe(32)
+        g.new_csrf_token = token
+    return token
+
+
+def csrf_ok():
+    """True if the submitted form carries this browser's own token."""
+    cookie = request.cookies.get(CSRF_COOKIE, "")
+    sent = request.form.get(CSRF_FIELD, "")
+    return len(cookie) >= 32 and secrets.compare_digest(cookie, sent)
+
+
+app.add_template_global(csrf_token, "csrf_token")
+
+
+@app.after_request
+def _set_csrf_cookie(resp):
+    token = g.get("new_csrf_token")
+    if token:
+        # HttpOnly: the page carries the token in its HTML, so no script ever
+        # needs the cookie. Lax so it is sent on the visitor's own POSTs.
+        resp.set_cookie(CSRF_COOKIE, token, max_age=30 * 86400, httponly=True,
+                        samesite="Lax", secure=request.is_secure)
+    return resp
 
 
 def _visitor_job_id():
@@ -394,6 +440,12 @@ def scan():
     # POST — user submitted the scan form
     repo_url         = request.form.get('repo_url', '').strip()
     archive_password = request.form.get('archive_password', 'infected').strip()
+
+    # Before anything is queued. The form comes back filled in, with a fresh
+    # token, so a genuine visitor whose token had lapsed just submits again.
+    if not csrf_ok():
+        return render_template('scan.html', error=CSRF_REFUSED,
+                               prefill_repo=parse_repo_slug(repo_url) or ''), 400
 
     if not repo_url:
         return render_template('scan.html', error="Please enter a GitHub URL")
@@ -1060,6 +1112,9 @@ def rescan(repo_id):
     # what an old bookmark to this URL should land on. The Rescan button on
     # the report is a form that POSTs here, like the scan form does.
     if request.method != 'POST':
+        return redirect(url_for('detail', repo_id=repo_id))
+    if not csrf_ok():
+        # Back to the report, whose Rescan form now carries a fresh token.
         return redirect(url_for('detail', repo_id=repo_id))
 
     db     = get_db()

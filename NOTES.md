@@ -1025,15 +1025,31 @@ worker's own user. Its "NotifyClamd … ERROR" line is harmless (MalDet runs `cl
 no clamd daemon to notify).
 
 Separately, freshclam reports the ClamAV *program* in the image is outdated (1.4.3,
-recommended 1.4.6). That is the Debian package the image installs; rebuilding the image
-with `--no-cache` picks up whatever Debian ships. Not done here.
+recommended 1.4.6). **Fixed the same day, and not the way first suggested:** a
+`--no-cache` rebuild would not have helped, because Debian 13 ships 1.4.3 in trixie,
+trixie-updates and trixie-security alike, and backports has nothing newer. 1.4.4-1.4.6
+fix memory-safety bugs in the parsers MalDet feeds untrusted files to (heap overflows in
+the 7z and PESpin unpackers, crashes in the PDF, HTML and GPT parsers), so the image now
+installs Cisco Talos's official 1.4.6 `.deb`, pinned by SHA-256 and checked at build time
+(`clamscan --version` must say 1.4.6). Its signature directory is linked to the existing
+`/var/lib/clamav` volume. The release's GPG signatures were not verified: no
+authoritative copy of the signing key (707F0DB480836771) was found. The image grows by
+roughly the size of the package (~90MB compressed).
+
+The worker's log said "updated" on a check that downloaded nothing, because freshclam
+1.4 exits 0 either way. It now goes by freshclam's per-database lines.
 
 **A visited link could start a rescan.** `/rescan/<id>` queued a scan on GET, so
 search-engine crawlers, chat apps building link previews and browser prefetching could
 each tie up the single scan slot for minutes. Only a POST starts one now (the report's
-Rescan button is a form); a GET redirects to the report. Still open: like the scan form,
-the POST has no CSRF token, so another site could submit it on a visitor's behalf. That
-needs the same fix for `/scan` too, so it is left for one change covering both.
+Rescan button is a form); a GET redirects to the report. **CSRF, fixed the same day for
+both `/scan` and `/rescan`:** any website could make a visitor's browser submit either
+form, queuing scans that hold the one slot. Both now need a "double-submit" token: a
+random value in an HttpOnly cookie and in a hidden form field, compared on POST. Another
+site cannot read or set this site's cookies, so it cannot match them. No secret key or
+server state needed, which matters because the app has neither. A visitor whose cookie
+has lapsed gets the form back filled in, with a fresh token, and submits again. Tested
+both ways (`tests/test_signatures_and_rescan.py`).
 
 *In plain words:* the live site's virus fingerprints were stuck on 1 November and are
 now updated daily by themselves; and a scan now starts only when someone presses the
