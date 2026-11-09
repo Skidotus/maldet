@@ -441,7 +441,10 @@ as a repository and being offered to the scan form as something to clone.
 
 **`GET /scan?repo=<owner>/<name>`** prefills the form and does **not**
 auto-submit. A GET that starts a scan gets fired by crawlers and chat-app
-link previews — the same latent bug `/rescan/<id>` still has.
+link previews. **`/rescan/<id>`** had exactly that bug until 2026-11-09: now
+only a POST (the report page's Rescan form) queues a scan, and a GET just
+redirects to the report, so old links and bookmarks still land somewhere
+useful. Never make a route that starts work answer to GET.
 
 Styling lives in `static/css/style.css`: a forest-green / off-white "paper"
 theme over Bootstrap, with tokens on `:root`. Below 768px, tables marked

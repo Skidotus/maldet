@@ -93,7 +93,10 @@ PY
 # exactly like a clean scan. Fetch it up front instead, and say so loudly.
 #
 # /var/lib/clamav is a named volume, so this download happens once and
-# survives restarts. Set SKIP_FRESHCLAM=1 to opt out.
+# survives restarts. Set SKIP_FRESHCLAM=1 to opt out. Keeping the signatures
+# current afterwards is worker.py's job (MALDET_CLAMAV_REFRESH_HOURS, set in
+# docker-compose.yml): this script runs in both containers, which share the
+# volume, so updating here would race two freshclams over one directory.
 # ---------------------------------------------------------------------------
 if [ "${SKIP_FRESHCLAM:-0}" = "1" ]; then
     say "SKIP_FRESHCLAM=1 — skipping signature download (ClamAV will report nothing)"
@@ -101,8 +104,9 @@ elif compgen -G "/var/lib/clamav/*.c[vl]d" > /dev/null; then
     say "ClamAV signatures already present"
 else
     say "downloading ClamAV signatures (~110MB, one time — cached in a volume)"
-    # Non-fatal: every other engine still works without ClamAV, and per
-    # NOTES.md it has yet to produce a single hit on this corpus.
+    # Non-fatal: every other engine still works without ClamAV. Not because
+    # ClamAV is unimportant: in the 2026-11-07 KVRT trial it flagged 293
+    # files across 10 offensive repos (NOTES.md), none in clean ones.
     if freshclam --stdout --log=/var/log/clamav/freshclam.log; then
         say "ClamAV signatures ready"
     else

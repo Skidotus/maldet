@@ -17,6 +17,9 @@ pointless, since the second would simply idle.
 """
 
 import os
+import re
+import shutil
+import subprocess
 import sys
 import time
 import signal
@@ -33,7 +36,25 @@ from scanner import scan_repo
 # enough for a web form and costs one trivial indexed query per tick.
 POLL_SECONDS = float(os.environ.get("MALDET_WORKER_POLL", "2"))
 
+# ClamAV signature refresh, every N hours while idle; 0 (the default) is off.
+# docker/entrypoint.sh only downloads signatures when none exist, and the
+# Docker volume keeps them, so before this the VPS scanned with whatever it
+# fetched on its first start: on 2026-11-09 that was 1 November, and nothing
+# would ever have updated it. Antivirus signatures a week old miss a week of
+# new malware, and nothing on the page would say so.
+#
+# Done here rather than at container start because the app and worker
+# containers share the signature volume and both run the entrypoint, so two
+# freshclams would race over one directory. Only the worker runs this, only
+# between scans (freshclam test-loads the database, ~1GB, which must not
+# overlap a scan on the 4GB host), and docker-compose.yml turns it on for the
+# worker alone. Off by default so a laptop's system ClamAV, which needs root
+# to update, is left to its own freshclam service.
+SIGNATURE_REFRESH_HOURS = float(os.environ.get("MALDET_CLAMAV_REFRESH_HOURS", "0"))
+FRESHCLAM_TIMEOUT = 900
+
 _stop = False
+_last_signature_check = None
 
 
 def _handle_stop(signum, frame):
@@ -139,6 +160,53 @@ def _clear_stale_summaries():
         return 0
 
 
+def refresh_signatures_if_due(label="worker", now=None):
+    """Runs freshclam if SIGNATURE_REFRESH_HOURS have passed since the last
+    attempt (or there has been none since start). Returns "off", "not due",
+    "missing", "updated", "current" or "failed"; never raises.
+
+    The attempt time is recorded before running, so a failing update (no
+    network, a ClamAV mirror rate limit) waits for the next interval instead
+    of being retried every poll."""
+    global _last_signature_check
+    if SIGNATURE_REFRESH_HOURS <= 0 or os.environ.get("SKIP_FRESHCLAM") == "1":
+        return "off"
+    now = time.monotonic() if now is None else now
+    if (_last_signature_check is not None
+            and now - _last_signature_check < SIGNATURE_REFRESH_HOURS * 3600):
+        return "not due"
+    _last_signature_check = now
+
+    if not shutil.which("freshclam"):
+        print(f"[{label}] ClamAV signature refresh skipped: freshclam is not installed", flush=True)
+        return "missing"
+    try:
+        result = subprocess.run(["freshclam", "--stdout"], capture_output=True, text=True,
+                                timeout=FRESHCLAM_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        print(f"[{label}] ClamAV signature refresh timed out after {FRESHCLAM_TIMEOUT}s", flush=True)
+        return "failed"
+    except OSError as e:
+        print(f"[{label}] ClamAV signature refresh failed: {type(e).__name__}: {e}", flush=True)
+        return "failed"
+
+    # freshclam: 0 = something was updated, 1 = already up to date.
+    if result.returncode in (0, 1):
+        status = "updated" if result.returncode == 0 else "current"
+        # "daily.cld updated (version: 27451, ...)" and
+        # "main.cvd database is up-to-date (version: 63, ...)" alike.
+        versions = [f"{m.group(1)} {m.group(2)}" for m in
+                    (re.search(r"(\w+\.c[vl]d)\b.*?version: (\d+)", l)
+                     for l in result.stdout.splitlines()) if m]
+        print(f"[{label}] ClamAV signatures {status}"
+              f"{' (' + ', '.join(versions) + ')' if versions else ''}", flush=True)
+        return status
+    reason = next((l.strip() for l in reversed((result.stdout + result.stderr).splitlines())
+                   if "ERROR" in l or "WARNING" in l), f"exit {result.returncode}")
+    print(f"[{label}] ClamAV signature refresh failed: {reason[:200]}", flush=True)
+    return "failed"
+
+
 def run_forever(recover=True, label="worker"):
     """Consume the queue until stopped. Safe to call from a thread.
 
@@ -170,6 +238,8 @@ def run_forever(recover=True, label="worker"):
             continue
 
         if not job:
+            # Idle is the only safe time: never alongside a scan's memory.
+            refresh_signatures_if_due(label)
             time.sleep(POLL_SECONDS)
             continue
 

@@ -30,11 +30,13 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // On submit, not click: disabling a submit button inside its own click
+  // handler stops some browsers sending the form at all.
+  var rescanForm = document.getElementById('rescanForm');
   var rescanBtn = document.getElementById('rescanBtn');
-  if (rescanBtn) {
-    rescanBtn.addEventListener('click', function () {
-      rescanBtn.classList.add('disabled');
-      rescanBtn.setAttribute('aria-disabled', 'true');
+  if (rescanForm && rescanBtn) {
+    rescanForm.addEventListener('submit', function () {
+      rescanBtn.disabled = true;
       rescanBtn.innerHTML =
         '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Rescanning…';
     });
