@@ -610,6 +610,378 @@ failed for three, and only one of the three is fixable.
   Both paths now build a byte-identical prompt for 161 of 162 repos and
   select the same top 15 for all 162.
 
+## What's improved (2026-11-07 — IOC extraction)
+
+- **Indicators of compromise on every new scan.** `ioc_extractor.py` reads files
+  ClamAV or YARA flagged plus install scripts, hashes the flagged files, and stores
+  the results in `iocs` and `ioc_runs`. The report page lists them as plain text,
+  with CSV and JSON downloads. abuse.ch lookups are optional and off without
+  `ABUSECH_AUTH_KEY`.
+- **Why metadata is skipped, not just safe-listed.** The requested safe-domain list
+  was not enough: Flask's `pyproject.toml` names `palletsprojects.com` and
+  `discord.gg`, and Django's names `djangoproject.com`. Those are an author's own
+  links and no list can keep up, so install scripts are parsed and only their
+  working parts searched. Measured on the root install scripts of 23 well-known
+  Python and npm projects: 0 indicators. A real Flask scan: 0 indicators, 62s.
+- **Flagged files are noisier, and that is known.** They are searched whole, by
+  design. `kserve/kserve`, a legitimate project with 39 YARA findings, gave 43
+  indicators (19 hashes, 15 URLs, 9 domains), all harmless: `astral.sh` from
+  `curl | sh` in Dockerfiles that `detect_pipe_to_shell` flagged, plus documentation
+  links in comments. Each is true, but none means compromise. Read an IOC as "this
+  address is in a suspicious file", not as a verdict. If it proves too noisy, the
+  first things to try are skipping comments in flagged files, or not counting files
+  flagged only at low severity.
+- **Why `ioc_runs` exists.** An empty `iocs` could mean nothing found, extraction
+  failed, or a scan from before this feature. Only the first may say "No indicators
+  of compromise found"; older scans say they were not extracted.
+- **Threat-intel weights** (thresholds unchanged): MalwareBazaar 101 points, which
+  is Critical on the malware axis; URLhaus 36 each, capped at 72, which is High. Both
+  skip the classifier. They are judgement calls set to land just past the existing
+  thresholds, and have not been calibrated against the corpus.
+
+**Limitations to state in the report:**
+- The abuse.ch calls have only been tested against mocked responses shaped like the
+  documented API, because no key was available. Run one real scan with a key before
+  claiming they work.
+- Safe-listing `github.com` and `githubusercontent.com` means a payload hosted on
+  GitHub produces no URL indicator. That was requested to keep clean projects quiet,
+  and it is a real blind spot, since attackers do host there.
+- Filtered paths are skipped too, so malware under `tests/` or `docs/` gets no IOCs,
+  matching `filter_noise()`.
+- Discord webhooks and Telegram tokens are shown in full, including on the public
+  site. They are already public in the scanned repository, but they are live
+  credentials, so consider masking them if that becomes a concern.
+- Existing scans have no IOCs until rescanned.
+
+## Evaluated, not adopted (2026-11-07 — Kaspersky KVRT as a second AV)
+
+An industry contact said one AV is not enough. VirusTotal was rejected over its API
+limits, so KVRT for Linux 24.0.6.0 was run locally, report-only, as a normal user, over
+the same files as `rules.yar`, YARA Forge and ClamAV. Counts are distinct flagged files
+outside `is_ignored_path()`, with the corrected `rules.yar`.
+
+| | KVRT | rules.yar | Forge | ClamAV |
+|---|---|---|---|---|
+| 23 clean repos (75,086 files): flagged files | 0 | 34 | 0 | 0 |
+| 20 offensive repos (7,968 files): flagged files | 604 | 215 | 114 | 293 |
+| Offensive repos with any hit | 13 | 14 | 10 | 10 |
+
+- **Files, not repos.** KVRT flagged 293 files no other engine did, but no repo that the
+  others all missed: 15 of 20 had a hit with or without it. Other engines flagged 219
+  files it missed, such as all 28 in `merlin`.
+- **Cost:** 4-36s per repo, 348-514MB peak. Far cheaper than ClamAV, which took 1,068s
+  for the whole set in one pass.
+- **Read with care.** 456 of the 604 are heuristic labels (`HEUR:...`). Nobody checked
+  that flagged files are really malicious, so this measures agreement, not accuracy. Zero
+  on clean repos is over popular projects only. Archives were not extracted first, which
+  `scan_repo()` would do, so samples in password-protected archives were not seen.
+- **Why it is not adopted yet:** the licence is the open question, not a clear ban. The
+  2024 Linux EULA ships inside `bin/libKvrtGui.so`. It never mentions public sites or
+  services, and it does not restrict publishing results. Clause 2.1 allows use "within the
+  scope of functionality" in the manual, and 2.2 allows distribution and some commercial
+  use. The risk is 5.3: "You shall not use the Software in the creation of data or
+  software used for detection, blocking or treating threats". MalDet is detection
+  software, and `train_classifier.py` learns from `scan_results`, so KVRT findings stored
+  there could fall under it. 5.2 also bars renting or leasing it to third parties. Get
+  Kaspersky's answer in writing, and keep KVRT output away from rule tuning and classifier
+  training until then. Separately: suspicious files may go to Kaspersky through KSN,
+  signatures need a 164MB re-download, and it exits 0 even when it finds threats.
+
+This also corrects the note above that ClamAV has produced zero real hits: on these
+repos it flagged 293 files, and none in the clean set.
+
+## Evaluated, not yet adopted (2026-11-09 — extra ClamAV signatures)
+
+The licence-free alternative to a second AV: unofficial signature lists loaded into the
+ClamAV MalDet already runs. Fetched with `fangfrisch` 1.9.3 from its two sources that
+need no sign-up, **SaneSecurity** (its default set, 40 files) and **InterServer**
+(4 files, PHP webshells): 44 files, 19MB. Same 43 repositories and method as KVRT
+(tarballs unpacked as data, `helm/helm` failing on an absolute symlink both times), run
+twice with the official database dated 2026-09-23: official signatures alone, then the
+extra lists alone, so each file's hit can be attributed. Counts are distinct files kept
+by `is_ignored_path()`.
+
+| | Official | Extra lists | Extra only | Together |
+|---|---|---|---|---|
+| 23 clean repos (75,105 files): flagged files | 0 | 0 | 0 | 0 |
+| 20 offensive repos (7,968 files): flagged files | 293 | 208 | 47 | 340 |
+| Offensive repos with any hit | 10 | 8 | 0 new | 10 |
+
+- **Cheap.** Loading both sets peaked at 1,034MB against 968MB for the official set alone
+  (+66MB), and the load was no slower (8.5s against 12.3s, i.e. noise). The extra lists
+  alone scanned all 43 repos in 4m55s at 260MB. The official baseline matched the
+  2026-11-07 run exactly (293 files), so the repos had not drifted.
+- **Files, not repos**, exactly like KVRT: +47 files (+16%), and no repository the
+  official signatures missed. The 10 offensive repos with no ClamAV hit stay at zero.
+- **What fired:** SaneSecurity `Malware.*` (117) and `Badmacro` (84, Office macros), most
+  of them heuristic (`Heur.BadOne.Pshell`, `JsHeur`), and 4 InterServer PHP webshell hits.
+  Nobody checked the flagged files, so this is agreement, not accuracy; zero on clean
+  repos is over popular projects only.
+- **Terms:** SaneSecurity's legal page allows free use including commercial products, but
+  its usage page asks organisations for a donation (suggested $100). InterServer calls its
+  lists free; no written licence was found. URLhaus (abuse.ch) needs a free key and was not
+  tested; it is the list most likely to matter for source code, since it is malware URLs.
+- **Not adopted yet** because the gain is small and adopting means a refresh job
+  (`fangfrisch refresh`, hourly upstream) in the Docker image. If adopted, pass the extra
+  directory with a second `-d` rather than copying into `/var/lib/clamav`, so `freshclam`
+  and `fangfrisch` never fight over one directory.
+
+## What's improved (2026-11-09 — hidden payloads, and no more "Safe")
+
+Two ideas taken from FlatScan (https://github.com/Masriyan/FlatScan, MIT), a Go
+single-file malware analyser: its recursive payload resolution, and its lowest band
+reading "No strong indicators. Not a clean verdict."
+
+**Hidden payloads (`payload_decoder.py`, `scanner.run_decoded_payloads()`).** YARA and
+ClamAV read files as they are, so code shipped as base64 is a long run of letters to
+both of them. The new stage peels base64 (also reversed and URL-safe), hex, `\x41`
+escapes and character-code lists, then zlib/gzip/bz2/xz, up to three layers; keeps a
+layer only if it looks like code or carries executable magic bytes; and runs both YARA
+rule sets and ClamAV over what it kept. Matches are reported on the original file and
+line as `Hidden payload: ...`, with the decoding chain and decoded text as the snippet.
+
+Measured on the same 43 repositories as KVRT and the extra ClamAV signatures:
+
+| | Clean (23 repos) | Offensive (20 repos) |
+|---|---|---|
+| Strings decoded and kept | 23, in 6 repos | 126, in 9 repos |
+| Hidden-payload matches | **0** | 49 (35 high, 14 medium), 26 files, 6 repos |
+| Files no engine flagged in plain sight | 0 | **17** |
+| Time for the stage, per repo | median 0.7s, max 14.6s | median 0.5s, max 30.0s |
+
+- **The 17 files are real tools, named.** Empire's PowerShell modules each carry a
+  compiled .NET tool as one base64 string: Rubeus, Seatbelt, SweetPotato, Watson,
+  SharpSecDump, SharpChromium, SpoolSample, WireTap and more, identified by YARA Forge's
+  `HKTL_NET_GUID_*` rules and ClamAV once decoded. CrackMapExec's NanoDump, HandleKatz
+  and process-injection modules, and two InQuest samples, are the rest. Before this
+  stage MalDet saw all 17 as text.
+- **Repos, again, did not change**: all 6 already had plain-sight hits. What it adds is
+  coverage inside a repo, plus the ability to say *what* is hidden in a file.
+- **Cost is mostly ClamAV's signature load** (~10-12s), paid only when something was
+  decoded; decoding itself took at most 30s (Empire, 41 payloads). Capped at 60s and 500
+  payloads, each a visible "decoding incomplete" marker if hit; neither was hit here.
+- Single-byte XOR, which FlatScan also peels, is not done: on source code every long
+  string "decodes" under some key, and the false-positive cost was not worth it.
+- Read with care: one corpus, nobody verified the flagged files, and zero on clean
+  repos is over popular projects. Covered by `tests/test_payload_decoder.py` (16 tests,
+  including a hidden reverse shell plain YARA misses).
+
+**"Safe" now reads "Nothing found".** A static scan can fail to find problems; it
+cannot show a repository is safe. Every page, the printable report, the extension popup
+and the LLM prompt show the lowest level through `scanner.level_label()`, and the report
+says outright that it is not proof of safety. The stored value stays `Safe` (thresholds,
+database, extension API and evaluation scripts key on it), so no saved scan changed.
+The prompt change means the 17-of-19 summary evaluation predates it; re-run
+`evaluate_summaries.py --generate` before quoting it as current.
+
+## Ideas from FlatScan, not yet built (2026-11-09)
+
+FlatScan (https://github.com/Masriyan/FlatScan, MIT, Go, one maintainer) is a static
+analyser for **one finished file at a time** (an `.exe`, a script, an Android app).
+MalDet scans **whole source-code repositories**, so only some of its ideas carry over.
+Two are already built (hidden-payload decoding, and "Nothing found" instead of "Safe",
+above). The rest, most useful first. The first three are problems shown in MalDet's own
+data, not guesses.
+
+1. **Stop lists of bad things reading as bad things** (FlatScan `falsepositive.go`).
+   MalDet looks for suspicious text, and some honest files are full of it because they
+   *describe* threats: rule files, signature sets, blocklists. Shown in the local
+   database: **MalDet rates its own repository High**, because `rules.yar` matches 7 of
+   MalDet's own rules, and **AdguardTeam/HostlistsRegistry is Critical**, because its
+   blocklists name crypto-mining sites in order to block them. FlatScan's test is
+   breadth: real malware does one job, so one file that looks like ransomware, a miner,
+   a stealer and a reverse shell at once is a catalogue. It then caps the score and
+   treats the matches as references. A blocklist is a catalogue of one kind, so it needs
+   a second check (a file that is mostly a list of domains). FlatScan pins the guard with
+   tests in both directions so it can never quietly hide real malware; copy that too.
+   **Done 2026-11-09, but not FlatScan's way** (`reference_files.py`). Breadth was
+   measured first and rejected: across the local corpus, `rules.yar` matches 7 different
+   MalDet rules, but nishang's `Powerpreter.psm1` (a real attack toolkit) and the
+   deliberately malicious `maldet-demo-package/install.sh` match 5 each. Any cut-off
+   that catches the rule file hides those two. So the test is the *kind* of file: a
+   data-file extension (nothing runs it by itself) **and** a rule or list format in its
+   first 256KB — YARA, Sigma or Snort rules, a ClamAV signature database, or a hosts /
+   adblock / domain / IP list. Code is never excused, whatever it contains. Matches in
+   such files stay on the report, set to low and labelled "Reference in a …, not code
+   that runs", but count for nothing in the score and give no IOCs. Hidden payloads and
+   threat-intel hash matches are never excused. Measured:
+   - **0 of 542** flagged files in the 43 trial repos were excused, so no real tool hid.
+   - **AdguardTeam/HostlistsRegistry: all 25 flagged files are blocklists** (up to 30MB
+     each); malware axis Critical 180 → Medium 20, trust 13 → 60, recomputed from the
+     stored findings (the recomputed "before" matches the stored 180).
+   - **MalDet itself: 341 of 356 YARA matches** are in `rules.yar` and the Forge rule
+     file; malware axis High 63 → Medium 28 from stored findings. What still counts is
+     real code: GuardDog on the `.claude/skills/` helper scripts, and the landing page's
+     decorative `static/js/hero-code.js`, whose "wall of code" contains snippets that
+     look like credential theft and `curl | sh`. Worth rewording that decoration, since
+     an examiner scanning MalDet will see it.
+   - **End to end:** a real scan of `Skidotus/maldet` from GitHub with the new code
+     (2026-11-09, LLM off) saved malware **Medium 24**, down from High; the 7 `rules.yar`
+     matches are stored as low, labelled, with confidence 0.
+   - 15 tests (`tests/test_reference_files.py`), both directions.
+   *In plain words:* MalDet now recognises files that are lists of threats (rule files,
+   antivirus fingerprint files, blocklists of bad websites) and stops treating them as
+   threats. It checks what kind of file it is rather than how many rules it matches,
+   because real attack tools also match many rules. A list cannot run, so its matches
+   are still shown but no longer raise the score.
+
+2. **UTF-16 blind spot.** UTF-16 stores a zero byte beside every letter, and Windows
+   PowerShell scripts, attackers' favourite, are often saved that way. Tested: a reverse
+   shell and download command saved as UTF-8 fired two `rules.yar` rules; the same text
+   saved as UTF-16 fired **none**. `rules.yar` has no `wide` strings, and
+   `ioc_extractor._read_text()` (so also the payload decoder) skips any file with a zero
+   byte. Fix: add `ascii wide` to the rule strings, and decode UTF-16 (with or without a
+   byte-order mark) before reading text. Small, and a proven gap.
+   **Done 2026-11-09.** All 100 `rules.yar` strings are `ascii wide`, and
+   `_read_text()` decodes UTF-16 (byte-order mark, or the "every other byte is zero"
+   shape over the first 8KB). Over the 43 trial repos: 342 matches before, 343 after;
+   the one new match is a UTF-16 PowerShell stage in InQuest's malware samples, and the
+   clean repos are unchanged. Not slower; peak memory 89MB to 115MB. The YARA tests now
+   check every sample, positive and negative, in UTF-8 and two UTF-16 forms.
+   *In plain words:* MalDet can now read scripts saved in the "zero between every
+   letter" format, so changing how a file is saved no longer hides it.
+
+3. **One clue should not raise a serious alarm** (FlatScan `correlation.go`). FlatScan
+   groups clues (credential dumping needs clues from several separate groups, not just
+   the word `lsass`), fires only when enough groups agree, and records how many did.
+   `rules.yar` already requires connected halves, and the classifier counts tools that
+   agree on a file. Missing: showing "flagged by N separate clues/engines" on the report,
+   and requiring more than one engine before a repo can reach High on the malware axis.
+
+4. **Disguised file names** (FlatScan `masquerade.go`). Three tricks honest projects
+   almost never use: a document extension followed by a program one
+   (`invoice.pdf.exe`); look-alike letters (`lnstaller` with a lowercase L, `Micros0ft`,
+   Cyrillic mixed into Latin); and invisible right-to-left characters that make
+   `annexe‮cod.exe` display as `annexe.exe.doc`. A cheap check over file names in a scan.
+
+5. **Tidier IOCs, and STIX export.** FlatScan labels each indicator as worth
+   investigating, benign infrastructure, build artefact or source path, and keeps the
+   noise out of exports. It also exports STIX 2.1, the standard format threat-intel
+   tools import. MalDet already exports IOCs as CSV and JSON; STIX would be small.
+
+6. **Label findings with MITRE ATT&CK techniques.** The industry's shared names for
+   attacker behaviour (download-and-run is T1105). Add an `attack` meta field to each
+   `rules.yar` rule and show it as a tag on the report. Low effort, and it ties MalDet
+   to the vocabulary examiners and security teams use.
+
+7. **A command-line / CI mode.** FlatScan has `--ci` with fixed exit codes (0 clean,
+   10 suspicious, 20 malicious), so a project's build fails when it finds something. A
+   small wrapper around `scan_repo()` with exit codes and SARIF output (the format
+   GitHub's Security tab reads) is realistic, or a good future-work item.
+
+8. **A verification table in the README.** FlatScan lists build, tests, lint and
+   vulnerability-check results in one table. MalDet has the numbers (test count,
+   classifier precision 0.52 / recall 0.62, summaries 17 of 19 clean); keep giving the
+   sample size behind each, which FlatScan does not ("Quality 10/10" is self-awarded).
+
+9. **Machine-generated domains** (FlatScan `dga.go`). Some malware invents random
+   domains (`xkqjzvbtr.com`) to stay hidden; FlatScan scores how random a name looks.
+   Could tag domains in the IOC list. Nice to have, low priority.
+
+**Not worth copying:** disassembly, `.exe` / ELF / Android / macOS parsers, naming
+malware families, similarity hashing, single-byte-XOR peeling (see above) and its PDF
+reports. All are for taking apart one compiled file, not a source repository.
+
+**Suggested order:** 2 (small, proven gap), then 1 (MalDet rating itself High is the
+kind of thing an examiner notices), then 6 and 4 (cheap), then the rest.
+
+### In plain words: what was done on 2026-11-09, and what the ideas mean
+
+The sections above are written for someone already deep in the code. This is the same
+material explained simply, for reading back later or explaining to someone else.
+
+**What was built**
+
+- **Hidden-payload decoding.** Attackers often hide their code by scrambling it into a
+  long string of random-looking letters (base64 is the most common way). A scanner that
+  reads the file sees only gibberish, like a letter written in code. MalDet now
+  unscrambles those strings (up to three layers deep, because attackers often scramble
+  something that is already scrambled), and runs its malware scanners on what comes out.
+  If it finds something, the report points to the exact file and line where the
+  scrambled string sat, and shows what it said once unscrambled. Nothing unscrambled is
+  ever run. On the test set it found 17 files that no scanner had flagged before, all of
+  them known hacking tools, and raised no false alarms on 23 normal projects.
+- **"Nothing found" instead of "Safe".** A scan can only report what its rules
+  recognise. If nothing matches, that is not proof the code is safe: it may be new,
+  hidden in a way no rule knows, or only fetched when the program runs. So the lowest
+  level now says what actually happened, "Nothing found", and the report explains that
+  this is not a guarantee. The database still stores "Safe", so no old scans changed.
+- **Extra ClamAV signatures (tested, not switched on).** ClamAV is MalDet's antivirus
+  engine. Volunteer groups publish extra lists of malware patterns for it. Loading them
+  cost very little memory and raised no false alarms, but only found 47 more files in
+  projects that were already flagged, and no new projects. Small gain, so it is written
+  down rather than switched on.
+
+**The FlatScan ideas, explained**
+
+1. **Lists of bad things are not bad things.** MalDet hunts for suspicious text
+   patterns. Some honest files are full of them because they are *lists*: a rule file
+   describing what malware looks like, or a blocklist of dangerous websites. It is like
+   flagging a police "wanted" poster as a criminal because it shows a criminal's face.
+   That is why MalDet rates *itself* High (its rule file must contain the patterns it
+   looks for) and AdGuard's blocklist project Critical (it lists crypto-mining sites so
+   they can be *blocked*). FlatScan's trick: real malware usually does one job (steal
+   passwords, *or* mine crypto, *or* lock files). One file that seems to do five or six
+   unrelated jobs at once is almost certainly a list describing them.
+2. **Text saved in a different format.** Text can be stored in different ways. The
+   usual one (UTF-8) stores `hello` as five letters. Another (UTF-16) puts an empty byte
+   between every letter. Windows PowerShell scripts, which attackers love, are often
+   saved that way. MalDet caught a test attack saved normally, but missed the same
+   attack saved as UTF-16, so an attacker could slip past just by changing how the file
+   is saved. YARA (the pattern scanner) has a setting, `wide`, that makes a rule look
+   for both formats; it just needs adding.
+3. **Do not panic over one clue.** Some checks raise a serious alarm from a single word,
+   for example `lsass`, the Windows process that holds passwords, which plenty of honest
+   security code mentions. FlatScan works like a careful detective: it only raises a
+   serious alarm when several *separate* clues agree, and shows how many did, so a
+   reader can see how strong the case is.
+4. **Disguised file names.** Attackers often trick people with the name, not the
+   contents: `invoice.pdf.exe` looks like a PDF but is a program; `lnstaller` uses a
+   lowercase L in place of a capital I; a hidden "flip" character can make a name
+   display backwards, so `annexe‮cod.exe` *looks* like `annexe.exe.doc`. Honest projects
+   almost never contain these, so checking for them is cheap and rarely wrong.
+5. **Tidier lists of clues, in a standard format.** MalDet already collects suspicious
+   web and IP addresses (IOCs). FlatScan also sorts them into "worth investigating" and
+   "harmless background" (such as a link to official documentation), and exports them
+   in STIX, the format security teams use to share threat information.
+6. **Use the industry's names for attacks.** MITRE ATT&CK is a shared catalogue of
+   attacker behaviour, each with an ID (download-and-run is T1105). Tagging MalDet's
+   findings with those IDs makes the results speak the same language as security teams
+   and examiners.
+7. **Let other projects use MalDet automatically.** A command-line mode that ends with
+   a code meaning "clean", "suspicious" or "malicious" lets a project's automatic build
+   stop itself when MalDet finds something, the way a smoke alarm can cut the power.
+8. **Show the proof in one place.** A small table in the README listing how many tests
+   pass, how accurate the classifier is, and how many AI summaries were checked clean,
+   each with how many examples the number came from.
+9. **Spot random-looking web addresses.** Some malware makes up random addresses like
+   `xkqjzvbtr.com` so they are hard to block. FlatScan scores how random a name looks;
+   MalDet could tag such addresses in its list of clues. Nice to have.
+
+Most of FlatScan's other features are for taking apart **one finished program** (an
+`.exe`, an Android app). MalDet looks at **source-code projects**, so those do not fit.
+
+**Words used above**
+
+- **False positive / false alarm:** the scanner says "danger" when there is none.
+- **YARA:** a tool that searches files for text or byte patterns described in rule
+  files. MalDet's own rules are in `rules.yar`; YARA Forge is a large public rule set.
+- **ClamAV:** a free antivirus engine. **Signatures** are its fingerprints of known
+  malware.
+- **base64 / hex:** common ways of writing any data, even a whole program, as ordinary
+  letters and digits, so it can be pasted into a text file.
+- **zlib / gzip:** compression, like zipping a file; often used together with base64.
+- **Payload:** the harmful part of an attack, the bit that actually does damage.
+- **Reverse shell:** a command that hands a stranger remote control of your computer.
+- **IOC (indicator of compromise):** a clue such as a suspicious web address, IP address
+  or file fingerprint.
+- **UTF-8 / UTF-16:** two ways of storing text as bytes.
+- **STIX:** a standard file format for sharing threat information.
+- **SARIF:** a standard file format for scan results, which GitHub can display.
+- **MITRE ATT&CK:** a public catalogue of attacker techniques, each with an ID.
+- **CI (continuous integration):** the automatic checks that run every time a project's
+  code changes.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully

@@ -32,7 +32,8 @@ from sklearn.preprocessing import OneHotEncoder
 
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import NOISE_RULES, is_ignored_path, normalize_severity, frequency_key
+from scanner import (NOISE_RULES, is_ignored_path, frequency_key,
+                     add_finding_features, FEATURE_COLUMNS)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
 
@@ -52,8 +53,17 @@ def load_findings():
     )
     try:
         with conn.cursor() as cur:
+            # tool_confidence is read only where the column exists (it is
+            # added by hand -- see schema.sql); elsewhere it is "unknown".
             cur.execute("""
-                SELECT repo_id, tool, severity, issue_text, filename, code_snippet
+                SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'scan_results'
+                  AND COLUMN_NAME = 'tool_confidence'
+            """)
+            conf_col = ", tool_confidence" if cur.fetchone()["n"] else ""
+            cur.execute(f"""
+                SELECT repo_id, tool, severity, issue_text, filename,
+                       line_number, code_snippet{conf_col}
                 FROM scan_results
             """)
             rows = cur.fetchall()
@@ -63,17 +73,16 @@ def load_findings():
 
 
 def build_features(df):
-    df["severity_norm"] = df["severity"].fillna("low").apply(normalize_severity)
-    df["filename"] = df["filename"].fillna("")
-    df["issue_text"] = df["issue_text"].fillna("")
-    df["code_snippet"] = df["code_snippet"].fillna("")
+    # severity_norm, snippet_length, tool_confidence, is_vendored and the
+    # tool-agreement counts all come from scanner.add_finding_features(), the
+    # same function score_findings() uses at scan time.
+    df = add_finding_features(df)
 
     # scanner.is_ignored_path, not a second copy of the logic — the two used
     # to be written out separately, which meant a substring bug in both
     # copies trained the model to call Dockerfile findings noise.
     df["is_ignored_path"] = df["filename"].apply(is_ignored_path)
     df["is_known_noise_text"] = df["issue_text"].isin(NOISE_RULES)
-    df["snippet_length"] = df["code_snippet"].str.len()
     df["frequency_key"] = df.apply(
         lambda r: frequency_key(r["tool"], r["issue_text"]), axis=1
     )
@@ -146,7 +155,7 @@ def main():
     print(f"  {n_signal:,} confidently real findings")
     print(f"  {n_ambiguous:,} ambiguous (left out of training)")
 
-    feature_cols = ["tool", "severity_norm", "repo_frequency", "snippet_length", "issue_text"]
+    feature_cols = FEATURE_COLUMNS
     X = labeled[feature_cols]
     y = labeled["label"]
 
@@ -157,8 +166,10 @@ def main():
     preprocessor = ColumnTransformer([
         ("tool_ohe",     OneHotEncoder(handle_unknown="ignore"), ["tool"]),
         ("severity_ohe", OneHotEncoder(handle_unknown="ignore"), ["severity_norm"]),
+        ("conf_ohe",     OneHotEncoder(handle_unknown="ignore"), ["tool_confidence"]),
         ("text_tfidf",   TfidfVectorizer(max_features=300, stop_words="english"), "issue_text"),
-    ], remainder="passthrough")  # repo_frequency, snippet_length pass through as-is
+    ], remainder="passthrough")  # numeric features (repo_frequency, snippet_length,
+                                 # is_vendored, tools_on_line/file) pass through as-is
 
     pipeline = Pipeline([
         ("features", preprocessor),
@@ -198,6 +209,9 @@ def main():
         "frequency_lookup": freq_lookup,
         "default_frequency": default_frequency,
         "total_repos": total_repos,
+        # score_findings() selects these columns; models saved before this
+        # key existed fall back to scanner.LEGACY_FEATURE_COLUMNS.
+        "feature_cols": list(feature_cols),
     }
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)

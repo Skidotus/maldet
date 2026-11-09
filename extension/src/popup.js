@@ -56,6 +56,13 @@ function levelClass(level) {
   return "lv-" + String(level || "").toLowerCase().replace(/[^a-z]/g, "");
 }
 
+/* The level as the site shows it. The API keeps the stored "Safe", but a
+ * static scan cannot prove a repository safe, so it reads as what happened.
+ * Mirrors scanner.LEVEL_LABELS. */
+function levelLabel(level) {
+  return level === "Safe" ? "Nothing found" : level;
+}
+
 function metaLine(meta) {
   if (!meta) return null;
   const line = el("p", "meta");
@@ -76,7 +83,7 @@ function metaLine(meta) {
 function verdictBlock(risk) {
   const box = el("div", `verdict ${levelClass(risk.level)}`);
   box.append(
-    el("span", "verdict__level", risk.level || "unrated"),
+    el("span", "verdict__level", levelLabel(risk.level) || "unrated"),
     el("span", "verdict__score", num(risk.score))
   );
   return box;
@@ -91,7 +98,7 @@ function verdictBlock(risk) {
 function trackRow(name, level, score) {
   const row = el("div", "track");
   const val = el("span", "track__val", num(score));
-  const band = el("em", null, level || "\u2014");
+  const band = el("em", null, levelLabel(level) || "\u2014");
   val.appendChild(band);
   row.append(el("span", "track__name", name), val);
   return row;

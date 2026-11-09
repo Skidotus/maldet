@@ -11,8 +11,13 @@ combined with machine learning (ML) risk classification.
 ## Features
 
 - Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV, GuardDog)
+- Hidden-payload decoding: base64, hex, escaped and compressed layers are unwrapped and re-scanned by YARA and ClamAV, so code shipped as an encoded string is still checked
+- Reads UTF-16 scripts (how Windows PowerShell often saves them), so changing a file's text format does not hide it
+- Rule files, antivirus signature files and blocklists are recognised as references to threats, not threats, so security projects are not rated as malware for describing it
 - Supply chain attack detection (OSV CVE lookups across requirements.txt, poetry.lock, pyproject.toml and Pipfile, plus a custom dependency checker)
 - ML risk classification (Random Forest)
+- Indicators of compromise extracted from flagged files and install scripts, with CSV and JSON export
+- Optional threat-intel lookups against abuse.ch (MalwareBazaar, URLhaus)
 - Plain-English findings summary written by a local LLM (Ollama, optional)
 - Scan history and risk trend tracking
 - Web dashboard with charts
@@ -349,6 +354,62 @@ http://localhost:5000
 5. Select the `repo` scope
 6. Copy the token into `config.py`
 
+### abuse.ch Auth-Key (optional)
+
+Turns on the threat-intel lookups described below. Without it they are skipped
+and IOCs are still extracted.
+
+1. Get a free key at https://auth.abuse.ch/
+2. Docker: set `ABUSECH_AUTH_KEY` in `.env`, then `docker compose up -d`
+3. Without Docker: `export ABUSECH_AUTH_KEY=...` before starting the worker,
+   because `.env` is only read by Docker Compose
+
+Never put the key in a committed file.
+
+---
+
+## Indicators of Compromise
+
+Every scan pulls indicators out of the files it has reason to distrust and lists
+them on the report page, with **Download IOCs (CSV)** and **(JSON)** buttons.
+
+**Types:** `url`, `domain`, `ipv4`, `discord_webhook`, `telegram_bot_token`,
+`btc_wallet`, `eth_wallet`, and `sha256` for every file ClamAV or YARA flagged.
+Base64 strings longer than 40 characters are decoded and searched for URLs and IPs.
+
+**What is read:** files ClamAV or YARA flagged, plus `setup.py`, `setup.cfg`,
+`pyproject.toml` and the install hooks in `package.json` (`preinstall`, `install`,
+`postinstall`, `prepare`, `prepublish`). Binary files and files over 2MB are hashed
+but not searched. Paths the noise filter ignores (tests, docs, examples and so on)
+are skipped.
+
+**What is left out:** common developer domains, private and reserved IPs, version
+strings, and project metadata such as homepage links, authors and maintainers.
+
+**Threat intel:** with `ABUSECH_AUTH_KEY` set, file hashes are checked against
+MalwareBazaar and URLs against URLhaus. Hashes and URLs from the scanned repository
+are sent to abuse.ch. Up to 50 of each are checked per scan, within 30 seconds, and
+lookups stop for that scan if abuse.ch answers with a rate limit. abuse.ch can limit
+heavy accounts for up to 72 hours under its Fair Use Policy, so leave the key unset
+for bulk runs such as `batch_scan.py`.
+
+| Match | Added to the score | Malware verdict |
+|---|---|---|
+| MalwareBazaar (this exact file is known malware) | 101 | Critical |
+| URLhaus (this URL is known to have served malware) | 36 each, up to 72 | High |
+
+A failed lookup or extraction never fails a scan. Extraction has a 60-second limit
+(`MALDET_IOC_TIMEOUT`). The page only says "No indicators of compromise found" when
+extraction finished; otherwise it says what happened instead.
+
+Existing databases need the new tables once. `schema.sql` is safe to re-run:
+
+```bash
+mysql -u <user> -p <database> < schema.sql
+```
+
+Run the tests with `python3 -m unittest discover -s tests -t .`
+
 ---
 
 ## Project Structure
@@ -360,6 +421,7 @@ maldet/
 ├── job_queue.py            # Persistent scan queue (scan_jobs table)
 ├── scanner.py              # Core scan engine — orchestrates all six detectors
 ├── dep_checker.py          # Dependency / supply chain checker
+├── ioc_extractor.py        # Indicators of compromise and abuse.ch lookups
 ├── llm_summary.py          # Plain-English scan summary via local Ollama
 ├── rules.yar               # YARA detection rules
 ├── schema.sql              # Database schema — source of truth for a fresh DB
@@ -374,6 +436,7 @@ maldet/
 ├── static/                 # css, js
 ├── docker/                 # entrypoint.sh
 ├── db/                     # export_seed.py, seed_data.sql.gz
+├── tests/                  # Unit tests for IOC extraction and its scoring
 ├── Dockerfile
 ├── docker-compose.yml      # db + app (gunicorn) + worker
 └── README.md
@@ -452,7 +515,9 @@ ClamAV
 Dependency Checker
 
 ↓
-Collect all findings
+Collect all findings and filter noise
+↓
+Extract indicators of compromise (optional abuse.ch lookups)
 ↓
 ML model classifies risk
 ↓

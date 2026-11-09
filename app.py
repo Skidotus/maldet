@@ -7,7 +7,8 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, R
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import scan_repo
+from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category, level_label
+from ioc_extractor import IOC_TYPES
 import job_queue
 
 app = Flask(__name__)
@@ -17,6 +18,24 @@ app = Flask(__name__)
 # so without this Flask serves it as a generic download and the one-click
 # install silently becomes "a file appeared in your Downloads folder".
 mimetypes.add_type("application/x-xpinstall", ".xpi")
+
+
+# {{ level | level_label }}: the stored level as a visitor should read it
+# ("Safe" shows as "Nothing found"). CSS classes keep the stored value.
+app.add_template_filter(level_label, "level_label")
+
+
+@app.context_processor
+def _trust_helpers():
+    """trust_for(row) -> scanner.trust_score() for any row carrying
+    vuln_score / malware_score (repository lists, the detail page's risk
+    row). Computed at render time from the stored scores rather than stored
+    itself, so changing the mapping never needs a migration or a rescan."""
+    def trust_for(row):
+        if not row:
+            return None
+        return trust_score(row.get("vuln_score"), row.get("malware_score"))
+    return {"trust_for": trust_for, "vuln_trust_floor": VULN_TRUST_FLOOR}
 
 
 @app.context_processor
@@ -318,6 +337,41 @@ def index():
 
 #Scan repo
 
+# Repository size limits, from GitHub's own `size` (the whole history, in KB;
+# the shallow clone a scan takes is smaller, but the two move together).
+# Calibrated 2026-11-04 against the corpus: requests/flask ~12MB, django
+# 277MB, artcraft 1.3GB and mlflow 1.5GB all scan normally;
+# vxunderground/MalwareSourceCode (2.2GB) ran YARA out of time, and WebKit
+# (12.9GB) could not be cloned at all. Above WARN the visitor is told the
+# scan will be slow and may be partial, and confirms; above MAX it is
+# refused, since on the 4GB VPS it would hold the one scan slot for an hour
+# and still not finish.
+REPO_WARN_MB = int(os.environ.get("MALDET_REPO_WARN_MB", "1000"))
+REPO_MAX_MB  = int(os.environ.get("MALDET_REPO_MAX_MB", "5000"))
+
+
+def _repo_size_mb(repo):
+    """GitHub's size for owner/repo in MB, or None if it cannot be had. None
+    never blocks a scan: the check is a courtesy, and a GitHub API hiccup
+    must not stop every scan from being queued."""
+    try:
+        import requests
+        from scanner import HEADERS
+        resp = requests.get(f"https://api.github.com/repos/{repo}", headers=HEADERS, timeout=8)
+        if resp.status_code != 200:
+            return None
+        return round(resp.json().get("size", 0) / 1024)
+    except Exception:
+        return None
+
+
+def _size_refusal(repo, size_mb):
+    return (f"{repo} is about {size_mb:,} MB on GitHub, which is over this server's "
+            f"{REPO_MAX_MB:,} MB limit. Repositories this large cannot be cloned and "
+            f"scanned in a reasonable time here, and a partial scan would look more "
+            f"complete than it is.")
+
+
 @app.route('/scan', methods=['GET', 'POST'])
 def scan():
     # If this visitor already has a scan queued or running, land back on its
@@ -348,6 +402,19 @@ def scan():
     if not repo:
         return render_template('scan.html',
             error="Invalid GitHub URL. Example: https://github.com/owner/repo")
+
+    size_mb = _repo_size_mb(repo)
+    if size_mb is not None and size_mb >= REPO_MAX_MB:
+        return render_template('scan.html', error=_size_refusal(repo, size_mb),
+                               prefill_repo=repo)
+    if (size_mb is not None and size_mb >= REPO_WARN_MB
+            and request.form.get('confirm_large') != '1'):
+        # Same form, with the warning and a hidden confirm flag, so "Scan
+        # anyway" is one click and nothing is queued until it is pressed.
+        return render_template('scan.html', prefill_repo=repo,
+                               archive_password=archive_password,
+                               large_repo={"repo": repo, "size_mb": size_mb,
+                                           "warn_mb": REPO_WARN_MB})
 
     job_id = _start_scan_job(repo, archive_password)
     return _redirect_to_job(job_id)
@@ -394,6 +461,7 @@ TOOL_PURPOSE = {
     "guarddog":    "Malicious package and install-time behaviour",
     "dep_checker": "Vulnerable, unpinned or typosquatted dependencies",
     "virustotal":  "Known malware signatures (legacy scans)",
+    "threat_intel": "Files and URLs already listed by abuse.ch as malicious",
 }
 
 
@@ -608,6 +676,179 @@ def report_pdf(repo_id):
     })
 
 
+# Engines whose findings the report page always lists in full: everything
+# except the two code-quality linters. See detail().
+UNCAPPED_TOOLS = ("yara", "clamav", "guarddog", "dep_checker", "virustotal", "threat_intel")
+
+# A spreadsheet treats a cell starting with one of these as a formula. The
+# findings CSV carries code snippets and file names from untrusted
+# repositories, so without this an attacker's repo could plant a formula
+# that runs when an analyst opens the export ("CSV injection").
+_CSV_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value):
+    if value is None:
+        return ""
+    text = str(value)
+    return "'" + text if text.startswith(_CSV_FORMULA_START) else text
+
+
+@app.route('/detail/<int:repo_id>/findings.csv')
+def findings_csv(repo_id):
+    """Every finding for a repository, uncapped -- the report page lists at
+    most 200 per code-quality engine, and this is where the rest are."""
+    import csv
+    import io
+
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT owner, repo_name FROM repositories WHERE id = %s", (repo_id,))
+        repo = cursor.fetchone()
+        if not repo:
+            return "Repository not found", 404
+        cursor.execute("""
+            SELECT tool, severity, confidence, issue_text, filename, line_number, code_snippet
+            FROM scan_results WHERE repo_id = %s
+            ORDER BY CASE severity
+                WHEN 'high' THEN 3 WHEN 'error' THEN 3 WHEN 'critical' THEN 3
+                WHEN 'medium' THEN 2 WHEN 'warning' THEN 2 ELSE 1 END DESC,
+                confidence DESC, tool ASC, id ASC
+        """, (repo_id,))
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        db.close()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["engine", "severity", "likely_real_confidence", "finding",
+                     "file", "line", "code_snippet"])
+    for r in rows:
+        writer.writerow([
+            _csv_cell(r["tool"]), _csv_cell(r["severity"]),
+            "" if r["confidence"] is None else f'{r["confidence"]:.4f}',
+            _csv_cell(r["issue_text"]), _csv_cell(r["filename"]),
+            r["line_number"] or "", _csv_cell(r["code_snippet"]),
+        ])
+    # GitHub owner/repo names are [A-Za-z0-9._-] only, so safe in a filename.
+    name = f"maldet-{repo['owner']}-{repo['repo_name']}-findings.csv"
+    return Response(
+        "﻿" + buf.getvalue(),   # BOM so Excel reads the file as UTF-8
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+# The report page lists this many indicators; the downloads have them all.
+IOC_DISPLAY_LIMIT = 500
+
+
+def _load_iocs(cursor, repo_id, limit=None):
+    """The indicators from this repository's latest extraction, and how far to
+    trust an empty list. `state` is:
+      none       extraction never ran here: scanned before the feature existed,
+                 or this database has not had the new tables added
+      failed     it ran and did not finish, so nothing can be said
+      partial    it stopped early; the rows are real but may not be all of them
+      done       it finished, and an empty list really does mean nothing found
+    """
+    empty = {"state": "none", "rows": [], "total": 0, "ti_status": "off", "note": None}
+    try:
+        cursor.execute("""
+            SELECT r.* FROM ioc_runs r
+            JOIN scan_history h ON h.id = r.scan_id
+            WHERE h.repo_id = %s
+            ORDER BY r.scan_id DESC LIMIT 1
+        """, (repo_id,))
+        run = cursor.fetchone()
+        if not run:
+            return empty
+        cursor.execute("SELECT COUNT(*) AS n FROM iocs WHERE scan_id = %s", (run["scan_id"],))
+        total = cursor.fetchone()["n"]
+        placeholders = ", ".join(["%s"] * len(IOC_TYPES))
+        cursor.execute(f"""
+            SELECT ioc_type, value, file_path, file_count, first_seen, ti_match, ti_source
+            FROM iocs WHERE scan_id = %s
+            ORDER BY ti_match IS NULL, FIELD(ioc_type, {placeholders}), value
+            {'LIMIT %s' if limit else ''}
+        """, (run["scan_id"], *IOC_TYPES, *((limit,) if limit else ())))
+        rows = cursor.fetchall()
+    except pymysql.MySQLError as e:
+        # 1146: the tables are not there yet. Never let this cost the whole report.
+        print(f"IOC lookup failed for repo {repo_id}: {e}")
+        return empty
+    return {"state": run["status"], "rows": rows, "total": total,
+            "ti_status": run["ti_status"], "note": run["note"]}
+
+
+def _iocs_for_export(repo_id):
+    """(repo, iocs) for a download, with repo None if there is no such repository."""
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT owner, repo_name FROM repositories WHERE id = %s", (repo_id,))
+        repo = cursor.fetchone()
+        return repo, (_load_iocs(cursor, repo_id) if repo else None)
+    finally:
+        cursor.close()
+        db.close()
+
+
+@app.route('/detail/<int:repo_id>/iocs.csv')
+def iocs_csv(repo_id):
+    import csv
+    import io
+
+    repo, iocs = _iocs_for_export(repo_id)
+    if not repo:
+        return "Repository not found", 404
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["type", "value", "file", "file_count", "first_seen",
+                     "threat_intel_match", "threat_intel_source"])
+    for r in iocs["rows"]:
+        writer.writerow([_csv_cell(r["ioc_type"]), _csv_cell(r["value"]), _csv_cell(r["file_path"]),
+                         r["file_count"], r["first_seen"], _csv_cell(r["ti_match"]),
+                         _csv_cell(r["ti_source"])])
+    name = f"maldet-{repo['owner']}-{repo['repo_name']}-iocs.csv"
+    return Response(
+        "\ufeff" + buf.getvalue(),   # BOM so Excel reads the file as UTF-8
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@app.route('/detail/<int:repo_id>/iocs.json')
+def iocs_json(repo_id):
+    repo, iocs = _iocs_for_export(repo_id)
+    if not repo:
+        return "Repository not found", 404
+    body = {
+        "repository":   f"{repo['owner']}/{repo['repo_name']}",
+        # Without this an empty list reads as "clean" whether or not it ran.
+        "status":       iocs["state"],
+        "note":         iocs["note"],
+        "threat_intel": iocs["ti_status"],
+        "iocs": [{
+            "type":                r["ioc_type"],
+            "value":               r["value"],
+            "file":                r["file_path"],
+            "file_count":          r["file_count"],
+            "first_seen":          r["first_seen"].isoformat() if r["first_seen"] else None,
+            "threat_intel_match":  r["ti_match"],
+            "threat_intel_source": r["ti_source"],
+        } for r in iocs["rows"]],
+    }
+    name = f"maldet-{repo['owner']}-{repo['repo_name']}-iocs.json"
+    return Response(
+        json.dumps(body, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 @app.route('/detail/<int:repo_id>')
 def detail(repo_id):
     db     = get_db()
@@ -642,6 +883,12 @@ def detail(repo_id):
         # each tool at FINDINGS_PER_TOOL_LIMIT rather than rendering
         # everything — the template shows a "N more not shown" note.
         FINDINGS_PER_TOOL_LIMIT = 200
+        # Only the code-quality engines are capped. They are where the volume
+        # is (Bandit reaches 33,603 findings in one repo), while the malware
+        # engines never exceed a few hundred -- and a malicious-code finding
+        # is exactly what must never be hidden by a display limit.
+        # Everything, capped or not, is in findings.csv.
+        uncapped = ", ".join(["%s"] * len(UNCAPPED_TOOLS))
         SEVERITY_RANK = """
             CASE severity
                 WHEN 'high' THEN 3 WHEN 'error' THEN 3 WHEN 'critical' THEN 3
@@ -678,9 +925,9 @@ def detail(repo_id):
                 FROM scan_results
                 WHERE repo_id = %s
             ) ranked
-            WHERE rn <= %s
+            WHERE rn <= %s OR tool IN ({uncapped})
             ORDER BY {SEVERITY_RANK} DESC, confidence DESC, tool ASC
-        """, (repo_id, FINDINGS_PER_TOOL_LIMIT))
+        """, (repo_id, FINDINGS_PER_TOOL_LIMIT, *UNCAPPED_TOOLS))
         findings = cursor.fetchall()
 
         # Get scan history for trend chart
@@ -695,6 +942,13 @@ def detail(repo_id):
         # Group findings by tool for display
         tools = {}
         for f in findings:
+            # Which verdict this finding counts towards, for the log's
+            # Vulnerability / Malicious filter. scanner.finding_category()
+            # is the same split the two verdict panels are scored with
+            # (dep_checker CVEs are vulnerabilities, the rest of
+            # dep_checker is malicious-pattern), so the filter and the
+            # verdicts can never disagree about a finding.
+            f['category'] = finding_category(f)
             tool = f['tool']
             if tool not in tools:
                 tools[tool] = []
@@ -755,7 +1009,8 @@ def detail(repo_id):
                 "likely_noise": int(summary_counts["likely_noise"] or 0),
             },
             history_dates  = json.dumps(history_dates),
-            history_scores = json.dumps(history_scores)
+            history_scores = json.dumps(history_scores),
+            iocs           = _load_iocs(cursor, repo_id, IOC_DISPLAY_LIMIT),
         )
 
     finally:
@@ -821,6 +1076,14 @@ def rescan(repo_id):
     own_job_id = _visitor_job_id()
     if own_job_id:
         return _redirect_to_job(own_job_id)
+
+    # Same hard limit as the scan form. A repo that was scannable once may
+    # have grown past it, and Rescan should say so rather than queue a scan
+    # that cannot finish.
+    size_mb = _repo_size_mb(repo_slug)
+    if size_mb is not None and size_mb >= REPO_MAX_MB:
+        return render_template('scan.html', error=_size_refusal(repo_slug, size_mb),
+                               prefill_repo=repo_slug)
 
     job_id = _start_scan_job(repo_slug, "infected")
     return _redirect_to_job(job_id)

@@ -32,7 +32,7 @@ try:
     for r in repos:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT id, tool, severity, issue_text, filename, code_snippet
+                SELECT *  -- line_number + tool_confidence feed the classifier
                 FROM scan_results WHERE repo_id = %s
             """, (r["id"],))
             findings = cur.fetchall()

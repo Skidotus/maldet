@@ -52,7 +52,13 @@ looks like a clean scan — verify it runs rather than assuming.
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
-No test suite or lint config exists in this repo currently.
+Tests cover IOC extraction and two YARA rules so far:
+`python3 -m unittest discover -s tests -t .` (stdlib, needs no database or network;
+`test_ioc_scoring.py` imports `scanner.py`, so `config.py` must exist, and
+`test_yara_rules.py` skips if `yara` is not installed). When changing a rule, test
+both directions: the first fix to `detect_downloader` passed its tests and still
+lost a real `curl.exe` download, found only by comparing hits across real repos.
+There is no lint config.
 
 ## Architecture
 
@@ -91,12 +97,87 @@ by `worker.py` (not inside the web request):
    are often password-protected to dodge automated scanning
 4. Runs detectors in sequence, each returning a list of findings dicts with the
    shape `{tool, severity, issue_text, filename, line_number, code_snippet}`:
-   `run_bandit`, `run_semgrep`, `run_yara` (rules in `rules.yar`), `run_clamav`,
-   `run_guarddog`, `check_dependencies` (from `dep_checker.py`)
+   `run_bandit`, `run_semgrep`, `run_yara`, `run_clamav`,
+   `run_guarddog`, `check_dependencies` (from `dep_checker.py`).
+   `run_yara` runs two rule sets, both reported as tool `yara`: MalDet's own
+   **behaviour** rules in `rules.yar` (decode-then-exec, download-then-exec,
+   persistence — what catches new code) and then `run_yara_forge()`, the
+   **YARA Forge core** fingerprints of known malware and hacking tools in
+   `rules/forge/` (release in `VERSION`, refresh with
+   `update_yara_forge.py`, measurements and licensing in its README). Forge
+   score maps to severity (75+ high), `HKTL_` rules are medium and labelled
+   `[hacking tool]`. The `rules.yar` rules require their two halves to be
+   connected (nested or on adjacent lines), not merely in the same file —
+   the file-wide versions fired in up to 55% of repos. Every `rules.yar`
+   string is `ascii wide`, so rules also match UTF-16 text (PowerShell's
+   habit); the tests check each sample in UTF-16 too, so keep the modifier
+   on any new string. `ioc_extractor._read_text()` (shared by the payload
+   decoder) decodes UTF-16 instead of refusing it as binary. Changing a rule's
+   description changes its `issue_text`, which is the classifier's
+   rule-frequency key, so retrain after editing descriptions.
+   Each rule set has `MALDET_YARA_TIMEOUT` (default 300s). A timeout keeps
+   the matches found so far (yara runs under `stdbuf -oL`; without it the
+   kill discards yara's whole output buffer) and adds a medium "YARA scan
+   incomplete" finding, because a timed-out scan used to save zero YARA
+   findings and look clean — it happened to WebKit and to a malware
+   collection
+4a. `run_decoded_payloads(path, findings)` — what the code *hides*.
+   `payload_decoder.py` peels base64 (also reversed and URL-safe), hex,
+   `\x41` escapes and character-code lists, then zlib/gzip/bz2/xz, up to
+   three layers, and writes each layer that looks like code (a
+   `CODE_MARKERS` hit) or like an executable (magic bytes) to a scratch
+   directory. `run_yara()` and `run_clamav()` scan that directory, and each
+   match is reported against the **original** file and line with
+   `issue_text` prefixed `Hidden payload: ` and the decoding chain plus
+   decoded text as the snippet. `rules.yar`'s decode-then-exec rules see
+   the wrapper; this sees what is inside it. A match already made in plain
+   sight on the same file is dropped, so nothing is counted twice. Capped at
+   `MALDET_DECODE_TIME_LIMIT` (60s) and 500 payloads; hitting either adds a
+   low "decoding incomplete" marker rather than looking complete. Never
+   executes, imports or unpickles anything; reads files with
+   `ioc_extractor`'s symlink-refusing helpers; every decompression is
+   capped at 1MB. ClamAV only runs here when something was decoded, which
+   costs its ~12s signature load
 5. `filter_noise()` — drops low-value Bandit rules and anything under
-   test/docs/example/migration/locale paths; downgrades some high findings to medium
+   test/docs/example/migration/locale paths; downgrades some high findings to medium.
+   Vulnerability findings (Bandit/Semgrep/CVEs) in copied-in code
+   (`is_vendored_path()`: `vendor/`, `node_modules/`, `dist/`, `*.min.js`…)
+   drop one severity step; malware detectors there are never downgraded,
+   since a committed `node_modules` is a place to hide a payload.
+   Then `run_reference_guard()` (`reference_files.py`): YARA/ClamAV
+   matches in files that *describe* threats — YARA/Sigma/Snort rule files,
+   ClamAV signature databases, DNS/adblock blocklists — are marked
+   `f["reference"]`, set to low and prefixed "Reference in a …, not code
+   that runs: ". It needs a data-file extension **and** a rule/list format
+   in the first 256KB, so code (`.py`, `.js`, `.sh`, `.ps1`…) is never
+   excused whatever it contains. Breadth ("matches many unrelated rules",
+   FlatScan's test) was rejected on data: nishang's Powerpreter and the
+   malicious demo package match as many rules as `rules.yar`. Hidden-payload
+   and threat-intel findings are never marked. After scoring,
+   `weigh_references()` sets their `p_real` to 0, so they stay on the
+   report but add nothing to either score, and `ioc_extractor.flagged_paths()`
+   skips them so a blocklist's domains are not published as IOCs
+5a. `score_findings()` — the Random Forest's P(real). Features come from
+   `add_finding_features()`, shared with `train_classifier.py` so training
+   and scan time cannot drift: tool, severity, rule text, rule frequency,
+   snippet length, plus the detector's own confidence
+   (`scan_results.tool_confidence`, Bandit and Semgrep only), whether the
+   file is vendored, and how many different tools flagged the same
+   line/file. The saved model lists its own `feature_cols`; a model without
+   that key uses the original five. Measured 2026-11-03 against
+   `eval_sample.json` over five training splits, the added features did not
+   change accuracy (AUC 0.79 either way), so the shipped model was not
+   replaced — rule-derived training labels limit what any feature can add.
+   `tool_confidence` cannot be judged until rescans populate it.
+   After filtering, `run_ioc_extraction()` (see `ioc_extractor.py` below) adds any
+   threat-intel matches to the findings as `tool="threat_intel"`.
 6. `calculate_risk()` — weights high/medium(capped 30)/low(capped 20) into a score,
-   maps score to `Safe/Low/Medium/High/Critical`
+   maps score to `Safe/Low/Medium/High/Critical`. "Safe" is the stored value
+   only: every page, the printable report, the extension popup and the LLM
+   prompt show it through `scanner.level_label()` as **"Nothing found"**
+   (Jinja: `{{ level | level_label }}`), because a static scan cannot show a
+   repository is safe. CSS classes, thresholds, the DB and the extension API
+   keep `Safe`. A new template that prints a level must use the filter
 7. `save_to_db()` — upserts into `repositories`, replaces `scan_results` and
    `risk_scores` for that repo, appends a `scan_history` row for trend charts
 8. temp clone directory is always removed in a `finally` block
@@ -137,6 +218,22 @@ released shortly after a scan instead of sitting in RAM for Ollama's default
 five minutes — on a memory-tight machine that idle residency is what triggers
 the OOM killer. Tune via `MALDET_OLLAMA_MODEL` / `MALDET_OLLAMA_HOST` /
 `MALDET_OLLAMA_TIMEOUT`, or set `MALDET_OLLAMA_DISABLE=1` to skip it.
+
+**`ioc_extractor.py`** — indicators of compromise from files ClamAV or YARA flagged
+and from install scripts, plus the optional abuse.ch lookups. Only runs after
+`filter_noise()`, so it sees the same flagged files the report lists. Three rules
+hold it together. Install scripts are parsed, never executed, and only their working
+parts are searched, because project metadata would otherwise report every author's
+own website (Flask's `pyproject.toml` alone gives `palletsprojects.com` and
+`discord.gg`). Symlinks and paths outside the clone are refused, because a link named
+`setup.py` pointing at `config.py` would publish its contents on a public page. And
+it can only lose its own results: failures become `status='failed'`, and
+`_save_iocs()` writes behind a savepoint, so a database without the new tables still
+saves the scan. Threat-intel points are derived from the stored tool and the source
+at the start of `issue_text`, in `_threat_intel_points()`, because
+`recompute_scores.py` only has `scan_results` to work from. Do not change the
+wording of that prefix without changing the weighting. `ABUSECH_AUTH_KEY` must never
+reach a log: print exception types there, not messages.
 
 **Adding a new detector**: write a `run_x(path)` function in `scanner.py` returning
 findings in the standard dict shape, call it inside `scan_repo()` and append its
@@ -179,7 +276,9 @@ sample, `--stored` to score what is in the database, `--rescore` to re-judge
 a saved run after fixing a check. Last run: 17 of 19 clean.
 
 **Database**: MySQL, `pymysql` with `DictCursor`. Tables (defined in `schema.sql`):
-`repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`.
+`repositories`, `risk_scores`, `scan_results`, `scan_history`, `scan_jobs`,
+`iocs`, `ioc_runs`. `iocs.scan_id` is `scan_history.id`, the only per-scan record,
+and `iocs.value` is `utf8mb4_bin` because wallets and tokens are case-sensitive.
 `repositories.source_status` and `risk_scores.llm_summary_status` both drive
 UI state — see the frontend contract below.
 Update `schema.sql` whenever the schema changes — it's the source of truth for a
@@ -193,6 +292,21 @@ What each template is given, and the two JSON endpoints the pages poll. Read
 this before changing a template: two pages have state that only makes sense
 with the backend behaviour behind it, and both are easy to break by
 "simplifying" a branch that looks redundant.
+
+**Trust score (all pages).** Every template has `trust_for(row)` (an
+`app.py` context processor over `scanner.trust_score()`), which turns any
+row carrying `vuln_score` / `malware_score` into `{trust, level, vuln,
+malware, limited_by, vuln_floored}`. It is computed at render time, never
+stored, so changing the mapping needs no migration. Each axis maps into its
+risk level's band (Safe 100, Low 99–70, Medium 69–50, High 49–25, Critical
+24–0, interpolated inside the level's thresholds), so the number can never
+contradict the level beside it. The headline is
+`min(malware, max(vuln, VULN_TRUST_FLOOR=40))`: code-quality findings scale
+with codebase size (django is Critical on that axis), so they can lower
+trust only to 40, and only malicious-pattern findings go below. Shown as
+"n / 100", never as a percentage — it is not a probability, and the pages
+say so. The detail page explains which axis is holding it down, including
+when the floor is. Not added to the browser extension.
 
 **`index.html`** — the one-page landing site (welcome, tools, scan form,
 recent scans, about). Given `repos` (10 most recent), `total`, the per-level
@@ -212,7 +326,15 @@ rather than offering a link to a file that is not there.
 
 **`scan.html`** — nothing, or `error` on a bad URL. The form normally lives
 in `index.html#scan`; this page is what the server renders on a rejected
-URL, so the error sits next to a form that can be corrected.
+URL, so the error sits next to a form that can be corrected. Also given
+`large_repo` (`repo`, `size_mb`, `warn_mb`) and `archive_password` when
+GitHub reports the repo at or over `MALDET_REPO_WARN_MB` (default 1000):
+the page warns, the button becomes "Scan anyway", and a hidden
+`confirm_large=1` is the only thing that queues it. At or over
+`MALDET_REPO_MAX_MB` (default 5000) both `/scan` and `/rescan` refuse with
+`error`. A GitHub API failure skips the check rather than blocking scans.
+Calibrated on the corpus: django 277MB and mlflow 1.5GB scan fine,
+MalwareSourceCode 2.2GB ran YARA out of time, WebKit 12.9GB never cloned.
 
 **`scan_status.html`** — `job` and `job_id`. `job` is shaped by
 `app.py:_job_payload()`, not the raw `scan_jobs` row: `status`, `stage`,
@@ -227,7 +349,7 @@ showing an unexplained spinner. The page polls `/api/scan-status/<job_id>`
 every 2s and must keep polling while `status` is `queued` *or* `running`; a
 queued job that is not polled looks frozen forever. Laid out like the report
 page (eyebrow + `owner / name` header, `console-panel`s): a "Now" panel
-with the live stage in large type, "Step n of 13 · m:ss elapsed" and the
+with the live stage in large type, "Step n of 15 · m:ss elapsed" and the
 queue notice, beside the progress track. The eyebrow, step counter and
 queue notice all switch with state (queued / running / failed) without a
 reload. The track's `data-stage` values must match `scanner.py`'s
@@ -239,8 +361,17 @@ reload. The track's `data-stage` values must match `scanner.py`'s
 `history_dates`/`history_scores` (JSON for the chart), plus the two below.
 Laid out as a security console: verdict panels, summary / engine / trend
 row, then a findings log filtered client-side and paged 50 at a time.
-`findings` is capped at 200 per engine, so the log says so when it is
-truncated. It follows the light/dark theme like every other page. It used
+Each finding carries `category` (`scanner.finding_category()`, the same
+split the two verdicts are scored with), which drives the log's All types /
+Vulnerability / Malicious filter; the filter's button groups are selected
+by `[data-cat]` / `[data-sev]`, not bare `.seg__btn`, so they stay
+independent. `findings` caps only Bandit and Semgrep at 200 each (`app.py`
+`UNCAPPED_TOOLS` lists the malware engines, which are always listed in
+full, since a hidden malicious finding is the failure that matters); the
+log names each truncated engine and how many it left out, and links
+`GET /detail/<id>/findings.csv`, every finding uncapped. That export
+escapes cells starting with `= + - @` because snippets come from untrusted
+repositories (CSV injection). Scores always count every finding. It follows the light/dark theme like every other page. It used
 to be dark in both, which left the theme toggle visibly doing nothing
 there; don't reintroduce a page-level palette (`body.console-page` now
 only sets the page's ground and width). Its console colours are the
@@ -270,6 +401,14 @@ Code snippets stay dark in both themes on purpose.
   findings cannot be refreshed and disables Rescan (it could only fail), on
   `renamed` it says these are the superseded original. Without this the page
   presents unverifiable months-old findings as current.
+
+- `iocs` — from `app.py:_load_iocs()`: `state`, `rows` (capped at
+  `IOC_DISPLAY_LIMIT`), `total`, `ti_status`, `note`. **Do not merge the states**:
+  `none` (extraction never ran, or no tables), `failed`, `partial` and `done`. Only
+  `done` with no rows may say "No indicators of compromise found"; the others would
+  be a false clean. Values stay plain escaped text, never links. `GET
+  /detail/<id>/iocs.csv` and `.json` download every row, and the CSV goes through
+  `_csv_cell()` because the values come from untrusted repositories.
 
 **JSON endpoints** (the first two exist because their work outlives a
 request):

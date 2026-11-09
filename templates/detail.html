@@ -9,7 +9,7 @@
    --------------------------------------------------------------- #}
 {% set level_steps = ["Safe", "Low", "Medium", "High", "Critical"] %}
 {% set level_meaning = {
-  "Safe":     "No issues of this kind were found.",
+  "Safe":     "No engine flagged anything of this kind. That is not proof the code is safe: a static scan only finds what its rules recognise.",
   "Low":      "Minor issues. Worth a glance, unlikely to be urgent.",
   "Medium":   "Real issues worth reviewing before you rely on this code.",
   "High":     "Serious issues. Review the high-severity findings before using it.",
@@ -23,11 +23,12 @@
   "guarddog":    ("GuardDog",           "Malicious pattern", "Supply-chain attack heuristics"),
   "virustotal":  ("VirusTotal",         "Malicious pattern", "Multi-engine file reputation"),
   "dep_checker": ("Dependency checker", "Supply chain",      "CVEs, typosquats and risky installs"),
+  "threat_intel": ("Threat intelligence", "Malicious pattern", "Files and URLs already listed by abuse.ch"),
 } %}
 {% macro engine_name(tool) -%}{{ engines[tool][0] if tool in engines else tool }}{%- endmacro %}
 
 {% macro level_scale(level) -%}
-  <span class="level-scale" role="img" aria-label="Level {{ level }} on a scale from Safe to Critical">
+  <span class="level-scale" role="img" aria-label="Level {{ level | level_label }} on a scale from {{ 'Safe' | level_label }} to Critical">
     {%- for step in level_steps %}
       <span class="level-scale__step level-scale__step--{{ step | lower }}{{ ' is-on' if step == level else '' }}"></span>
     {%- endfor %}
@@ -41,7 +42,7 @@
   <section class="console-panel verdict" data-resolve aria-label="{{ title }} verdict">
     <header class="console-panel__head">
       <span class="console-panel__title">{{ title }}</span>
-      <span class="seal-badge seal-{{ level | lower }}">{{ level }}</span>
+      <span class="seal-badge seal-{{ level | lower }}">{{ level | level_label }}</span>
     </header>
     <p class="verdict__question">{{ question }}</p>
     <div class="verdict__score">
@@ -135,13 +136,64 @@
      something malicious" (the author's intent). Different threat
      models, so scored and shown separately.
      --------------------------------------------------------- #}
+  {# ---------------------------------------------------------
+     Trust score: one number out of 100 for people who want one, derived
+     from the two verdicts below by scanner.trust_score(). Shown as a score,
+     never as a percentage or a probability -- MalDet has no calibrated
+     model that could back "73% likely malicious". The sentence underneath
+     says which axis is holding it down, including when the vulnerability
+     floor is doing so, so the number is never unexplained.
+     --------------------------------------------------------- #}
+  {% set t = trust_for(risk) %}
+  {% if t %}
+  <section class="console-panel trust-panel" data-resolve aria-label="Trust score">
+    <div class="trust-panel__score">
+      <span class="console-panel__title">Trust score</span>
+      <div class="verdict__score">
+        <span class="verdict__number trust-panel__number score-{{ t.level | lower }}"
+              data-score="{{ t.trust }}">{{ t.trust }}</span>
+        <span class="verdict__unit">/ 100</span>
+      </div>
+    </div>
+    <div class="trust-panel__body">
+      <div class="trust-meter" role="img"
+           aria-label="Trust {{ t.trust }} out of 100, in the {{ t.level | level_label }} risk band">
+        <span class="trust-meter__fill trust-meter__fill--{{ t.level | lower }}" style="width: {{ t.trust }}%"></span>
+        {% for edge in [25, 50, 70] %}<span class="trust-meter__tick" style="left: {{ edge }}%"></span>{% endfor %}
+      </div>
+      <p class="trust-panel__why">
+        {% if t.limited_by is none %}
+          No engine found anything of note. That is not proof the code is safe, only that nothing matched.
+        {% elif t.limited_by == "malicious_pattern" %}
+          Held down by <strong>malicious-pattern</strong> findings: signs the code may be trying to cause harm.
+        {% elif t.vuln_floored %}
+          Vulnerability findings alone would put this at {{ t.vuln }}. Code-quality problems can lower trust
+          only to {{ vuln_trust_floor }}; going below that takes signs of malicious intent.
+        {% else %}
+          Held down by <strong>vulnerability</strong> findings: weaknesses an attacker could exploit.
+        {% endif %}
+      </p>
+      <p class="trust-panel__axes">
+        Vulnerability <span class="score-{{ risk.vuln_level | lower }}">{{ t.vuln }}/100</span>
+        <span aria-hidden="true">·</span>
+        Malicious pattern <span class="score-{{ risk.malware_level | lower }}">{{ t.malware }}/100</span>
+      </p>
+    </div>
+    <p class="console-panel__foot trust-panel__foot">
+      A score out of 100, not a probability. 100 means nothing of note was found; the bands
+      match the risk levels (Low 70&ndash;99, Medium 50&ndash;69, High 25&ndash;49, Critical below 25).
+    </p>
+  </section>
+  {% endif %}
+
   <div class="console-grid console-grid--verdicts">
     {{ verdict_panel("Vulnerability", "Could an attacker exploit mistakes in this code?",
                      risk.vuln_level, risk.vuln_score, risk.vuln_high, risk.vuln_medium, risk.vuln_low,
                      "Bandit, Semgrep, pip-audit") }}
     {{ verdict_panel("Malicious pattern", "Does this code look like it is trying to cause harm?",
                      risk.malware_level, risk.malware_score, risk.malware_high, risk.malware_medium, risk.malware_low,
-                     "YARA, ClamAV, GuardDog, dependency checker") }}
+                     "YARA, ClamAV, GuardDog, dependency checker"
+                     ~ (", threat intelligence" if tool_totals.get("threat_intel") else "")) }}
 
     {% set fc = finding_counts %}
     {% set uncertain = fc.total - fc.likely_real - fc.likely_noise %}
@@ -255,13 +307,92 @@
   </div>
 
   {# ---------------------------------------------------------
+     Indicators of compromise. Values come from untrusted repositories, so
+     they stay plain escaped text: never a link anyone could open by accident.
+     An empty list only says "none found" when extraction finished (see
+     app.py _load_iocs), because anything else would be a false clean.
+     --------------------------------------------------------- #}
+  {% set ioc_labels = {
+    "sha256": "SHA-256", "discord_webhook": "Discord webhook", "telegram_bot_token": "Telegram token",
+    "btc_wallet": "BTC wallet", "eth_wallet": "ETH wallet", "url": "URL", "ipv4": "IPv4", "domain": "Domain",
+  } %}
+  <section class="console-panel console-panel--iocs" id="iocs" aria-labelledby="iocsTitle">
+    <header class="iocs-head">
+      <div>
+        <h2 class="console-panel__title" id="iocsTitle">Indicators of compromise</h2>
+        <p class="events-head__hint">From files ClamAV or YARA flagged, and from install scripts.</p>
+      </div>
+      {% if iocs.state != 'none' %}
+        <div class="iocs-head__actions">
+          <a href="{{ url_for('iocs_csv', repo_id=repo.id) }}" class="btn btn-outline-parchment btn-pill btn-sm">
+            <i class="bi bi-download me-1" aria-hidden="true"></i>Download IOCs (CSV)</a>
+          <a href="{{ url_for('iocs_json', repo_id=repo.id) }}" class="btn btn-outline-parchment btn-pill btn-sm">
+            <i class="bi bi-download me-1" aria-hidden="true"></i>Download IOCs (JSON)</a>
+        </div>
+      {% endif %}
+    </header>
+
+    {% if iocs.state == 'partial' %}
+      <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>Incomplete: extraction {{ iocs.note or 'stopped early' }}, so this list may not be everything.</span></p>
+    {% endif %}
+    {% if iocs.total > iocs.rows|length %}
+      <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>Showing {{ "{:,}".format(iocs.rows|length) }} of {{ "{:,}".format(iocs.total) }}. The downloads include all of them.</span></p>
+    {% endif %}
+
+    {% if iocs.rows %}
+      <div class="table-responsive">
+        <table class="table table-ledger table-stack align-middle mb-0 ioc-table">
+          <thead>
+            <tr><th scope="col">Type</th><th scope="col">Value</th><th scope="col">File</th><th scope="col">Threat intel</th></tr>
+          </thead>
+          <tbody>
+            {% for i in iocs.rows %}
+              <tr>
+                <td data-label="Type" class="ioc-type">{{ ioc_labels.get(i.ioc_type, i.ioc_type) }}</td>
+                <td data-label="Value" class="td-full"><span class="ioc-value">{{ i.value }}</span></td>
+                <td data-label="File" class="td-full"><span class="ioc-file">{{ i.file_path }}</span>
+                  {%- if i.file_count > 1 %} <span class="ioc-more">+{{ i.file_count - 1 }} more</span>{% endif %}</td>
+                <td data-label="Threat intel">
+                  {%- if i.ti_match %}
+                    <span class="ioc-hit"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                      {{ i.ti_source }}: {{ i.ti_match }}</span>
+                  {%- elif i.ioc_type not in ('sha256', 'url') %}<span class="ioc-muted">Not applicable</span>
+                  {%- elif iocs.ti_status == 'done' %}<span class="ioc-muted">No match</span>
+                  {%- else %}<span class="ioc-muted">Not checked</span>
+                  {%- endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="iocs-foot">Shown as plain text on purpose. These may be live malicious addresses, so do not open them.</p>
+    {% elif iocs.state == 'done' %}
+      <div class="empty-state empty-state--compact">
+        <i class="bi bi-shield-check empty-state__icon" aria-hidden="true"></i>
+        <h3 class="h5">No indicators of compromise found</h3>
+      </div>
+    {% elif iocs.state == 'partial' %}
+      <p class="console-empty">No indicators in the files read before extraction stopped.</p>
+    {% elif iocs.state == 'failed' %}
+      <p class="console-empty">Indicator extraction failed on this scan, so nothing can be said either way. Rescan to try again.</p>
+    {% else %}
+      <p class="console-empty">Indicators were not extracted for this scan. Rescan to extract them.</p>
+    {% endif %}
+  </section>
+
+  {# ---------------------------------------------------------
      Event log
      --------------------------------------------------------- #}
   <section class="console-panel console-panel--events" aria-labelledby="eventsTitle">
     <header class="events-head">
       <div>
         <h2 class="console-panel__title" id="eventsTitle">Findings</h2>
-        <p class="events-head__hint">Highest severity first. Select a finding to see the code and what it means.</p>
+        <p class="events-head__hint">Highest severity first. Select a finding to see the code and what it means.
+          <a href="{{ url_for('findings_csv', repo_id=repo.id) }}" class="events-head__csv">
+            <i class="bi bi-download" aria-hidden="true"></i>Download all (CSV)</a></p>
       </div>
       <p class="events-count" id="eventCount" aria-live="polite"></p>
     </header>
@@ -270,9 +401,17 @@
       {% set capped = [] %}
       {% for tool, items in tools.items() %}{% if tool_totals[tool] > items|length %}{% set _ = capped.append(tool) %}{% endif %}{% endfor %}
       {% if capped %}
+        {# Only Bandit and Semgrep are ever capped (app.py UNCAPPED_TOOLS):
+           every malware-engine finding is always listed. Say exactly what
+           was cut, per engine, and where the rest are. #}
         <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
-          Large result: showing the top {{ findings|length }} of {{ "{:,}".format(finding_counts.total) }} findings
-          (up to 200 per engine, most severe and most likely real first). Totals above include everything.</p>
+          <span>Large result: showing {{ "{:,}".format(findings|length) }} of {{ "{:,}".format(finding_counts.total) }} findings.
+          {% for tool in capped -%}
+            {{ engine_name(tool) }}: {{ "{:,}".format(tool_totals[tool] - tools[tool]|length) }} more not shown
+            (only its top 200 are listed, most severe and most likely real first){{ "; " if not loop.last else "." }}
+          {%- endfor %}
+          Malware engines are always listed in full, and every score counts everything.
+          <a href="{{ url_for('findings_csv', repo_id=repo.id) }}">Download all findings (CSV)</a></span></p>
       {% endif %}
 
       <div class="events-toolbar" role="search" aria-label="Filter findings">
@@ -281,6 +420,20 @@
           <span class="visually-hidden">Search findings</span>
           <input type="search" id="eventSearch" placeholder="Search description or file…" autocomplete="off">
         </label>
+
+        {# Which verdict a finding counts towards -- the same split as the two
+           verdict panels above (scanner.finding_category()). #}
+        <div class="seg" role="group" aria-label="Finding type">
+          {% set n_vuln = findings | selectattr('category', 'equalto', 'vulnerability') | list | length %}
+          {% set n_mal = findings | selectattr('category', 'equalto', 'malicious_pattern') | list | length %}
+          <button type="button" class="seg__btn is-on" data-cat="all" aria-pressed="true">All types</button>
+          <button type="button" class="seg__btn" data-cat="vulnerability" aria-pressed="false"{% if n_vuln == 0 %} disabled{% endif %}
+                  title="Bandit, Semgrep and dependency CVEs: weaknesses an attacker could exploit">
+            <i class="bi bi-bug" aria-hidden="true"></i>Vulnerability <span>{{ n_vuln }}</span></button>
+          <button type="button" class="seg__btn" data-cat="malicious_pattern" aria-pressed="false"{% if n_mal == 0 %} disabled{% endif %}
+                  title="YARA, ClamAV, GuardDog and supply-chain checks: signs the code may be trying to cause harm">
+            <i class="bi bi-shield-exclamation" aria-hidden="true"></i>Malicious <span>{{ n_mal }}</span></button>
+        </div>
 
         <div class="seg" role="group" aria-label="Severity">
           {% set sev_all = findings | length %}
@@ -316,10 +469,15 @@
         {% for f in findings %}
           {% set sev = (f.severity or 'low') | lower %}
           {% set noise = f.confidence is not none and f.confidence < 0.3 %}
-          <li class="event{{ ' event--noise' if noise else '' }}" data-sev="{{ sev }}" data-tool="{{ f.tool }}"
+          <li class="event{{ ' event--noise' if noise else '' }}" data-sev="{{ sev }}" data-tool="{{ f.tool }}" data-cat="{{ f.category }}"
               data-noise="{{ 1 if noise else 0 }}">
             <button type="button" class="event__row" aria-expanded="false" aria-controls="ev-{{ loop.index }}">
-              <span class="event__sev"><span class="seal-badge seal-{{ sev }}">{{ sev }}</span></span>
+              {# Severity is "how bad if real"; confidence is "how likely real".
+                 The badge keeps its colour on noise rows (a user call: a badge
+                 that fades reads as the severity changing); the tooltip and
+                 the Severity line in the details explain the two together. #}
+              <span class="event__sev"><span class="seal-badge seal-{{ sev }}"
+                {% if noise %}title="{{ sev | capitalize }} if real; rated likely noise"{% endif %}>{{ sev }}</span></span>
               <span class="event__tool">{{ engine_name(f.tool) }}</span>
               <span class="event__text">{{ f.issue_text }}</span>
               <span class="event__loc">{% if f.filename %}{{ f.filename }}{% if f.line_number %}:{{ f.line_number }}{% endif %}{% else %}&mdash;{% endif %}</span>
@@ -335,6 +493,9 @@
             <div class="event__detail" id="ev-{{ loop.index }}" hidden>
               <dl class="event__facts">
                 <div><dt>Engine</dt><dd>{{ engine_name(f.tool) }}{% if f.tool in engines %} <span class="text-muted">&middot; {{ engines[f.tool][2] }}</span>{% endif %}</dd></div>
+                <div><dt>Severity</dt><dd>
+                  {{ sev | capitalize }}{% if noise %} if real. Rated likely noise, so it counts for little in the risk score{% endif %}
+                </dd></div>
                 <div><dt>Counts towards</dt><dd>{{ engines[f.tool][1] if f.tool in engines else '—' }}</dd></div>
                 <div><dt>File</dt><dd class="mono">{{ f.filename or '—' }}{% if f.line_number %} <span class="text-muted">line {{ f.line_number }}</span>{% endif %}</dd></div>
                 <div><dt>Likely real</dt><dd>
@@ -380,7 +541,9 @@
     var search  = document.getElementById('eventSearch');
     var toolSel = document.getElementById('eventTool');
     var noise   = document.getElementById('eventNoise');
-    var segs    = Array.prototype.slice.call(document.querySelectorAll('.seg__btn'));
+    var segs    = Array.prototype.slice.call(document.querySelectorAll('.seg__btn[data-sev]'));
+    var cats    = Array.prototype.slice.call(document.querySelectorAll('.seg__btn[data-cat]'));
+    var cat = 'all';
     var countEl = document.getElementById('eventCount');
     var noneEl  = document.getElementById('eventNone');
     var moreBtn = document.getElementById('eventMore');
@@ -394,6 +557,7 @@
       var matched = 0;
       items.forEach(function (li) {
         var ok = (sev === 'all' || li.dataset.sev === sev) &&
+                 (cat === 'all' || li.dataset.cat === cat) &&
                  (tool === 'all' || li.dataset.tool === tool) &&
                  !(hideNoise && li.dataset.noise === '1') &&
                  (!q || li._text.indexOf(q) !== -1);
@@ -421,9 +585,17 @@
         refilter();
       });
     });
+    cats.forEach(function (b) {
+      b.addEventListener('click', function () {
+        cat = b.dataset.cat;
+        cats.forEach(function (o) { var on = o === b; o.classList.toggle('is-on', on); o.setAttribute('aria-pressed', String(on)); });
+        refilter();
+      });
+    });
     moreBtn.addEventListener('click', function () { limit += PAGE; apply(); });
     document.getElementById('eventReset').addEventListener('click', function () {
       search.value = ''; toolSel.value = 'all'; noise.setAttribute('aria-pressed', 'false');
+      cats[0].click();
       segs[0].click();
     });
 

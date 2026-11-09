@@ -143,7 +143,7 @@
 {% if risk %}
 <div class="verdict keep">
   <div class="label">Overall assessment</div>
-  <div class="level lvl-{{ (risk.risk_level or 'safe')|lower }}">{{ risk.risk_level or 'Unknown' }}</div>
+  <div class="level lvl-{{ (risk.risk_level or 'safe')|lower }}">{{ (risk.risk_level | level_label) if risk.risk_level else 'Unknown' }}</div>
   <div class="score">Combined score {{ risk.final_score|round|int if risk.final_score is not none else '—' }}
     &nbsp;·&nbsp; {{ "{:,}".format(total) }} findings after filtering</div>
 </div>
@@ -165,6 +165,25 @@
   {% endif %}
 </section>
 
+{% set t = trust_for(risk) %}
+{% if t %}
+<section class="keep">
+  <h2>Trust score</h2>
+  <div class="axis">
+    <div class="val lvl-{{ t.level|lower }}">{{ t.trust }} <span style="font-size:9.5pt;color:var(--muted)">/ 100</span></div>
+    <div class="what">
+      {% if t.limited_by is none %}No engine found anything of note.
+      {% elif t.limited_by == "malicious_pattern" %}Held down by malicious-pattern findings.
+      {% elif t.vuln_floored %}Vulnerability findings alone would give {{ t.vuln }}; code-quality
+        problems can lower trust only to {{ vuln_trust_floor }}, and going below that takes signs of malicious intent.
+      {% else %}Held down by vulnerability findings.{% endif %}
+      Vulnerability {{ t.vuln }}/100, malicious pattern {{ t.malware }}/100.
+      A score out of 100 derived from the two risk levels below, not a probability.
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {% if risk %}
 <section>
   <h2>Risk, by type</h2>
@@ -175,7 +194,7 @@
     <div class="axis">
       <div class="name">Vulnerability</div>
       <div class="val lvl-{{ (risk.vuln_level or 'safe')|lower }}">
-        {{ risk.vuln_level or '—' }}
+        {{ (risk.vuln_level | level_label) if risk.vuln_level else '—' }}
         <span style="font-size:9.5pt;color:var(--muted)">
           ({{ risk.vuln_score|round|int if risk.vuln_score is not none else '—' }})</span>
       </div>
@@ -185,7 +204,7 @@
     <div class="axis">
       <div class="name">Malicious pattern</div>
       <div class="val lvl-{{ (risk.malware_level or 'safe')|lower }}">
-        {{ risk.malware_level or '—' }}
+        {{ (risk.malware_level | level_label) if risk.malware_level else '—' }}
         <span style="font-size:9.5pt;color:var(--muted)">
           ({{ risk.malware_score|round|int if risk.malware_score is not none else '—' }})</span>
       </div>

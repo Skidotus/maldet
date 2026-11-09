@@ -9,7 +9,10 @@ import pymysql
 from config import GITHUB_TOKEN, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
 from dep_checker import check_dependencies
+import ioc_extractor
 import llm_summary
+import payload_decoder
+import reference_files
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
 # Not a hardcoded "/tmp/..." literal: gettempdir() honours TMPDIR, which is
@@ -168,7 +171,10 @@ def run_bandit(path):
                 "issue_text":   issue["issue_text"],
                 "filename":     issue["filename"].replace(path, ""),
                 "line_number":  issue.get("line_number", 0),
-                "code_snippet": issue.get("code", "").strip()
+                "code_snippet": issue.get("code", "").strip(),
+                # Bandit's own estimate of how likely the match is a real
+                # problem rather than a pattern coincidence.
+                "tool_confidence": normalize_tool_confidence(issue.get("issue_confidence")),
             })
     except json.JSONDecodeError:
         print("    Bandit: no Python files found")
@@ -189,6 +195,22 @@ def normalize_severity(severity):
         return "low"
     else:
         return "low"
+
+
+def normalize_tool_confidence(value):
+    """Bandit and Semgrep both rate their own matches LOW/MEDIUM/HIGH.
+    Anything else -- missing, or a tool that has no such rating -- is None,
+    which the classifier sees as "unknown".
+
+    Anything that is not a string counts as missing. In a DataFrame mixing
+    Bandit/Semgrep findings (which have a confidence) with YARA or
+    dep_checker ones (which do not), pandas stores the gaps as NaN -- a
+    float, which is truthy, so `(value or "").strip()` crashed every real
+    scan at the scoring step."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lower()
+    return value if value in ("low", "medium", "high") else None
 
 # dep_checker's issue_text always embeds the specific package/version/CVE id
 # (e.g. "Loose version constraint: 'requests>=2.0'"), so no two are ever
@@ -295,6 +317,40 @@ def is_ignored_path(filename):
             or bool(IGNORE_FILENAME_RE.match(basename)))
 
 
+# Directories that hold code the repository's author copied in rather than
+# wrote: vendored libraries, installed packages, and build output. Same
+# whole-segment matching as IGNORE_PATH_SEGMENTS, for the same reason.
+VENDOR_PATH_SEGMENTS = frozenset({
+    "vendor", "vendors", "third_party", "thirdparty", "third-party",
+    "node_modules", "bower_components", "site-packages",
+    "dist", "build",
+})
+
+# Minified or bundled files: machine-generated, one enormous line, and
+# almost always a copy of somebody else's library.
+VENDOR_FILENAME_RE = re.compile(
+    r"[.-]min\.(?:js|css|mjs)$|\.bundle\.(?:js|mjs)$", re.IGNORECASE
+)
+
+
+def is_vendored_path(filename):
+    """True if this finding sits in code the repo copied in, not code its
+    author wrote. Unlike is_ignored_path() this never drops a finding: a
+    committed node_modules is a classic place to hide a payload, so
+    filter_noise() only lowers the severity of *vulnerability* findings here
+    and leaves the malware detectors alone. Shared with train_classifier.py
+    as a feature, so scan-time and training-time cannot disagree."""
+    parts = [p for p in (filename or "").lower().replace("\\", "/").split("/") if p]
+    if not parts:
+        return False
+    if any(p in VENDOR_PATH_SEGMENTS for p in parts[:-1]):
+        return True
+    return bool(VENDOR_FILENAME_RE.search(parts[-1]))
+
+
+SEVERITY_ONE_STEP_DOWN = {"high": "medium", "medium": "low", "low": "low"}
+
+
 def filter_noise(findings):
     filtered = []
 
@@ -314,6 +370,13 @@ def filter_noise(findings):
         # Downgrade chmod from high to medium
         if "Chmod" in f["issue_text"] or "chmod" in f["issue_text"]:
             f["severity"] = "medium"
+
+        # Copied-in library code: a coding flaw there is the library's, not
+        # this author's, so vulnerability findings drop one step. Malware
+        # findings keep their severity -- see is_vendored_path().
+        if is_vendored_path(f["filename"]) and finding_category(f) == "vulnerability":
+            sev = normalize_severity(f.get("severity") or "low")
+            f["severity"] = SEVERITY_ONE_STEP_DOWN[sev]
 
         # YARA severities used to be hardcoded in run_yara() and manually
         # downgraded here for the noisy ones (detect_downloader,
@@ -363,7 +426,11 @@ def run_semgrep(path):
                 "issue_text":   issue.get("extra", {}).get("message", ""),
                 "filename":     issue.get("path", "").replace(path, ""),
                 "line_number":  issue.get("start", {}).get("line", 0),
-                "code_snippet": issue.get("extra", {}).get("lines", "").strip()
+                "code_snippet": issue.get("extra", {}).get("lines", "").strip(),
+                # Registry rules carry the rule author's confidence in their
+                # metadata; many older rules omit it (stored as NULL).
+                "tool_confidence": normalize_tool_confidence(
+                    issue.get("extra", {}).get("metadata", {}).get("confidence")),
             })
     except json.JSONDecodeError:
         print("    Semgrep: no output")
@@ -378,6 +445,56 @@ def run_semgrep(path):
 
 YARA_MATCH_LINE = re.compile(r"^(\S+)\s+\[(.*?)\]\s+(.+)$")
 
+# Per rule set. The previous 120s/180s limits were exceeded by the two
+# largest repos in the corpus (WebKit; vxunderground/MalwareSourceCode, a
+# malware collection), and a timeout used to discard everything YARA had
+# already printed -- the repo then showed no YARA findings at all, which
+# reads exactly like a clean result.
+YARA_TIMEOUT = int(os.environ.get("MALDET_YARA_TIMEOUT", "300"))
+
+
+def _run_yara_capture(cmd, timeout=None):
+    """Run yara and return (stdout, timed_out). On a timeout the matches
+    printed before the kill are kept rather than thrown away; a final line
+    cut off mid-write is dropped, since it may name a truncated path.
+
+    stdbuf -oL makes yara write each match as it finds it. Without it, yara
+    block-buffers stdout into the pipe and a kill loses the whole buffer --
+    measured: 0 of the matches already found survived a timeout without
+    stdbuf, versus all of them with it."""
+    if shutil.which("stdbuf"):
+        cmd = ["stdbuf", "-oL"] + cmd
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=timeout or YARA_TIMEOUT)
+        if result.returncode != 0 and result.stderr.strip():
+            print(f"    YARA stderr: {result.stderr.strip()[:200]}")
+        return result.stdout, False
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout or ""
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", errors="replace")
+        if out and not out.endswith("\n"):
+            out = out[:out.rfind("\n") + 1]
+        return out, True
+
+
+def yara_incomplete_finding(rule_set, seconds):
+    """A visible marker for a YARA run that hit its time limit, so a partial
+    scan can never pass for a clean one."""
+    return {
+        "tool":         "yara",
+        "severity":     "medium",
+        "issue_text":   (f"YARA scan incomplete: the {rule_set} rules stopped after the "
+                         f"{seconds}s time limit on this repository, so YARA results are "
+                         f"partial. Matches found before the limit are listed; the rest "
+                         f"of the repository was not checked by these rules."),
+        "filename":     "",
+        "line_number":  0,
+        "code_snippet": "",
+    }
+
+
 def run_yara(path):
     print("  Running YARA...")
     rules_file = os.path.join(os.path.dirname(__file__), "rules.yar")
@@ -389,11 +506,11 @@ def run_yara(path):
         # -m prints each rule's meta (severity, description) alongside the
         # match, so severity lives in rules.yar itself — adding a rule
         # there doesn't need a code change here.
-        result = subprocess.run(
-            ["yara", "-m", "-r", rules_file, path],
-            capture_output=True, text=True, timeout=120
-        )
-        for line in result.stdout.strip().split("\n"):
+        stdout, timed_out = _run_yara_capture(["yara", "-m", "-r", rules_file, path])
+        if timed_out:
+            print(f"    YARA: timed out after {YARA_TIMEOUT}s, keeping partial results")
+            findings.append(yara_incomplete_finding("MalDet behaviour", YARA_TIMEOUT))
+        for line in stdout.strip().split("\n"):
             if not line:
                 continue
             match = YARA_MATCH_LINE.match(line)
@@ -413,6 +530,92 @@ def run_yara(path):
     except Exception as e:
         print(f"    YARA error: {e}")
     print(f"    YARA found {len(findings)} matches")
+
+    forge = run_yara_forge(path)
+    return findings + forge
+
+
+# YARA Forge (https://github.com/YARAHQ/yara-forge): ~5,000 curated public
+# rules that fingerprint KNOWN malware families and hacking tools, alongside
+# rules.yar's behaviour rules (which are what catch new code). Measured
+# 2026-11-03 over 174 scanned repos: hits in 15, every one a malware sample
+# collection or offensive tool, none in ordinary code; 97 files flagged that
+# ClamAV and rules.yar both missed. Refreshed by update_yara_forge.py; see
+# rules/forge/README.md for version and licensing (per-rule, attribution
+# required).
+FORGE_RULES_PATH = os.path.join(os.path.dirname(__file__), "rules", "forge", "yara-rules-core.yar")
+_forge_meta = None
+
+# Forge carries a 0-100 `score` instead of rules.yar's severity. Core only
+# contains rules scoring 65+, and 75 is by far the most common.
+FORGE_HIGH_SCORE = 75
+
+
+def _load_forge_meta():
+    """rule name -> {score, description}, parsed once from the rules file.
+    Read from the file rather than via `yara -m` because Forge descriptions
+    contain brackets and quotes that the one-line -m output cannot be split
+    on reliably."""
+    global _forge_meta
+    if _forge_meta is None:
+        _forge_meta = {}
+        with open(FORGE_RULES_PATH, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        for m in re.finditer(r"^rule\s+(\w+)[^{]*\{\s*meta:(.*?)\n\s*(?:strings|condition)\s*:",
+                             text, re.S | re.M):
+            body = m.group(2)
+            score = re.search(r"\bscore\s*=\s*(\d+)", body)
+            desc = re.search(r'\bdescription\s*=\s*"((?:[^"\\]|\\.)*)"', body)
+            _forge_meta[m.group(1)] = {
+                "score": int(score.group(1)) if score else FORGE_HIGH_SCORE,
+                "description": desc.group(1).replace('\\"', '"') if desc else "",
+            }
+    return _forge_meta
+
+
+def forge_severity(rule_name, score):
+    """Hacking tools (HKTL_ in the rule name, the signature-base convention)
+    are medium whatever their score: red-team frameworks and pentest
+    references legitimately contain them, and that is a different claim
+    from "this repository is malware"."""
+    if "HKTL_" in rule_name:
+        return "medium"
+    return "high" if score >= FORGE_HIGH_SCORE else "medium"
+
+
+def run_yara_forge(path):
+    print("  Running YARA Forge rules...")
+    findings = []
+    if not os.path.exists(FORGE_RULES_PATH):
+        print("    YARA Forge: rules/forge/yara-rules-core.yar not found, skipping")
+        return findings
+    try:
+        meta = _load_forge_meta()
+        # -w: Forge rules trip YARA's performance warnings by the hundred,
+        # which would bury any real error on stderr.
+        stdout, timed_out = _run_yara_capture(["yara", "-w", "-r", FORGE_RULES_PATH, path])
+        if timed_out:
+            print(f"    YARA Forge: timed out after {YARA_TIMEOUT}s, keeping partial results")
+            findings.append(yara_incomplete_finding("YARA Forge", YARA_TIMEOUT))
+        for line in stdout.splitlines():
+            rule_name, _, filename = line.partition(" ")
+            if not filename:
+                continue
+            m = meta.get(rule_name, {"score": FORGE_HIGH_SCORE, "description": ""})
+            label = " [hacking tool]" if "HKTL_" in rule_name else ""
+            findings.append({
+                "tool":         "yara",
+                "severity":     forge_severity(rule_name, m["score"]),
+                # Stable per rule (no file name or score in it), because
+                # the FP classifier keys its rule-frequency lookup on this.
+                "issue_text":   f"YARA Forge rule matched: {rule_name}{label} — {m['description']}",
+                "filename":     filename.replace(path, ""),
+                "line_number":  0,
+                "code_snippet": "",
+            })
+    except Exception as e:
+        print(f"    YARA Forge error: {e}")
+    print(f"    YARA Forge found {len(findings)} matches")
     return findings
 
 #ClamAV
@@ -579,6 +782,8 @@ def run_guarddog(path):
 
 #False-positive classifier (train_classifier.py)
 
+THREAT_INTEL_TOOL = ioc_extractor.THREAT_INTEL_TOOL
+
 MODEL_ARTIFACT_PATH = os.path.join(os.path.dirname(__file__), "model", "risk_classifier.pkl")
 _model_artifact = None
 
@@ -593,46 +798,140 @@ def _load_model_artifact():
     return _model_artifact or None
 
 
+# The columns the classifier is trained on, in order. Models saved before
+# tool_confidence / is_vendored / tool agreement existed have no
+# "feature_cols" entry and fall back to LEGACY_FEATURE_COLUMNS, so an old
+# risk_classifier.pkl keeps scoring correctly until it is retrained.
+LEGACY_FEATURE_COLUMNS = ["tool", "severity_norm", "repo_frequency",
+                          "snippet_length", "issue_text"]
+FEATURE_COLUMNS = LEGACY_FEATURE_COLUMNS + [
+    "tool_confidence", "is_vendored", "tools_on_line", "tools_on_file",
+]
+
+
+def add_finding_features(df):
+    """Adds every per-finding classifier feature except repo_frequency (which
+    needs the whole corpus, or the saved lookup) to a DataFrame of findings.
+    The one definition used by both train_classifier.py and score_findings(),
+    so training and live scoring cannot compute a feature differently.
+
+    tools_on_line / tools_on_file count how many *different* detectors
+    flagged the same line / file in the same repo. Two independent tools
+    agreeing is far more likely to be a real problem than one rule firing
+    alone. Findings with no line number (YARA, ClamAV, manifest checks) count
+    as 1 on the line, and are judged by the file-level count instead.
+    Without a repo_id column (a live scan, which is one repo) all rows are
+    treated as the same repo."""
+    import pandas as pd
+
+    for col, default in (("repo_id", 0), ("filename", ""), ("code_snippet", ""),
+                         ("line_number", 0), ("tool_confidence", None)):
+        if col not in df:
+            df[col] = default
+
+    df["tool"]         = df["tool"].fillna("")
+    df["issue_text"]   = df["issue_text"].fillna("")
+    df["filename"]     = df["filename"].fillna("")
+    df["code_snippet"] = df["code_snippet"].fillna("")
+    df["severity_norm"]  = df["severity"].fillna("low").apply(normalize_severity)
+    df["snippet_length"] = df["code_snippet"].str.len()
+    df["tool_confidence"] = (df["tool_confidence"]
+                             .apply(normalize_tool_confidence).fillna("unknown"))
+    df["is_vendored"] = df["filename"].apply(is_vendored_path).astype(int)
+
+    # Tools disagree on a leading slash ("/requirements.txt" vs
+    # "requirements.txt"), which would stop them ever matching.
+    k = pd.DataFrame({
+        "_repo": df["repo_id"],
+        "_file": df["filename"].str.lstrip("/"),
+        "_line": pd.to_numeric(df["line_number"], errors="coerce").fillna(0).astype(int),
+        "_tool": df["tool"],
+    }, index=df.index)
+    df["tools_on_file"] = k.groupby(["_repo", "_file"])["_tool"].transform("nunique")
+    on_line = k.groupby(["_repo", "_file", "_line"])["_tool"].transform("nunique")
+    df["tools_on_line"] = on_line.where(k["_line"] > 0, 1)
+    return df
+
+
 def score_findings(findings):
     """Attaches f["p_real"] = P(real issue, not noise) to each finding using
     the trained classifier. Falls back to p_real=1.0 (no discount, same as
     the old count-everything-equally behavior) if the model hasn't been
-    trained yet, so scanning still works without it."""
+    trained yet, so scanning still works without it.
+
+    `findings` must be one repo's findings (or carry repo_id), since the
+    tool-agreement features compare each finding to the others passed in.
+
+    A threat-intel match skips the classifier and stays at 1.0: it is an exact
+    lookup rather than a heuristic, the model has never seen the tool, and it
+    is the one kind of finding that noise-scoring should never talk down."""
+    for f in findings:
+        if f["tool"] == THREAT_INTEL_TOOL:
+            f["p_real"] = 1.0
+    all_findings = findings
+    findings = [f for f in all_findings if f["tool"] != THREAT_INTEL_TOOL]
     if not findings:
-        return findings
+        return all_findings
 
     artifact = _load_model_artifact()
     if artifact is None:
         for f in findings:
             f["p_real"] = 1.0
-        return findings
+        return all_findings
 
     import pandas as pd
     pipeline          = artifact["pipeline"]
     freq_lookup       = artifact["frequency_lookup"]
     default_frequency = artifact["default_frequency"]
+    feature_cols      = artifact.get("feature_cols", LEGACY_FEATURE_COLUMNS)
 
-    rows = []
-    for f in findings:
-        tool       = f["tool"]
-        issue_text = f.get("issue_text") or ""
-        key        = (tool, frequency_key(tool, issue_text))
-        rows.append({
-            "tool":           tool,
-            "severity_norm":  normalize_severity(f.get("severity", "low")),
-            "repo_frequency": freq_lookup.get(key, default_frequency),
-            "snippet_length": len(f.get("code_snippet") or ""),
-            "issue_text":     issue_text,
-        })
+    df = pd.DataFrame([{
+        "repo_id":         f.get("repo_id", 0),
+        "tool":            f["tool"],
+        "severity":        f.get("severity", "low"),
+        "issue_text":      f.get("issue_text") or "",
+        "filename":        f.get("filename") or "",
+        "line_number":     f.get("line_number") or 0,
+        "code_snippet":    f.get("code_snippet") or "",
+        "tool_confidence": f.get("tool_confidence"),
+    } for f in findings])
+    df = add_finding_features(df)
+    df["repo_frequency"] = [
+        freq_lookup.get((t, frequency_key(t, txt)), default_frequency)
+        for t, txt in zip(df["tool"], df["issue_text"])
+    ]
 
-    probs = pipeline.predict_proba(pd.DataFrame(rows))[:, 1]
+    probs = pipeline.predict_proba(df[feature_cols])[:, 1]
     for f, p in zip(findings, probs):
         f["p_real"] = round(float(p), 4)
-    return findings
+    return all_findings
 
 #Risk Score calcualtor
 
 SEVERITY_WEIGHT = {"high": 10, "medium": 3, "low": 1}
+
+# A confirmed threat-intel match is worth more than one heuristic "high", which
+# at 10 points reads as only Low on the malware axis. The thresholds themselves
+# are untouched; these are chosen to land just past them (malware axis: over 100
+# is Critical, over 35 is High).
+#   MalwareBazaar: this exact file is a known malware sample. 101 = Critical.
+#   URLhaus: a URL here is known to have served malware, which is strong but
+#   does not prove this repository is the attacker: a security tool or a blocklist
+#   can legitimately contain one. 36 = High, capped at 72 so it stays there.
+# Worked out from the stored tool and source, not attached to the finding, so
+# recompute_scores.py reaches the same number from scan_results alone.
+TI_HASH_POINTS = 101
+TI_URL_POINTS = 36
+TI_URL_POINTS_CAP = 72
+
+
+def _threat_intel_points(findings):
+    matches = [f for f in findings if f["tool"] == THREAT_INTEL_TOOL]
+    hashes = sum((f.get("issue_text") or "").startswith(ioc_extractor.SOURCE_MALWAREBAZAAR)
+                 for f in matches)
+    urls = len(matches) - hashes
+    return hashes * TI_HASH_POINTS + min(urls * TI_URL_POINTS, TI_URL_POINTS_CAP)
+
 
 def _score_findings(findings):
     high   = sum(1 for f in findings if f["severity"] == "high")
@@ -645,8 +944,8 @@ def _score_findings(findings):
     # fix for the same false-positive-flooding problem this solves directly.
     weighted_score = sum(
         SEVERITY_WEIGHT.get(f["severity"], 1) * f.get("p_real", 1.0)
-        for f in findings
-    )
+        for f in findings if f["tool"] != THREAT_INTEL_TOOL
+    ) + _threat_intel_points(findings)
     return high, medium, low, round(weighted_score)
 
 
@@ -681,6 +980,7 @@ TOOL_CATEGORY = {
     "dep_checker": "malicious_pattern",
     "guarddog":    "malicious_pattern",
     "virustotal":  "malicious_pattern",  # legacy tool name from old scans
+    THREAT_INTEL_TOOL: "malicious_pattern",
 }
 
 def finding_category(f):
@@ -703,6 +1003,21 @@ def _level_for(score, thresholds):
     elif score <= high_max: return "High"
     else:                   return "Critical"
 
+
+# What a visitor reads for each stored level. Only "Safe" differs. A static
+# scan can fail to find problems; it cannot show that a repository is safe
+# (code can be packed, staged, fetched at run time, or simply new to every
+# rule), so the lowest band says what actually happened. Idea from FlatScan,
+# whose lowest band reads "No strong indicators. Not a clean verdict."
+# The stored value stays "Safe": thresholds, the database, the extension API
+# and the evaluation scripts all key on it, and renaming it would mean
+# migrating every saved scan for a change that is only ever about wording.
+LEVEL_LABELS = {"Safe": "Nothing found"}
+
+
+def level_label(level):
+    return LEVEL_LABELS.get(level, level)
+
 # Calibrated separately per axis against real data (calibrate_thresholds.py)
 # — malicious_pattern findings are far lower-volume than vulnerability ones
 # (bandit/semgrep dominate raw counts), so reusing the blended thresholds
@@ -711,6 +1026,83 @@ CATEGORY_THRESHOLDS = {
     "vulnerability":     (20, 80, 300),
     "malicious_pattern": (15, 35, 100),
 }
+
+# --- Trust score (0-100) -----------------------------------------------------
+#
+# A bounded, monotonic restatement of the two risk scores, for people who
+# want one number. It is deliberately NOT a probability ("73% likely
+# malicious" would need a calibrated repo-level model and labelled repos,
+# which MalDet does not have) -- it is a score out of 100, like a credit
+# score, where 100 means nothing of note was found.
+#
+# Each axis maps its unbounded risk score into the band of its risk level,
+# interpolating within the level's threshold range, so the number can never
+# disagree with the level the page shows next to it:
+#     Safe 100 | Low 99-70 | Medium 69-50 | High 49-25 | Critical 24-0
+# Critical decays as 24 * high_max / score, so it approaches 0 but every
+# extra finding still lowers it.
+#
+# The headline combines the axes asymmetrically: vulnerability findings can
+# lower trust no further than VULN_TRUST_FLOOR, and only malicious-pattern
+# findings can take it below. Vulnerability volume grows with codebase size
+# (django is Critical on that axis) and says "badly written", not
+# "hostile"; without the floor, django scored 17 while a repository of live
+# malware samples scored 39.
+TRUST_BANDS = {"Low": (99, 70), "Medium": (69, 50), "High": (49, 25)}
+VULN_TRUST_FLOOR = 40
+
+
+def axis_trust(score, thresholds):
+    score = float(score or 0)
+    if score <= 0:
+        return 100
+    low_max, med_max, high_max = thresholds
+    level = _level_for(score, thresholds)
+    if level == "Critical":
+        return max(0, min(24, round(24 * high_max / score)))
+    lo, hi = {"Low": (0, low_max), "Medium": (low_max, med_max),
+              "High": (med_max, high_max)}[level]
+    top, bottom = TRUST_BANDS[level]
+    return round(top - (score - lo) / (hi - lo) * (top - bottom))
+
+
+def trust_level(trust):
+    """The risk level whose band a trust score sits in -- for colour and
+    wording, so a trust of 40 reads as High risk wherever it appears."""
+    if trust >= 100: return "Safe"
+    if trust >= 70:  return "Low"
+    if trust >= 50:  return "Medium"
+    if trust >= 25:  return "High"
+    return "Critical"
+
+
+def trust_score(vuln_score, malware_score):
+    """Trust out of 100 from the two stored axis scores. Returns None when
+    there is no score at all (a scan that died before scoring), rather than
+    a 100 that would read as "checked, nothing found"."""
+    if vuln_score is None and malware_score is None:
+        return None
+    vuln = axis_trust(vuln_score, CATEGORY_THRESHOLDS["vulnerability"])
+    malware = axis_trust(malware_score, CATEGORY_THRESHOLDS["malicious_pattern"])
+    vuln_effect = max(vuln, VULN_TRUST_FLOOR)
+    trust = min(malware, vuln_effect)
+    if trust >= 100:
+        limited_by = None
+    elif malware <= vuln_effect:
+        limited_by = "malicious_pattern"
+    else:
+        limited_by = "vulnerability"
+    return {
+        "trust": trust,
+        "level": trust_level(trust),
+        "vuln": vuln,
+        "malware": malware,
+        "limited_by": limited_by,
+        # True when the vulnerability axis alone would have scored lower
+        # and the floor held it up -- the page says so instead of hiding it.
+        "vuln_floored": vuln < VULN_TRUST_FLOOR,
+    }
+
 
 def calculate_category_risk(findings):
     """Same weighted-score math as calculate_risk(), computed separately
@@ -771,8 +1163,86 @@ def _fit_varchar(value, max_chars):
 FINDING_INSERT_BATCH = 500
 
 
+_tool_confidence_column = None
+
+def _has_tool_confidence_column(cursor):
+    """Whether scan_results has the tool_confidence column (schema.sql).
+    Checked rather than assumed because columns here are added by hand with
+    ALTER TABLE: a deployment that has not run it yet keeps scanning, just
+    without storing the tools' confidence, instead of every save failing on
+    an unknown column. Cached per process; restart the worker after the
+    ALTER to start storing it."""
+    global _tool_confidence_column
+    if _tool_confidence_column is None:
+        cursor.execute("""
+            SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'scan_results' AND COLUMN_NAME = 'tool_confidence'
+        """)
+        row = cursor.fetchone()
+        n = row["n"] if isinstance(row, dict) else row[0]
+        _tool_confidence_column = bool(n)
+        if not _tool_confidence_column:
+            print("    Note: scan_results.tool_confidence missing -- see schema.sql; "
+                  "tool confidence not stored")
+    return _tool_confidence_column
+
+
+def _save_iocs(cursor, scan_id, repo_id, result):
+    """Stores one scan's IOCs inside save_to_db()'s transaction, behind a
+    savepoint: a problem here (above all a database that has not had the new
+    tables added) loses the IOCs and never the scan. Being in that transaction
+    also means a failed scan leaves no IOCs pointing at it."""
+    cursor.execute("SAVEPOINT save_iocs")
+    try:
+        # first_seen survives a rescan: "when did this repo start containing
+        # that" is the question the column answers, not "when was it last read".
+        cursor.execute("""
+            SELECT i.ioc_type, i.value, MIN(i.first_seen) AS first_seen
+            FROM iocs i JOIN scan_history h ON h.id = i.scan_id
+            WHERE h.repo_id = %s
+            GROUP BY i.ioc_type, i.value
+        """, (repo_id,))
+        earlier = {(r["ioc_type"], r["value"]): r["first_seen"] for r in cursor.fetchall()}
+        cursor.execute("SELECT NOW() AS now")
+        now = cursor.fetchone()["now"]
+
+        rows = [(scan_id, i["ioc_type"], i["value"], _fit_varchar(i["file_path"], 500),
+                 i["file_count"], earlier.get((i["ioc_type"], i["value"]), now),
+                 i["ti_match"], i["ti_source"])
+                for i in result["iocs"]]
+        for start in range(0, len(rows), FINDING_INSERT_BATCH):
+            cursor.executemany("""
+                INSERT INTO iocs
+                    (scan_id, ioc_type, value, file_path, file_count, first_seen,
+                     ti_match, ti_source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, rows[start:start + FINDING_INSERT_BATCH])
+        cursor.execute("""
+            INSERT INTO ioc_runs (scan_id, status, ti_status, files_scanned, files_hashed, note)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (scan_id, result["status"], result["ti_status"], result["files_scanned"],
+              result["files_hashed"], _fit_varchar(result["note"], 255) if result["note"] else None))
+    except Exception as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT save_iocs")
+        if isinstance(e, pymysql.MySQLError) and e.args and e.args[0] == 1146:
+            print("    IOCs not saved: the iocs tables are missing. Apply schema.sql to "
+                  "this database (safe to re-run) and restart the worker.")
+            return
+        print(f"    IOCs not saved: {type(e).__name__}: {e}")
+        # Say so, or the page goes on showing the previous scan's indicators
+        # as if they were this one's.
+        try:
+            cursor.execute("""
+                INSERT INTO ioc_runs (scan_id, status, ti_status, files_scanned, files_hashed, note)
+                VALUES (%s, 'failed', 'off', 0, 0, 'could not save indicators')
+            """, (scan_id,))
+        except pymysql.MySQLError:
+            pass
+
+
 def save_to_db(repo_info, findings, high, medium, low, score, level, category_risk,
-               llm_text=None, llm_status=None):
+               llm_text=None, llm_status=None, ioc_result=None):
     db     = get_db()
     cursor = db.cursor()
 
@@ -823,6 +1293,7 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
         # is now held open across all of them, and the largest repo in the
         # corpus has ~157k findings -- one round trip each would hold it open
         # for minutes. The batch size bounds the packet, not the transaction.
+        with_conf = _has_tool_confidence_column(cursor)
         rows = [
             (repo_id,
              _fit_varchar(f["tool"], 50),
@@ -832,15 +1303,22 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
              _fit_varchar(f["filename"], 500),
              f.get("line_number", 0),
              _fit_text(f.get("code_snippet", "")))
+            + ((f.get("tool_confidence"),) if with_conf else ())
             for f in findings
         ]
-        for start in range(0, len(rows), FINDING_INSERT_BATCH):
-            cursor.executemany("""
+        insert_sql = ("""
+                INSERT INTO scan_results
+                    (repo_id, tool, severity, confidence, issue_text,
+                     filename, line_number, code_snippet, tool_confidence)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """ if with_conf else """
                 INSERT INTO scan_results
                     (repo_id, tool, severity, confidence, issue_text,
                      filename, line_number, code_snippet)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, rows[start:start + FINDING_INSERT_BATCH])
+            """)
+        for start in range(0, len(rows), FINDING_INSERT_BATCH):
+            cursor.executemany(insert_sql, rows[start:start + FINDING_INSERT_BATCH])
 
         # Save risk score — high_count/medium_count/low_count/final_score/
         # risk_level stay as the blended "overall" figure (kept only for
@@ -880,6 +1358,9 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
             VALUES (%s, %s, %s)
         """, (repo_id, level, score))
 
+        if ioc_result is not None:
+            _save_iocs(cursor, cursor.lastrowid, repo_id, ioc_result)
+
         db.commit()
         return repo_id
 
@@ -889,6 +1370,124 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
     finally:
         cursor.close()
         db.close()
+
+#IOC extraction
+
+
+#Hidden payloads — decode encoded layers, then run the malware engines on them
+
+HIDDEN_PREFIX = "Hidden payload: "
+
+
+def run_decoded_payloads(path, findings):
+    """YARA and ClamAV over code a repository hides behind encoding layers.
+
+    payload_decoder writes every decoded layer that looks like code (or like
+    an executable) to a scratch directory; the engines scan that, and each
+    match is reported against the original file and line, with the decoding
+    chain and the decoded text as the snippet. A match is dropped when the
+    same rule already fired on the same file in plain sight, so a payload
+    YARA could already read is not counted twice.
+
+    Like every engine, it can only lose its own results: a failure prints and
+    returns what it has rather than failing the scan."""
+    print("  Decoding hidden payloads...")
+    results = []
+    out_dir = None
+    try:
+        out_dir = tempfile.mkdtemp(prefix="payloads_", dir=ensure_scratch_dir(CLONE_DIR))
+        decoded = payload_decoder.extract_payloads(path, out_dir, is_ignored=is_ignored_path)
+        payloads = decoded["payloads"]
+        print(f"    Decoded {len(payloads)} payloads from {decoded['files_read']} files "
+              f"({decoded['status']}{', ' + decoded['note'] if decoded['note'] else ''})")
+        if decoded["status"] == "partial":
+            results.append({
+                "tool":         "yara",
+                "severity":     "low",
+                "issue_text":   (f"{HIDDEN_PREFIX}decoding incomplete ({decoded['note']}), "
+                                 "so some encoded strings in this repository were not checked."),
+                "filename":     "",
+                "line_number":  0,
+                "code_snippet": "",
+            })
+        if not payloads:
+            return results
+        seen = {(f["issue_text"], f["filename"]) for f in findings}
+        for f in run_yara(out_dir) + run_clamav(out_dir):
+            info = payloads.get(os.path.basename(f["filename"]))
+            if info is None:
+                if not f["filename"]:   # YARA's "scan incomplete" marker
+                    f["issue_text"] = HIDDEN_PREFIX + f["issue_text"]
+                    results.append(f)
+                continue
+            if (f["issue_text"], info["filename"]) in seen:
+                continue
+            seen.add((f["issue_text"], info["filename"]))
+            results.append({
+                **f,
+                "issue_text":   HIDDEN_PREFIX + f["issue_text"],
+                "filename":     info["filename"],
+                "line_number":  info["line"],
+                "code_snippet": f"[decoded: {info['chain']}]\n{info['preview']}",
+            })
+    except Exception as e:
+        print(f"    Payload decoding error: {type(e).__name__}: {e}")
+    finally:
+        if out_dir:
+            shutil.rmtree(out_dir, ignore_errors=True)
+    print(f"    Hidden payloads: {len(results)} new matches")
+    return results
+
+
+#Reference files — rule files, signature databases and blocklists
+
+def run_reference_guard(path, findings):
+    """Marks YARA/ClamAV matches that sit in files which describe threats
+    rather than carry them (see reference_files.py). They stay on the report,
+    as low and labelled; weigh_references() then stops them counting. Like
+    every engine it can only lose its own effect: on any error nothing is
+    marked and the scan carries on."""
+    try:
+        marked = reference_files.mark_references(path, findings)
+        if marked:
+            print(f"  Reference files: {marked} matches are in rule files or lists, not code")
+    except Exception as e:
+        print(f"    Reference check error: {type(e).__name__}: {e}")
+
+
+def weigh_references(findings):
+    """A rule file or blocklist cannot run, so its matches add nothing to the
+    score. Done through p_real (the classifier's 'is this real' estimate),
+    which both scores already multiply by and the report already shows as
+    'likely noise', rather than by deleting the findings."""
+    for f in findings:
+        if f.get("reference"):
+            f["p_real"] = 0.0
+
+
+def run_ioc_extraction(path, findings):
+    """Indicators of compromise for this scan. Like every other engine it can
+    only ever lose its own results: any failure comes back as status 'failed',
+    which the detail page reports rather than showing "none found". Lookups have
+    their own try, so a threat-intel problem cannot cost the extraction."""
+    print("  Extracting IOCs...")
+    try:
+        result = ioc_extractor.extract_iocs(path, findings, is_ignored=is_ignored_path)
+    except Exception as e:
+        print(f"    IOC extraction error: {type(e).__name__}: {e}")
+        return {"iocs": [], "status": "failed", "note": "extraction failed",
+                "files_scanned": 0, "files_hashed": 0, "ti_status": "off"}
+    try:
+        result["ti_status"] = ioc_extractor.enrich_with_threat_intel(result["iocs"])
+    except Exception as e:
+        # Type only: this path has the API key in scope.
+        print(f"    Threat intel error: {type(e).__name__}")
+        result["ti_status"] = "failed"
+    print(f"    IOCs: {len(result['iocs'])} indicators from {result['files_scanned']} files "
+          f"read and {result['files_hashed']} hashed ({result['status']}, "
+          f"threat intel {result['ti_status']})")
+    return result
+
 
 #main Scan function
 
@@ -926,15 +1525,28 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         report("Running GuardDog")
         findings += run_guarddog(path)
 
+        report("Decoding hidden payloads")
+        findings += run_decoded_payloads(path, findings)
+
         report("Checking dependencies")
         findings += check_dependencies(path)
 
         report("Filtering results")
         findings = filter_noise(findings)
         print(f"  Findings after filter: {len(findings)}")
+        # Before IOC extraction, so a blocklist's thousands of domains are not
+        # published as this repository's indicators.
+        run_reference_guard(path, findings)
+
+        # After filter_noise so IOCs come from the same flagged files the
+        # report lists; before scoring so a threat-intel match counts.
+        report("Extracting IOCs")
+        ioc_result = run_ioc_extraction(path, findings)
+        findings += ioc_extractor.threat_intel_findings(ioc_result["iocs"])
 
         report("Scoring findings")
         findings = score_findings(findings)
+        weigh_references(findings)
 
         report("Calculating risk score")
         high, medium, low, score, level = calculate_risk(findings)
@@ -948,7 +1560,8 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         # worker.py and app.py's /api/summary route).
         report("Saving results")
         repo_id = save_to_db(repo_info, findings,
-                             high, medium, low, score, level, category_risk)
+                             high, medium, low, score, level, category_risk,
+                             ioc_result=ioc_result)
 
     finally:
         # clear temp folder
