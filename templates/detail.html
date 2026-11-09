@@ -502,6 +502,13 @@
                 </dd></div>
                 <div><dt>Counts towards</dt><dd>{{ engines[f.tool][1] if f.tool in engines else '—' }}</dd></div>
                 <div><dt>File</dt><dd class="mono">{{ f.filename or '—' }}{% if f.line_number %} <span class="text-muted">line {{ f.line_number }}</span>{% endif %}</dd></div>
+                {% set techniques = f.issue_text | attack_techniques %}
+                {% if techniques %}
+                <div><dt><abbr title="MITRE ATT&amp;CK: the shared catalogue of attacker techniques">ATT&amp;CK</abbr></dt><dd>
+                  {% for t in techniques %}<a href="{{ t.url }}" target="_blank" rel="noopener noreferrer"
+                     class="mono">{{ t.id }}</a> <span class="text-muted">{{ t.name }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}
+                </dd></div>
+                {% endif %}
                 <div><dt>Likely real</dt><dd>
                   {% if f.confidence is none %}Not rated (scanned before the classifier existed)
                   {% elif f.confidence >= 0.5 %}Yes, {{ (f.confidence * 100) | round | int }}% confidence

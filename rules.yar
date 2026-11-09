@@ -37,6 +37,7 @@ keep `ascii wide` on any string you add.
 rule detect_reverse_shell {
     meta:
         severity = "high"
+        attack = "T1059.004"
         description = "Reverse shell command patterns"
     strings:
         $a = "bash -i >& /dev/tcp" ascii wide
@@ -58,6 +59,7 @@ rule detect_reverse_shell {
 rule detect_base64_exec {
     meta:
         severity = "high"
+        attack = "T1140,T1027"
         description = "Decodes or decompresses a hidden payload and executes it directly (decode call nested in, or on the line before, an exec/eval)"
     strings:
         // Python: exec(base64.b64decode(...)), eval(zlib.decompress(...)), exec(marshal.loads(...))
@@ -81,6 +83,7 @@ rule detect_base64_exec {
 rule detect_credential_harvester {
     meta:
         severity = "high"
+        attack = "T1552.001,T1555.003"
         description = "Reads stored credential files (SSH keys, cloud credentials, browser password stores) and also sends data out, or pairs secrets with a webhook/bot exfiltration channel"
     strings:
         $file1 = ".aws/credentials" ascii wide
@@ -110,6 +113,7 @@ rule detect_credential_harvester {
 rule detect_downloader {
     meta:
         severity = "low"
+        attack = "T1105"
         description = "Downloads an executable or script file (.exe, .dll, .sh, .ps1, .jar...) - low signal alone; see detect_download_and_execute"
     strings:
         // The keyword must be used like a command or a call. Without this,
@@ -122,6 +126,7 @@ rule detect_downloader {
 rule detect_download_and_execute {
     meta:
         severity = "high"
+        attack = "T1105,T1059"
         description = "Downloads a remote resource and runs it straight away (download nested in, or within a few lines of, an exec/eval/system call)"
     strings:
         // Python: exec(urlopen(...).read()), exec(requests.get(...).text)
@@ -146,6 +151,7 @@ rule detect_download_and_execute {
 rule detect_pipe_to_shell {
     meta:
         severity = "medium"
+        attack = "T1105,T1059.004"
         description = "Pipes a downloaded script straight into a shell (curl ... | sh) - also how many legitimate installers work, so medium rather than high"
     strings:
         $a = /(curl|wget)\s[^\n|;]{0,300}\|\s*(sudo\s+)?(-E\s+)?(ba|z|da)?sh\b/ ascii wide
@@ -156,6 +162,7 @@ rule detect_pipe_to_shell {
 rule detect_obfuscated_string_execution {
     meta:
         severity = "high"
+        attack = "T1027"
         description = "Builds a string from character codes or hex escapes and executes it in the same expression"
     strings:
         $py_join = /\b(exec|eval)\s*\(\s*(''|"")\.join\s*\(/ ascii wide
@@ -172,6 +179,7 @@ rule detect_obfuscated_string_execution {
 rule detect_known_obfuscator {
     meta:
         severity = "medium"
+        attack = "T1027"
         description = "Output of a known code obfuscator or packer (javascript-obfuscator, Dean Edwards packer, PyArmor, JSFuck) - sometimes used to protect legitimate code, but hides what the code does from review"
     strings:
         $jsobf_decl = /var _0x[a-f0-9]{4,6}\s*=\s*\[/ ascii wide
@@ -188,6 +196,7 @@ rule detect_known_obfuscator {
 rule detect_persistence_mechanism {
     meta:
         severity = "high"
+        attack = "T1053.003,T1547.001,T1543.001,T1053.005"
         description = "Installs itself to run automatically: adds a cron job, writes a Windows Run registry key, or loads a macOS LaunchAgent"
     strings:
         $cron1 = /crontab\s+-l[^\n]{0,300}\|\s*crontab\s+-/ ascii wide
@@ -205,6 +214,7 @@ rule detect_persistence_mechanism {
 rule detect_shell_profile_modification {
     meta:
         severity = "medium"
+        attack = "T1546.004"
         description = "Appends to a shell startup file (~/.bashrc, ~/.zshrc, ~/.profile) - a persistence technique, but also what toolchain installers do to set PATH"
     strings:
         $redirect = /(>>|\btee\s+-a)\s*["']?(~|\$HOME|\$\{HOME\})\/\.(bashrc|bash_profile|zshrc|profile)\b/ ascii wide
@@ -216,6 +226,7 @@ rule detect_shell_profile_modification {
 rule detect_anti_analysis {
     meta:
         severity = "high"
+        attack = "T1497,T1622"
         description = "Checks for a debugger together with a VM or sandbox before continuing - a malware evasion technique; one check alone is common in legitimate crash handlers and games"
     strings:
         $dbg1 = "IsDebuggerPresent" ascii wide
@@ -236,6 +247,7 @@ rule detect_anti_analysis {
 rule detect_crypto_miner {
     meta:
         severity = "high"
+        attack = "T1496"
         description = "Connects to a cryptocurrency mining pool or carries an XMRig miner configuration"
     strings:
         $a = "stratum+tcp://" ascii wide
@@ -252,6 +264,7 @@ rule detect_crypto_miner {
 rule detect_process_injection {
     meta:
         severity = "high"
+        attack = "T1055"
         description = "Windows remote process injection: allocate memory in another process, write to it, and start a thread there"
     strings:
         $alloc = "VirtualAllocEx" ascii wide
@@ -267,6 +280,7 @@ rule detect_process_injection {
 rule detect_clipboard_hijack {
     meta:
         severity = "medium"
+        attack = "T1115"
         description = "Reads the clipboard alongside crypto-wallet-address-shaped patterns - a known 'clipper' malware technique that swaps a copied address for the attacker's own"
     strings:
         $clip1 = "win32clipboard" nocase ascii wide

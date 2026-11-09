@@ -535,6 +535,68 @@ def run_yara(path):
     return findings + forge
 
 
+# MITRE ATT&CK: the shared catalogue of attacker techniques that security
+# teams name findings by. Each rules.yar rule carries `attack = "T1105,..."`
+# in its meta; a finding is labelled from that at render time, by the rule
+# name in its issue_text, so stored findings from before the labels existed
+# get them too and nothing in the database or the classifier changes. Only
+# MalDet's own behaviour rules are labelled: Forge rules fingerprint known
+# tools rather than techniques, and a match in a rule file or blocklist
+# describes a technique rather than using one. The names are ATT&CK's own
+# (v15); a technique ID links to attack.mitre.org.
+ATTACK_NAMES = {
+    "T1027":     "Obfuscated Files or Information",
+    "T1055":     "Process Injection",
+    "T1059":     "Command and Scripting Interpreter",
+    "T1059.004": "Command and Scripting Interpreter: Unix Shell",
+    "T1105":     "Ingress Tool Transfer",
+    "T1115":     "Clipboard Data",
+    "T1140":     "Deobfuscate/Decode Files or Information",
+    "T1496":     "Resource Hijacking",
+    "T1497":     "Virtualization/Sandbox Evasion",
+    "T1053.003": "Scheduled Task/Job: Cron",
+    "T1053.005": "Scheduled Task/Job: Scheduled Task",
+    "T1543.001": "Create or Modify System Process: Launch Agent",
+    "T1546.004": "Event Triggered Execution: Unix Shell Configuration Modification",
+    "T1547.001": "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder",
+    "T1552.001": "Unsecured Credentials: Credentials In Files",
+    "T1555.003": "Credentials from Password Stores: Credentials from Web Browsers",
+    "T1622":     "Debugger Evasion",
+}
+RULES_PATH = os.path.join(os.path.dirname(__file__), "rules.yar")
+_rule_attack = None
+
+
+def _load_rule_attack():
+    """{rule name: [technique ids]} from rules.yar's meta, read once."""
+    global _rule_attack
+    if _rule_attack is None:
+        _rule_attack = {}
+        try:
+            with open(RULES_PATH, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            return _rule_attack
+        for name, body in re.findall(r"^rule (\w+)\s*\{(.*?)^\s*strings:", text, re.M | re.S):
+            m = re.search(r'^\s*attack\s*=\s*"([^"]*)"', body, re.M)
+            if m:
+                _rule_attack[name] = [t.strip() for t in m.group(1).split(",") if t.strip()]
+    return _rule_attack
+
+
+def attack_techniques(issue_text):
+    """ATT&CK techniques for a finding, as [{id, name, url}], or []."""
+    text = issue_text or ""
+    if text.startswith("Reference in a "):
+        return []
+    m = re.search(r"\bYARA rule matched: (\w+)", text)
+    if not m:
+        return []
+    return [{"id": t, "name": ATTACK_NAMES.get(t, ""),
+             "url": "https://attack.mitre.org/techniques/" + t.replace(".", "/") + "/"}
+            for t in _load_rule_attack().get(m.group(1), [])]
+
+
 # YARA Forge (https://github.com/YARAHQ/yara-forge): ~5,000 curated public
 # rules that fingerprint KNOWN malware families and hacking tools, alongside
 # rules.yar's behaviour rules (which are what catch new code). Measured

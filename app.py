@@ -8,7 +8,8 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, R
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category, level_label
+from scanner import (scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category, level_label,
+                     attack_techniques)
 from ioc_extractor import IOC_TYPES
 import job_queue
 
@@ -24,6 +25,9 @@ mimetypes.add_type("application/x-xpinstall", ".xpi")
 # {{ level | level_label }}: the stored level as a visitor should read it
 # ("Safe" shows as "Nothing found"). CSS classes keep the stored value.
 app.add_template_filter(level_label, "level_label")
+# {{ f.issue_text | attack_techniques }}: MITRE ATT&CK techniques for a
+# finding, from its rule's meta in rules.yar (see scanner.attack_techniques).
+app.add_template_filter(attack_techniques, "attack_techniques")
 
 
 @app.context_processor
@@ -776,13 +780,14 @@ def findings_csv(repo_id):
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["engine", "severity", "likely_real_confidence", "finding",
-                     "file", "line", "code_snippet"])
+                     "file", "line", "code_snippet", "attack_techniques"])
     for r in rows:
         writer.writerow([
             _csv_cell(r["tool"]), _csv_cell(r["severity"]),
             "" if r["confidence"] is None else f'{r["confidence"]:.4f}',
             _csv_cell(r["issue_text"]), _csv_cell(r["filename"]),
             r["line_number"] or "", _csv_cell(r["code_snippet"]),
+            " ".join(t["id"] for t in attack_techniques(r["issue_text"])),
         ])
     # GitHub owner/repo names are [A-Za-z0-9._-] only, so safe in a filename.
     name = f"maldet-{repo['owner']}-{repo['repo_name']}-findings.csv"
