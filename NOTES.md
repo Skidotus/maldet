@@ -794,6 +794,36 @@ data, not guesses.
    treats the matches as references. A blocklist is a catalogue of one kind, so it needs
    a second check (a file that is mostly a list of domains). FlatScan pins the guard with
    tests in both directions so it can never quietly hide real malware; copy that too.
+   **Done 2026-11-09, but not FlatScan's way** (`reference_files.py`). Breadth was
+   measured first and rejected: across the local corpus, `rules.yar` matches 7 different
+   MalDet rules, but nishang's `Powerpreter.psm1` (a real attack toolkit) and the
+   deliberately malicious `maldet-demo-package/install.sh` match 5 each. Any cut-off
+   that catches the rule file hides those two. So the test is the *kind* of file: a
+   data-file extension (nothing runs it by itself) **and** a rule or list format in its
+   first 256KB — YARA, Sigma or Snort rules, a ClamAV signature database, or a hosts /
+   adblock / domain / IP list. Code is never excused, whatever it contains. Matches in
+   such files stay on the report, set to low and labelled "Reference in a …, not code
+   that runs", but count for nothing in the score and give no IOCs. Hidden payloads and
+   threat-intel hash matches are never excused. Measured:
+   - **0 of 542** flagged files in the 43 trial repos were excused, so no real tool hid.
+   - **AdguardTeam/HostlistsRegistry: all 25 flagged files are blocklists** (up to 30MB
+     each); malware axis Critical 180 → Medium 20, trust 13 → 60, recomputed from the
+     stored findings (the recomputed "before" matches the stored 180).
+   - **MalDet itself: 341 of 356 YARA matches** are in `rules.yar` and the Forge rule
+     file; malware axis High 63 → Medium 28 from stored findings. What still counts is
+     real code: GuardDog on the `.claude/skills/` helper scripts, and the landing page's
+     decorative `static/js/hero-code.js`, whose "wall of code" contains snippets that
+     look like credential theft and `curl | sh`. Worth rewording that decoration, since
+     an examiner scanning MalDet will see it.
+   - **End to end:** a real scan of `Skidotus/maldet` from GitHub with the new code
+     (2026-11-09, LLM off) saved malware **Medium 24**, down from High; the 7 `rules.yar`
+     matches are stored as low, labelled, with confidence 0.
+   - 15 tests (`tests/test_reference_files.py`), both directions.
+   *In plain words:* MalDet now recognises files that are lists of threats (rule files,
+   antivirus fingerprint files, blocklists of bad websites) and stops treating them as
+   threats. It checks what kind of file it is rather than how many rules it matches,
+   because real attack tools also match many rules. A list cannot run, so its matches
+   are still shown but no longer raise the score.
 
 2. **UTF-16 blind spot.** UTF-16 stores a zero byte beside every letter, and Windows
    PowerShell scripts, attackers' favourite, are often saved that way. Tested: a reverse

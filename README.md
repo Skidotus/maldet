@@ -12,6 +12,8 @@ combined with machine learning (ML) risk classification.
 
 - Multi-tool static analysis (Bandit, Semgrep, YARA, ClamAV, GuardDog)
 - Hidden-payload decoding: base64, hex, escaped and compressed layers are unwrapped and re-scanned by YARA and ClamAV, so code shipped as an encoded string is still checked
+- Reads UTF-16 scripts (how Windows PowerShell often saves them), so changing a file's text format does not hide it
+- Rule files, antivirus signature files and blocklists are recognised as references to threats, not threats, so security projects are not rated as malware for describing it
 - Supply chain attack detection (OSV CVE lookups across requirements.txt, poetry.lock, pyproject.toml and Pipfile, plus a custom dependency checker)
 - ML risk classification (Random Forest)
 - Indicators of compromise extracted from flagged files and install scripts, with CSV and JSON export

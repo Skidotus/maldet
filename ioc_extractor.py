@@ -477,9 +477,13 @@ class IocCollector:
 
 def flagged_paths(findings):
     """Distinct files ClamAV or YARA flagged. YARA's "scan incomplete" marker
-    has no filename, so it never reaches here."""
+    has no filename, so it never reaches here. Reference files (rule files,
+    signature databases, blocklists; see reference_files.py) are left out:
+    a blocklist names thousands of bad domains, and none of them is an
+    indicator of this repository."""
     return sorted({f["filename"] for f in findings
-                   if f.get("tool") in ("clamav", "yara") and f.get("filename")})
+                   if f.get("tool") in ("clamav", "yara") and f.get("filename")
+                   and not f.get("reference")})
 
 
 def find_install_scripts(root, deadline=None):

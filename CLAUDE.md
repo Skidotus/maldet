@@ -143,7 +143,20 @@ by `worker.py` (not inside the web request):
    Vulnerability findings (Bandit/Semgrep/CVEs) in copied-in code
    (`is_vendored_path()`: `vendor/`, `node_modules/`, `dist/`, `*.min.js`…)
    drop one severity step; malware detectors there are never downgraded,
-   since a committed `node_modules` is a place to hide a payload
+   since a committed `node_modules` is a place to hide a payload.
+   Then `run_reference_guard()` (`reference_files.py`): YARA/ClamAV
+   matches in files that *describe* threats — YARA/Sigma/Snort rule files,
+   ClamAV signature databases, DNS/adblock blocklists — are marked
+   `f["reference"]`, set to low and prefixed "Reference in a …, not code
+   that runs: ". It needs a data-file extension **and** a rule/list format
+   in the first 256KB, so code (`.py`, `.js`, `.sh`, `.ps1`…) is never
+   excused whatever it contains. Breadth ("matches many unrelated rules",
+   FlatScan's test) was rejected on data: nishang's Powerpreter and the
+   malicious demo package match as many rules as `rules.yar`. Hidden-payload
+   and threat-intel findings are never marked. After scoring,
+   `weigh_references()` sets their `p_real` to 0, so they stay on the
+   report but add nothing to either score, and `ioc_extractor.flagged_paths()`
+   skips them so a blocklist's domains are not published as IOCs
 5a. `score_findings()` — the Random Forest's P(real). Features come from
    `add_finding_features()`, shared with `train_classifier.py` so training
    and scan time cannot drift: tool, severity, rule text, rule frequency,

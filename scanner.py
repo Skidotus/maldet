@@ -12,6 +12,7 @@ from dep_checker import check_dependencies
 import ioc_extractor
 import llm_summary
 import payload_decoder
+import reference_files
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
 # Not a hardcoded "/tmp/..." literal: gettempdir() honours TMPDIR, which is
@@ -1438,6 +1439,32 @@ def run_decoded_payloads(path, findings):
     return results
 
 
+#Reference files — rule files, signature databases and blocklists
+
+def run_reference_guard(path, findings):
+    """Marks YARA/ClamAV matches that sit in files which describe threats
+    rather than carry them (see reference_files.py). They stay on the report,
+    as low and labelled; weigh_references() then stops them counting. Like
+    every engine it can only lose its own effect: on any error nothing is
+    marked and the scan carries on."""
+    try:
+        marked = reference_files.mark_references(path, findings)
+        if marked:
+            print(f"  Reference files: {marked} matches are in rule files or lists, not code")
+    except Exception as e:
+        print(f"    Reference check error: {type(e).__name__}: {e}")
+
+
+def weigh_references(findings):
+    """A rule file or blocklist cannot run, so its matches add nothing to the
+    score. Done through p_real (the classifier's 'is this real' estimate),
+    which both scores already multiply by and the report already shows as
+    'likely noise', rather than by deleting the findings."""
+    for f in findings:
+        if f.get("reference"):
+            f["p_real"] = 0.0
+
+
 def run_ioc_extraction(path, findings):
     """Indicators of compromise for this scan. Like every other engine it can
     only ever lose its own results: any failure comes back as status 'failed',
@@ -1507,6 +1534,9 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
         report("Filtering results")
         findings = filter_noise(findings)
         print(f"  Findings after filter: {len(findings)}")
+        # Before IOC extraction, so a blocklist's thousands of domains are not
+        # published as this repository's indicators.
+        run_reference_guard(path, findings)
 
         # After filter_noise so IOCs come from the same flagged files the
         # report lists; before scoring so a threat-intel match counts.
@@ -1516,6 +1546,7 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
 
         report("Scoring findings")
         findings = score_findings(findings)
+        weigh_references(findings)
 
         report("Calculating risk score")
         high, medium, low, score, level = calculate_risk(findings)
