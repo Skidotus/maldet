@@ -690,6 +690,90 @@ outside `is_ignored_path()`, with the corrected `rules.yar`.
 This also corrects the note above that ClamAV has produced zero real hits: on these
 repos it flagged 293 files, and none in the clean set.
 
+## Evaluated, not yet adopted (2026-11-09 — extra ClamAV signatures)
+
+The licence-free alternative to a second AV: unofficial signature lists loaded into the
+ClamAV MalDet already runs. Fetched with `fangfrisch` 1.9.3 from its two sources that
+need no sign-up, **SaneSecurity** (its default set, 40 files) and **InterServer**
+(4 files, PHP webshells): 44 files, 19MB. Same 43 repositories and method as KVRT
+(tarballs unpacked as data, `helm/helm` failing on an absolute symlink both times), run
+twice with the official database dated 2026-09-23: official signatures alone, then the
+extra lists alone, so each file's hit can be attributed. Counts are distinct files kept
+by `is_ignored_path()`.
+
+| | Official | Extra lists | Extra only | Together |
+|---|---|---|---|---|
+| 23 clean repos (75,105 files): flagged files | 0 | 0 | 0 | 0 |
+| 20 offensive repos (7,968 files): flagged files | 293 | 208 | 47 | 340 |
+| Offensive repos with any hit | 10 | 8 | 0 new | 10 |
+
+- **Cheap.** Loading both sets peaked at 1,034MB against 968MB for the official set alone
+  (+66MB), and the load was no slower (8.5s against 12.3s, i.e. noise). The extra lists
+  alone scanned all 43 repos in 4m55s at 260MB. The official baseline matched the
+  2026-11-07 run exactly (293 files), so the repos had not drifted.
+- **Files, not repos**, exactly like KVRT: +47 files (+16%), and no repository the
+  official signatures missed. The 10 offensive repos with no ClamAV hit stay at zero.
+- **What fired:** SaneSecurity `Malware.*` (117) and `Badmacro` (84, Office macros), most
+  of them heuristic (`Heur.BadOne.Pshell`, `JsHeur`), and 4 InterServer PHP webshell hits.
+  Nobody checked the flagged files, so this is agreement, not accuracy; zero on clean
+  repos is over popular projects only.
+- **Terms:** SaneSecurity's legal page allows free use including commercial products, but
+  its usage page asks organisations for a donation (suggested $100). InterServer calls its
+  lists free; no written licence was found. URLhaus (abuse.ch) needs a free key and was not
+  tested; it is the list most likely to matter for source code, since it is malware URLs.
+- **Not adopted yet** because the gain is small and adopting means a refresh job
+  (`fangfrisch refresh`, hourly upstream) in the Docker image. If adopted, pass the extra
+  directory with a second `-d` rather than copying into `/var/lib/clamav`, so `freshclam`
+  and `fangfrisch` never fight over one directory.
+
+## What's improved (2026-11-09 — hidden payloads, and no more "Safe")
+
+Two ideas taken from FlatScan (https://github.com/Masriyan/FlatScan, MIT), a Go
+single-file malware analyser: its recursive payload resolution, and its lowest band
+reading "No strong indicators. Not a clean verdict."
+
+**Hidden payloads (`payload_decoder.py`, `scanner.run_decoded_payloads()`).** YARA and
+ClamAV read files as they are, so code shipped as base64 is a long run of letters to
+both of them. The new stage peels base64 (also reversed and URL-safe), hex, `\x41`
+escapes and character-code lists, then zlib/gzip/bz2/xz, up to three layers; keeps a
+layer only if it looks like code or carries executable magic bytes; and runs both YARA
+rule sets and ClamAV over what it kept. Matches are reported on the original file and
+line as `Hidden payload: ...`, with the decoding chain and decoded text as the snippet.
+
+Measured on the same 43 repositories as KVRT and the extra ClamAV signatures:
+
+| | Clean (23 repos) | Offensive (20 repos) |
+|---|---|---|
+| Strings decoded and kept | 23, in 6 repos | 126, in 9 repos |
+| Hidden-payload matches | **0** | 49 (35 high, 14 medium), 26 files, 6 repos |
+| Files no engine flagged in plain sight | 0 | **17** |
+| Time for the stage, per repo | median 0.7s, max 14.6s | median 0.5s, max 30.0s |
+
+- **The 17 files are real tools, named.** Empire's PowerShell modules each carry a
+  compiled .NET tool as one base64 string: Rubeus, Seatbelt, SweetPotato, Watson,
+  SharpSecDump, SharpChromium, SpoolSample, WireTap and more, identified by YARA Forge's
+  `HKTL_NET_GUID_*` rules and ClamAV once decoded. CrackMapExec's NanoDump, HandleKatz
+  and process-injection modules, and two InQuest samples, are the rest. Before this
+  stage MalDet saw all 17 as text.
+- **Repos, again, did not change**: all 6 already had plain-sight hits. What it adds is
+  coverage inside a repo, plus the ability to say *what* is hidden in a file.
+- **Cost is mostly ClamAV's signature load** (~10-12s), paid only when something was
+  decoded; decoding itself took at most 30s (Empire, 41 payloads). Capped at 60s and 500
+  payloads, each a visible "decoding incomplete" marker if hit; neither was hit here.
+- Single-byte XOR, which FlatScan also peels, is not done: on source code every long
+  string "decodes" under some key, and the false-positive cost was not worth it.
+- Read with care: one corpus, nobody verified the flagged files, and zero on clean
+  repos is over popular projects. Covered by `tests/test_payload_decoder.py` (16 tests,
+  including a hidden reverse shell plain YARA misses).
+
+**"Safe" now reads "Nothing found".** A static scan can fail to find problems; it
+cannot show a repository is safe. Every page, the printable report, the extension popup
+and the LLM prompt show the lowest level through `scanner.level_label()`, and the report
+says outright that it is not proof of safety. The stored value stays `Safe` (thresholds,
+database, extension API and evaluation scripts key on it), so no saved scan changed.
+The prompt change means the 17-of-19 summary evaluation predates it; re-run
+`evaluate_summaries.py --generate` before quoting it as current.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully

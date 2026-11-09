@@ -117,6 +117,23 @@ by `worker.py` (not inside the web request):
    incomplete" finding, because a timed-out scan used to save zero YARA
    findings and look clean — it happened to WebKit and to a malware
    collection
+4a. `run_decoded_payloads(path, findings)` — what the code *hides*.
+   `payload_decoder.py` peels base64 (also reversed and URL-safe), hex,
+   `\x41` escapes and character-code lists, then zlib/gzip/bz2/xz, up to
+   three layers, and writes each layer that looks like code (a
+   `CODE_MARKERS` hit) or like an executable (magic bytes) to a scratch
+   directory. `run_yara()` and `run_clamav()` scan that directory, and each
+   match is reported against the **original** file and line with
+   `issue_text` prefixed `Hidden payload: ` and the decoding chain plus
+   decoded text as the snippet. `rules.yar`'s decode-then-exec rules see
+   the wrapper; this sees what is inside it. A match already made in plain
+   sight on the same file is dropped, so nothing is counted twice. Capped at
+   `MALDET_DECODE_TIME_LIMIT` (60s) and 500 payloads; hitting either adds a
+   low "decoding incomplete" marker rather than looking complete. Never
+   executes, imports or unpickles anything; reads files with
+   `ioc_extractor`'s symlink-refusing helpers; every decompression is
+   capped at 1MB. ClamAV only runs here when something was decoded, which
+   costs its ~12s signature load
 5. `filter_noise()` — drops low-value Bandit rules and anything under
    test/docs/example/migration/locale paths; downgrades some high findings to medium.
    Vulnerability findings (Bandit/Semgrep/CVEs) in copied-in code
@@ -138,7 +155,12 @@ by `worker.py` (not inside the web request):
    After filtering, `run_ioc_extraction()` (see `ioc_extractor.py` below) adds any
    threat-intel matches to the findings as `tool="threat_intel"`.
 6. `calculate_risk()` — weights high/medium(capped 30)/low(capped 20) into a score,
-   maps score to `Safe/Low/Medium/High/Critical`
+   maps score to `Safe/Low/Medium/High/Critical`. "Safe" is the stored value
+   only: every page, the printable report, the extension popup and the LLM
+   prompt show it through `scanner.level_label()` as **"Nothing found"**
+   (Jinja: `{{ level | level_label }}`), because a static scan cannot show a
+   repository is safe. CSS classes, thresholds, the DB and the extension API
+   keep `Safe`. A new template that prints a level must use the filter
 7. `save_to_db()` — upserts into `repositories`, replaces `scan_results` and
    `risk_scores` for that repo, appends a `scan_history` row for trend charts
 8. temp clone directory is always removed in a `finally` block
@@ -310,7 +332,7 @@ showing an unexplained spinner. The page polls `/api/scan-status/<job_id>`
 every 2s and must keep polling while `status` is `queued` *or* `running`; a
 queued job that is not polled looks frozen forever. Laid out like the report
 page (eyebrow + `owner / name` header, `console-panel`s): a "Now" panel
-with the live stage in large type, "Step n of 14 · m:ss elapsed" and the
+with the live stage in large type, "Step n of 15 · m:ss elapsed" and the
 queue notice, beside the progress track. The eyebrow, step counter and
 queue notice all switch with state (queued / running / failed) without a
 reload. The track's `data-stage` values must match `scanner.py`'s

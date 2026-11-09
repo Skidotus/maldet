@@ -11,6 +11,7 @@ from db_connect import DB_PORT
 from dep_checker import check_dependencies
 import ioc_extractor
 import llm_summary
+import payload_decoder
 
 HEADERS   = {"Authorization": f"token {GITHUB_TOKEN}"} #recall token later
 # Not a hardcoded "/tmp/..." literal: gettempdir() honours TMPDIR, which is
@@ -1372,6 +1373,71 @@ def save_to_db(repo_info, findings, high, medium, low, score, level, category_ri
 #IOC extraction
 
 
+#Hidden payloads — decode encoded layers, then run the malware engines on them
+
+HIDDEN_PREFIX = "Hidden payload: "
+
+
+def run_decoded_payloads(path, findings):
+    """YARA and ClamAV over code a repository hides behind encoding layers.
+
+    payload_decoder writes every decoded layer that looks like code (or like
+    an executable) to a scratch directory; the engines scan that, and each
+    match is reported against the original file and line, with the decoding
+    chain and the decoded text as the snippet. A match is dropped when the
+    same rule already fired on the same file in plain sight, so a payload
+    YARA could already read is not counted twice.
+
+    Like every engine, it can only lose its own results: a failure prints and
+    returns what it has rather than failing the scan."""
+    print("  Decoding hidden payloads...")
+    results = []
+    out_dir = None
+    try:
+        out_dir = tempfile.mkdtemp(prefix="payloads_", dir=ensure_scratch_dir(CLONE_DIR))
+        decoded = payload_decoder.extract_payloads(path, out_dir, is_ignored=is_ignored_path)
+        payloads = decoded["payloads"]
+        print(f"    Decoded {len(payloads)} payloads from {decoded['files_read']} files "
+              f"({decoded['status']}{', ' + decoded['note'] if decoded['note'] else ''})")
+        if decoded["status"] == "partial":
+            results.append({
+                "tool":         "yara",
+                "severity":     "low",
+                "issue_text":   (f"{HIDDEN_PREFIX}decoding incomplete ({decoded['note']}), "
+                                 "so some encoded strings in this repository were not checked."),
+                "filename":     "",
+                "line_number":  0,
+                "code_snippet": "",
+            })
+        if not payloads:
+            return results
+        seen = {(f["issue_text"], f["filename"]) for f in findings}
+        for f in run_yara(out_dir) + run_clamav(out_dir):
+            info = payloads.get(os.path.basename(f["filename"]))
+            if info is None:
+                if not f["filename"]:   # YARA's "scan incomplete" marker
+                    f["issue_text"] = HIDDEN_PREFIX + f["issue_text"]
+                    results.append(f)
+                continue
+            if (f["issue_text"], info["filename"]) in seen:
+                continue
+            seen.add((f["issue_text"], info["filename"]))
+            results.append({
+                **f,
+                "issue_text":   HIDDEN_PREFIX + f["issue_text"],
+                "filename":     info["filename"],
+                "line_number":  info["line"],
+                "code_snippet": f"[decoded: {info['chain']}]\n{info['preview']}",
+            })
+    except Exception as e:
+        print(f"    Payload decoding error: {type(e).__name__}: {e}")
+    finally:
+        if out_dir:
+            shutil.rmtree(out_dir, ignore_errors=True)
+    print(f"    Hidden payloads: {len(results)} new matches")
+    return results
+
+
 def run_ioc_extraction(path, findings):
     """Indicators of compromise for this scan. Like every other engine it can
     only ever lose its own results: any failure comes back as status 'failed',
@@ -1431,6 +1497,9 @@ def scan_repo(repo, archive_password="infected", on_progress=None):
 
         report("Running GuardDog")
         findings += run_guarddog(path)
+
+        report("Decoding hidden payloads")
+        findings += run_decoded_payloads(path, findings)
 
         report("Checking dependencies")
         findings += check_dependencies(path)
