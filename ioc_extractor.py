@@ -395,13 +395,44 @@ def _safe_path(root, rel):
         return None
 
 
+def _utf16_encoding(raw):
+    """"utf-16" / "utf-16-le" / "utf-16-be" if `raw` is UTF-16 text, else None.
+
+    UTF-16 stores plain English with a zero byte beside every letter, so a
+    zero-byte check alone files it with the binaries. Windows PowerShell
+    saves scripts this way, which made a UTF-16 dropper unreadable here.
+    Without a byte-order mark it is recognised by its shape: in text that is
+    mostly ASCII, one of every two bytes is zero and the other almost never is.
+    Binary formats do not keep that up for 8KB."""
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return "utf-16"
+    sample = raw[:8192]
+    if len(sample) < 16:
+        return None
+    sample = sample[:len(sample) // 2 * 2]
+    even, odd = sample[0::2], sample[1::2]
+    def zero_share(half):
+        return half.count(0) / len(half)
+    if zero_share(odd) >= 0.9 and zero_share(even) <= 0.05:
+        return "utf-16-le"
+    if zero_share(even) >= 0.9 and zero_share(odd) <= 0.05:
+        return "utf-16-be"
+    return None
+
+
 def _read_text(full):
-    """File contents as text, or None for binaries and anything over the limit."""
+    """File contents as text, or None for binaries and anything over the limit.
+    UTF-16 text (see _utf16_encoding) is decoded rather than refused."""
     if os.path.getsize(full) > MAX_TEXT_BYTES:
         return None
     with open(full, "rb") as handle:
         raw = handle.read(MAX_TEXT_BYTES + 1)
-    if len(raw) > MAX_TEXT_BYTES or b"\0" in raw[:8192]:
+    if len(raw) > MAX_TEXT_BYTES:
+        return None
+    encoding = _utf16_encoding(raw)
+    if encoding:
+        return raw.decode(encoding, errors="replace")
+    if b"\0" in raw[:8192]:
         return None
     return raw.decode("utf-8", errors="replace")
 

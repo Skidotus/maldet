@@ -109,6 +109,14 @@ class ExtractPayloadTests(unittest.TestCase):
         with open(os.path.join(self.out, name)) as handle:
             self.assertEqual(handle.read(), SHELL)
 
+    def test_utf16_file_is_decoded(self):
+        full = os.path.join(self.repo, "drop.ps1")
+        with open(full, "wb") as handle:
+            handle.write(f'iex ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("{b64(SHELL)}")))'
+                         .encode("utf-16"))
+        result = pd.extract_payloads(self.repo, self.out)
+        self.assertEqual([i["filename"] for i in result["payloads"].values()], ["/drop.ps1"])
+
     def test_symlink_ignored_path_and_skipped_extension_are_not_read(self):
         outside = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False)
         outside.write(f'exec(base64.b64decode("{b64(SHELL)}"))\n')

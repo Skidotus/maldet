@@ -802,6 +802,14 @@ data, not guesses.
    `ioc_extractor._read_text()` (so also the payload decoder) skips any file with a zero
    byte. Fix: add `ascii wide` to the rule strings, and decode UTF-16 (with or without a
    byte-order mark) before reading text. Small, and a proven gap.
+   **Done 2026-11-09.** All 100 `rules.yar` strings are `ascii wide`, and
+   `_read_text()` decodes UTF-16 (byte-order mark, or the "every other byte is zero"
+   shape over the first 8KB). Over the 43 trial repos: 342 matches before, 343 after;
+   the one new match is a UTF-16 PowerShell stage in InQuest's malware samples, and the
+   clean repos are unchanged. Not slower; peak memory 89MB to 115MB. The YARA tests now
+   check every sample, positive and negative, in UTF-8 and two UTF-16 forms.
+   *In plain words:* MalDet can now read scripts saved in the "zero between every
+   letter" format, so changing how a file is saved no longer hides it.
 
 3. **One clue should not raise a serious alarm** (FlatScan `correlation.go`). FlatScan
    groups clues (credential dumping needs clues from several separate groups, not just

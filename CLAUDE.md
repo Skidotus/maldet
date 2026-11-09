@@ -108,7 +108,11 @@ by `worker.py` (not inside the web request):
    score maps to severity (75+ high), `HKTL_` rules are medium and labelled
    `[hacking tool]`. The `rules.yar` rules require their two halves to be
    connected (nested or on adjacent lines), not merely in the same file —
-   the file-wide versions fired in up to 55% of repos. Changing a rule's
+   the file-wide versions fired in up to 55% of repos. Every `rules.yar`
+   string is `ascii wide`, so rules also match UTF-16 text (PowerShell's
+   habit); the tests check each sample in UTF-16 too, so keep the modifier
+   on any new string. `ioc_extractor._read_text()` (shared by the payload
+   decoder) decodes UTF-16 instead of refusing it as binary. Changing a rule's
    description changes its `issue_text`, which is the classifier's
    rule-frequency key, so retrain after editing descriptions.
    Each rule set has `MALDET_YARA_TIMEOUT` (default 300s). A timeout keeps

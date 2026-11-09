@@ -16,21 +16,28 @@ RULES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 class RuleTestCase(unittest.TestCase):
     rule = None
 
-    def fires(self, content):
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
-            handle.write(content)
+    def fires(self, content, encoding="utf-8"):
+        """encoding "utf-16" writes a byte-order mark, "utf-16-le" does not:
+        Windows PowerShell saves scripts both ways."""
+        with tempfile.NamedTemporaryFile("wb", suffix=".txt", delete=False) as handle:
+            handle.write(content.encode(encoding))
         self.addCleanup(os.unlink, handle.name)
         result = subprocess.run(["yara", RULES, handle.name], capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         return any(line.split()[0] == self.rule for line in result.stdout.splitlines())
 
     def assert_fires(self, *samples):
+        """Every positive sample must also fire saved as UTF-16, with and
+        without a byte-order mark. Without `ascii wide` on the rule strings,
+        a script saved that way matched none of them."""
         for sample in samples:
-            self.assertTrue(self.fires(sample), sample)
+            for encoding in ("utf-8", "utf-16", "utf-16-le"):
+                self.assertTrue(self.fires(sample, encoding), f"{encoding}: {sample}")
 
     def assert_quiet(self, *samples):
         for sample in samples:
-            self.assertFalse(self.fires(sample), sample)
+            for encoding in ("utf-8", "utf-16", "utf-16-le"):
+                self.assertFalse(self.fires(sample, encoding), f"{encoding}: {sample}")
 
 
 class ReverseShellRule(RuleTestCase):

