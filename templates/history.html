@@ -54,11 +54,11 @@
                 </td>
                 {% set t = trust_for(repo) %}<td data-label="Trust">{% if t %}<span class="trust-chip score-{{ t.level | lower }}" title="Trust score out of 100 (not a probability)">{{ t.trust }}<small>/100</small></span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                 <td data-label="Vulnerability"><span class="axis-cell">
-                  <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
+                  <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level | level_label }}</span>
                   <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | round | int }}</span>
                 </span></td>
                 <td data-label="Malicious pattern"><span class="axis-cell">
-                  <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
+                  <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level | level_label }}</span>
                   <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | round | int }}</span>
                 </span></td>
                 <td class="text-muted td-date text-nowrap">{% if repo.scanned_at %}{{ repo.scanned_at.strftime('%d %b %Y') }}<span class="d-block small">{{ repo.scanned_at.strftime('%H:%M') }}</span>{% else %}&mdash;{% endif %}</td>

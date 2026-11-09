@@ -1001,6 +1001,21 @@ def _level_for(score, thresholds):
     elif score <= high_max: return "High"
     else:                   return "Critical"
 
+
+# What a visitor reads for each stored level. Only "Safe" differs. A static
+# scan can fail to find problems; it cannot show that a repository is safe
+# (code can be packed, staged, fetched at run time, or simply new to every
+# rule), so the lowest band says what actually happened. Idea from FlatScan,
+# whose lowest band reads "No strong indicators. Not a clean verdict."
+# The stored value stays "Safe": thresholds, the database, the extension API
+# and the evaluation scripts all key on it, and renaming it would mean
+# migrating every saved scan for a change that is only ever about wording.
+LEVEL_LABELS = {"Safe": "Nothing found"}
+
+
+def level_label(level):
+    return LEVEL_LABELS.get(level, level)
+
 # Calibrated separately per axis against real data (calibrate_thresholds.py)
 # — malicious_pattern findings are far lower-volume than vulnerability ones
 # (bandit/semgrep dominate raw counts), so reusing the blended thresholds

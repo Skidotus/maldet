@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, R
 import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
-from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category
+from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category, level_label
 from ioc_extractor import IOC_TYPES
 import job_queue
 
@@ -18,6 +18,11 @@ app = Flask(__name__)
 # so without this Flask serves it as a generic download and the one-click
 # install silently becomes "a file appeared in your Downloads folder".
 mimetypes.add_type("application/x-xpinstall", ".xpi")
+
+
+# {{ level | level_label }}: the stored level as a visitor should read it
+# ("Safe" shows as "Nothing found"). CSS classes keep the stored value.
+app.add_template_filter(level_label, "level_label")
 
 
 @app.context_processor

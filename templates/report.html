@@ -143,7 +143,7 @@
 {% if risk %}
 <div class="verdict keep">
   <div class="label">Overall assessment</div>
-  <div class="level lvl-{{ (risk.risk_level or 'safe')|lower }}">{{ risk.risk_level or 'Unknown' }}</div>
+  <div class="level lvl-{{ (risk.risk_level or 'safe')|lower }}">{{ (risk.risk_level | level_label) if risk.risk_level else 'Unknown' }}</div>
   <div class="score">Combined score {{ risk.final_score|round|int if risk.final_score is not none else '—' }}
     &nbsp;·&nbsp; {{ "{:,}".format(total) }} findings after filtering</div>
 </div>
@@ -194,7 +194,7 @@
     <div class="axis">
       <div class="name">Vulnerability</div>
       <div class="val lvl-{{ (risk.vuln_level or 'safe')|lower }}">
-        {{ risk.vuln_level or '—' }}
+        {{ (risk.vuln_level | level_label) if risk.vuln_level else '—' }}
         <span style="font-size:9.5pt;color:var(--muted)">
           ({{ risk.vuln_score|round|int if risk.vuln_score is not none else '—' }})</span>
       </div>
@@ -204,7 +204,7 @@
     <div class="axis">
       <div class="name">Malicious pattern</div>
       <div class="val lvl-{{ (risk.malware_level or 'safe')|lower }}">
-        {{ risk.malware_level or '—' }}
+        {{ (risk.malware_level | level_label) if risk.malware_level else '—' }}
         <span style="font-size:9.5pt;color:var(--muted)">
           ({{ risk.malware_score|round|int if risk.malware_score is not none else '—' }})</span>
       </div>

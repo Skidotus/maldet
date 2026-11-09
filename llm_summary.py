@@ -358,7 +358,14 @@ def _compose_prompt(repo_label, groups, total_findings, vuln, malware, about=Non
     matters when the database is remote: a repo can have tens of thousands
     of findings but only a few dozen distinct (tool, issue_text) groups, and
     only the groups are needed here.
+
+    Levels go in as a visitor reads them ("Nothing found", not "Safe"): a
+    model handed the word "Safe" repeats it, and the page beside the summary
+    deliberately never says it. Imported here for the same circular-import
+    reason as in _rank_groups.
     """
+    from scanner import level_label
+
     top = _select_groups(groups)
 
     lines = []
@@ -392,8 +399,8 @@ def _compose_prompt(repo_label, groups, total_findings, vuln, malware, about=Non
 
 The scan has ALREADY been completed and scored. Two separate scores were produced:
 
-- Vulnerability risk: {vuln['level']} (score {vuln['score']}) — insecure coding patterns that an attacker could exploit. Reported by Bandit and Semgrep.
-- Malicious-pattern risk: {malware['level']} (score {malware['score']}) — signs the code may be intentionally malicious. Reported by YARA, ClamAV, GuardDog and the dependency checker.
+- Vulnerability risk: {level_label(vuln['level'])} (score {vuln['score']}) — insecure coding patterns that an attacker could exploit. Reported by Bandit and Semgrep.
+- Malicious-pattern risk: {level_label(malware['level'])} (score {malware['score']}) — signs the code may be intentionally malicious. Reported by YARA, ClamAV, GuardDog and the dependency checker.
 
 {total_findings} findings survived filtering. The most important kinds, already ranked, are:
 

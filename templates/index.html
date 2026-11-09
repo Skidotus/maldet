@@ -26,7 +26,7 @@
 {% set level_steps = ["Safe", "Low", "Medium", "High", "Critical"] %}
 
 {% macro level_scale(level) -%}
-  <span class="level-scale" role="img" aria-label="Level: {{ level }}">
+  <span class="level-scale" role="img" aria-label="Level: {{ level | level_label }}">
     {%- for step in level_steps %}
       <span class="level-scale__step level-scale__step--{{ step | lower }}{{ ' is-on' if step == level else '' }}"></span>
     {%- endfor %}
@@ -88,7 +88,7 @@
                   <span class="trust-chip score-{{ lt.level | lower }}">{{ lt.trust }}<small>/100</small></span>
                 </div>
                 <div class="trust-meter preview-card__meter" role="img"
-                     aria-label="Trust {{ lt.trust }} out of 100, in the {{ lt.level }} risk band">
+                     aria-label="Trust {{ lt.trust }} out of 100, in the {{ lt.level | level_label }} risk band">
                   <span class="trust-meter__fill trust-meter__fill--{{ lt.level | lower }}" style="width: {{ lt.trust }}%"></span>
                 </div>
               {% endif %}
@@ -96,7 +96,7 @@
                 <div class="axis-panel">
                   <div class="axis-panel__head">
                     <span>Vulnerability</span>
-                    <span class="seal-badge seal-{{ latest.vuln_level | lower }}">{{ latest.vuln_level }}</span>
+                    <span class="seal-badge seal-{{ latest.vuln_level | lower }}">{{ latest.vuln_level | level_label }}</span>
                   </div>
                   <div class="axis-panel__score"><span class="axis-panel__num" data-score="{{ latest.vuln_score | default(0, true) | round | int }}">{{ latest.vuln_score | default(0, true) | round | int }}</span><small>score</small></div>
                   {{ level_scale(latest.vuln_level) }}
@@ -104,7 +104,7 @@
                 <div class="axis-panel">
                   <div class="axis-panel__head">
                     <span>Malicious pattern</span>
-                    <span class="seal-badge seal-{{ latest.malware_level | lower }}">{{ latest.malware_level }}</span>
+                    <span class="seal-badge seal-{{ latest.malware_level | lower }}">{{ latest.malware_level | level_label }}</span>
                   </div>
                   <div class="axis-panel__score"><span class="axis-panel__num" data-score="{{ latest.malware_score | default(0, true) | round | int }}">{{ latest.malware_score | default(0, true) | round | int }}</span><small>score</small></div>
                   {{ level_scale(latest.malware_level) }}
@@ -155,7 +155,7 @@
         <div class="stat-card stat-card--split">
           <div class="stat-card__label">Worst verdict per repository</div>
           <ul class="verdict-tally">
-            <li><span class="dot dot--safe"></span>Safe<b>{{ safe }}</b></li>
+            <li><span class="dot dot--safe"></span>{{ "Safe" | level_label }}<b>{{ safe }}</b></li>
             <li><span class="dot dot--low"></span>Low<b>{{ low }}</b></li>
             <li><span class="dot dot--medium"></span>Medium<b>{{ medium }}</b></li>
             <li><span class="dot dot--high"></span>High<b>{{ high }}</b></li>
@@ -212,7 +212,7 @@
             <li><span class="pipeline__n">02</span><div><b>Unpack</b><span>Archives are extracted, including password-protected ones.</span></div></li>
             <li><span class="pipeline__n">03</span><div><b>Detect</b><span>Six engines inspect code, files and dependencies.</span></div></li>
             <li><span class="pipeline__n">04</span><div><b>Triage</b><span>The classifier separates likely-real findings from noise.</span></div></li>
-            <li><span class="pipeline__n">05</span><div><b>Score</b><span>Two risk levels, from Safe to Critical, saved to your history.</span></div></li>
+            <li><span class="pipeline__n">05</span><div><b>Score</b><span>Two risk levels, from {{ "Safe" | level_label }} to Critical, saved to your history.</span></div></li>
           </ol>
         </div>
       </div>
@@ -470,11 +470,11 @@
                     <td class="td-hide-sm d-none d-xl-table-cell">{% if repo.language %}{{ repo.language }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                     {% set t = trust_for(repo) %}<td data-label="Trust">{% if t %}<span class="trust-chip score-{{ t.level | lower }}" title="Trust score out of 100 (not a probability)">{{ t.trust }}<small>/100</small></span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
                     <td data-label="Vulnerability"><span class="axis-cell">
-                      <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level }}</span>
+                      <span class="seal-badge seal-{{ repo.vuln_level | lower }}">{{ repo.vuln_level | level_label }}</span>
                       <span class="score-{{ repo.vuln_level | lower }}">{{ repo.vuln_score | default(0, true) | round | int }}</span>
                     </span></td>
                     <td data-label="Malicious pattern"><span class="axis-cell">
-                      <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level }}</span>
+                      <span class="seal-badge seal-{{ repo.malware_level | lower }}">{{ repo.malware_level | level_label }}</span>
                       <span class="score-{{ repo.malware_level | lower }}">{{ repo.malware_score | default(0, true) | round | int }}</span>
                     </span></td>
                     <td class="text-muted text-nowrap td-date">{{ repo.scanned_at.strftime('%d %b %Y') if repo.scanned_at else '—' }}</td>

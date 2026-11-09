@@ -9,7 +9,7 @@
    --------------------------------------------------------------- #}
 {% set level_steps = ["Safe", "Low", "Medium", "High", "Critical"] %}
 {% set level_meaning = {
-  "Safe":     "No issues of this kind were found.",
+  "Safe":     "No engine flagged anything of this kind. That is not proof the code is safe: a static scan only finds what its rules recognise.",
   "Low":      "Minor issues. Worth a glance, unlikely to be urgent.",
   "Medium":   "Real issues worth reviewing before you rely on this code.",
   "High":     "Serious issues. Review the high-severity findings before using it.",
@@ -28,7 +28,7 @@
 {% macro engine_name(tool) -%}{{ engines[tool][0] if tool in engines else tool }}{%- endmacro %}
 
 {% macro level_scale(level) -%}
-  <span class="level-scale" role="img" aria-label="Level {{ level }} on a scale from Safe to Critical">
+  <span class="level-scale" role="img" aria-label="Level {{ level | level_label }} on a scale from {{ 'Safe' | level_label }} to Critical">
     {%- for step in level_steps %}
       <span class="level-scale__step level-scale__step--{{ step | lower }}{{ ' is-on' if step == level else '' }}"></span>
     {%- endfor %}
@@ -42,7 +42,7 @@
   <section class="console-panel verdict" data-resolve aria-label="{{ title }} verdict">
     <header class="console-panel__head">
       <span class="console-panel__title">{{ title }}</span>
-      <span class="seal-badge seal-{{ level | lower }}">{{ level }}</span>
+      <span class="seal-badge seal-{{ level | lower }}">{{ level | level_label }}</span>
     </header>
     <p class="verdict__question">{{ question }}</p>
     <div class="verdict__score">
@@ -157,13 +157,13 @@
     </div>
     <div class="trust-panel__body">
       <div class="trust-meter" role="img"
-           aria-label="Trust {{ t.trust }} out of 100, in the {{ t.level }} risk band">
+           aria-label="Trust {{ t.trust }} out of 100, in the {{ t.level | level_label }} risk band">
         <span class="trust-meter__fill trust-meter__fill--{{ t.level | lower }}" style="width: {{ t.trust }}%"></span>
         {% for edge in [25, 50, 70] %}<span class="trust-meter__tick" style="left: {{ edge }}%"></span>{% endfor %}
       </div>
       <p class="trust-panel__why">
         {% if t.limited_by is none %}
-          No engine found anything of note.
+          No engine found anything of note. That is not proof the code is safe, only that nothing matched.
         {% elif t.limited_by == "malicious_pattern" %}
           Held down by <strong>malicious-pattern</strong> findings: signs the code may be trying to cause harm.
         {% elif t.vuln_floored %}
