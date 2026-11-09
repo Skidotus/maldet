@@ -1,19 +1,33 @@
 # MalDet — Project Notes
 
-Snapshot as of 2026-09-22. Written for the FYP report / your own reference —
-update as things change rather than treating this as a one-time record.
+Written for the FYP report / your own reference — update as things change
+rather than treating this as a one-time record. The two "current state" lists
+just below were brought up to date on **2026-11-09** (they had been left at
+2026-09-22, and several of their disadvantages had since been fixed). Every
+dated "What's improved" section further down is a record as of its own date:
+read a figure there together with its date.
 
 ## Advantages (current state)
 
 - **Real aggregation value, actually working end-to-end.** Bandit, Semgrep,
-  YARA, ClamAV, and dep_checker all run and get reduced to two scored axes
-  and verdicts — the core positioning claim in PRODUCT.md is real, not
-  aspirational.
-- **Tested against real data, not a toy demo.** The live DB has 155 scanned
-  repos and ~235K findings. Every fix has been verified against that real
-  data, not just unit-tested in isolation — including several bugs that were
-  only findable by querying the corpus (see the IGNORE_PATHS and dep_checker
-  parsing fixes below).
+  YARA (MalDet's behaviour rules plus YARA Forge), ClamAV, GuardDog and
+  dep_checker all run and get reduced to two scored axes and verdicts, plus a
+  trust score out of 100 — the core positioning claim in PRODUCT.md is real,
+  not aspirational.
+- **Deployed and public.** The site runs on a 4GB VPS behind Apache with
+  HTTPS: gunicorn for the web app, one scan worker, MySQL, all in Docker. As
+  of 2026-11-09 it holds 196 repositories.
+- **Looks past the surface.** Code hidden as base64/hex/compressed strings is
+  decoded and re-scanned (17 files in the 43-repo trial no engine had seen),
+  UTF-16 scripts are read, and rule files and blocklists are recognised as
+  references rather than threats. Each was measured both ways: new finds in
+  offensive repos, and no new false alarms in 23 popular clean ones.
+- **Tested against real data, not a toy demo.** Every fix has been verified
+  against the real corpus, not just unit-tested in isolation — including
+  several bugs that were only findable by querying it (see the IGNORE_PATHS
+  and dep_checker parsing fixes below) — and 153 automated tests now pin the
+  behaviour down (IOC extraction, every YARA rule both ways and in UTF-16,
+  the payload decoder, reference files, scoring, CSRF, the rescan route).
 - **The classifier now has a ground-truth-backed number, not just
   self-grading.** A 168-finding hand-reviewed set (`eval_sample.json`) gives
   precision 0.52 / recall 0.62 / F1 0.56, against a 0.28 baseline for
@@ -24,9 +38,10 @@ update as things change rather than treating this as a one-time record.
 - **Complete, cohesive UI.** Dashboard, New Scan, Detail, History, and the
   scan-status page all exist and follow one considered design system
   (wax-seal risk badges, ledger layout) — not a default Bootstrap look.
-- **Background scan execution with persistent status.** Scans run in a
-  background thread with a pollable status page — refreshing or navigating
-  away no longer loses track of an in-progress scan.
+- **A real scan queue.** Scans are rows in `scan_jobs`, run by one worker
+  process, with a status page that polls and tells a visitor how many scans
+  are ahead of theirs. Refreshing, closing the tab or restarting the web app
+  loses nothing; a worker crash is recovered at its next start.
 - **Resilient to real edge cases found via testing:** a 157K-finding repo
   renders safely instead of crashing the browser; clone timeouts clean up
   after themselves instead of leaving partial data on disk; malformed
@@ -54,32 +69,27 @@ update as things change rather than treating this as a one-time record.
   and other ecosystems aren't parsed yet — Python (`requirements.txt`,
   `pyproject.toml`, Poetry, Pipfile, lock file) and Node (`package.json`,
   including install-hook scripts) are covered.
-- **No automated test suite.** Every fix has been verified by manual/live
-  testing against the real app and DB — thorough, but not repeatable or
-  regression-proof going forward. The IGNORE_PATHS bug is the clearest
-  argument for one: it survived in two separate copies of the same logic for
-  six weeks, and a single unit test over a handful of paths would have
-  caught it immediately.
-- **In-memory scan job tracking.** Job status lives in a process-lifetime
-  dict; a server restart kills any in-progress scan and forgets its status.
-  (The dev auto-reloader used to do this on every `.py` save; `use_reloader`
-  is now pinned off for exactly that reason, so this is down to deliberate
-  restarts only.)
-- **Existing scan data is missing findings the IGNORE_PATHS bug discarded.**
-  The fix only affects new scans — findings dropped at scan time were never
-  stored. Recovering them for the 155 repos already scanned needs a full
-  rescan (hours of re-cloning), not the partial `rescan_yara_dep.py` path.
-  Findings in `Dockerfile`/`docker-compose.yml` are the notable gap.
-- **ClamAV has produced zero real hits** across all scanned repos — expected,
-  since it's built for compiled malware, not source code, but worth being
-  honest that this engine's contribution is currently unproven on this
-  workload.
-- **LLM plain-English summary is still unbuilt.** The rule-based version in
-  `app.py:build_findings_summary` covers the need for now and is shaped as a
-  drop-in replacement target. The Ollama-vs-hosted-API ambiguity is at least
-  resolved on the code side: the unused `anthropic` dependency and
-  `CLAUDE_API_KEY` slot are gone, so PRODUCT.md's Ollama/llama3.2 spec is
-  now the only stated intent.
+- **Tests exist, but nothing runs them automatically.** 153 unit and route
+  tests cover the logic that has broken before (the IGNORE_PATHS bug survived
+  six weeks in two copies of the same code; one test over a handful of paths
+  would have caught it). There is no CI, so they run only when someone runs
+  them, and there is no browser-level test of the pages.
+- **Stored results lag behind the scanner.** A report is a snapshot taken by
+  the scanner of its day, so improvements reach a repository only when it is
+  rescanned. On 2026-11-09 every stored result predated that day's changes;
+  a full rescan through the queue was started that day
+  (`rescan_via_queue.py`, see its section below).
+- **ClamAV's contribution is real but narrow.** Earlier versions of this
+  list said it had produced zero hits; that was wrong. In the 2026-11-07
+  trial it flagged 293 files in 10 of 20 offensive repos and none in 23
+  clean ones, mostly compiled samples and archives. On ordinary source code
+  it rarely fires, which is what it is built for.
+- **The AI summary is local-only and imperfect.** Built (Ollama,
+  qwen3.5:2b) and evaluated: 15 of 20 summaries pass all nine mechanical
+  checks, and 2 of 20 still call a repository "safe" in their own words
+  despite a rule against it. The 4GB VPS cannot host the model, so the live
+  site shows the rule-based summary until a laptop running
+  `backfill_summaries.py --watch` writes one into the live database.
 - **Hand labels are AI-assisted, not independent.** The 168-finding
   evaluation set was labeled by AI first-pass with author confirmation, and
   the author agreed with every suggestion. That has to be disclosed wherever
@@ -1055,6 +1065,26 @@ both ways (`tests/test_signatures_and_rescan.py`).
 now updated daily by themselves; and a scan now starts only when someone presses the
 button, not when a bot or a chat app merely looks at the link.
 
+## Full live rescan (started 2026-11-09)
+
+Every result on the live site predated that day's changes (hidden-payload decoding,
+UTF-16 reading, the reference-file guard, IOC extraction, ClamAV 1.4.6), and a stored
+report only improves when its repository is rescanned. So all 196 repositories were
+rescanned on the VPS with `rescan_via_queue.py`.
+
+**Method.** Not `batch_scan.py`, which calls the scanner in its own process: beside the
+VPS worker, a visitor's scan could then run alongside a batch one, and two scans do not
+fit the 4GB host. The new script only *queues* a scan, and only when the queue is empty,
+so the worker stays the single consumer and a visitor waits behind at most one batch
+scan. It snapshots each repository's stored result just before its scan and again after
+(levels, scores, findings per tool and severity, hidden-payload and reference matches,
+files flagged by YARA/ClamAV, IOCs), and skips repositories that are gone from GitHub,
+superseded by a rename, or over the 5,000 MB limit. It ran in its own one-off container
+writing to `/root/rescan-run/` on the VPS host, so a restart of the app could not lose
+its records. A one-repo trial first (psf/requests): queued, scanned in 70s, recorded.
+
+**Results:** to be filled in when the run finishes.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
@@ -1070,7 +1100,8 @@ button, not when a bot or a chat app merely looks at the link.
   `vxunderground/MalwareSourceCode`, `mlflow/mlflow` and
   `juliocesarfort/public-pentesting-reports`, none under 700MB, so an
   overnight job when nothing else needs the memory. Use
-  `rescan_stale_july.txt`, which is ordered smallest first.
+  `rescan_stale_july.txt`, which is ordered smallest first. *(2026-11-09:
+  all three are in the full live rescan started that day; see its section.)*
 - **Done 2026-10-07: `save_to_db()` is atomic.** One transaction from the
   upsert to the history row, with findings inserted in batches of 500 so the
   157K-finding repo is ~4 seconds inside it rather than minutes. See the
@@ -1088,10 +1119,11 @@ button, not when a bot or a chat app merely looks at the link.
   permanently. Either drop them, taking the corpus to 175 and saying why, or
   keep them flagged as frozen at their 2026-07-29 scan. Keeping them is
   defensible if documented; leaving them silently is not.
-- **Automated tests.** Route smoke tests plus unit tests over
-  `is_ignored_path()`, `_parse_pep508_name_version()`, `normalize_severity()`
-  and now `_fit_text()`/`_fit_varchar()` — the places where a silent logic bug
-  has already happened at least once each.
+- **Automated tests: mostly done (153 as of 2026-11-09).** Still missing:
+  unit tests over `is_ignored_path()`, `_parse_pep508_name_version()`,
+  `normalize_severity()` and `_fit_text()`/`_fit_varchar()` (each has had a
+  silent bug once), page-level smoke tests, and CI to run all of it on every
+  push.
 - **Extend dep_checker to other ecosystems** (`go.mod`, `Cargo.toml`, etc.);
   Python and Node are covered.
 - **Done 2026-10-07: the summariser is evaluated.** `evaluate_summaries.py`,
@@ -1111,8 +1143,11 @@ button, not when a bot or a chat app merely looks at the link.
 - **Done (ba2beef, extended 2026-09-23): Dockerised.** `docker compose up`
   brings up MySQL, the web app under gunicorn, and the scan worker. Config
   is env-var driven, `SEMGREP_APP_TOKEN` is passed through, and the ClamAV
-  signature DB lives in a named volume so it downloads once. What remains is
-  running it on the actual VPS, which nothing has yet.
+  signature DB lives in a named volume so it downloads once. *Since then:
+  running on the VPS behind Apache with HTTPS; redeployed from `main` four
+  times on 2026-11-09 (PRs #25-#28), each after a database backup. The
+  worker now refreshes ClamAV signatures daily, since the volume alone kept
+  the first-start set forever.*
 - **Independently confirm a slice of the evaluation labels**, or have a
   groupmate review the ambiguous ones, so the precision/recall figures rest
   on something stronger than AI-suggested labels the author agreed with
@@ -1120,8 +1155,11 @@ button, not when a bot or a chat app merely looks at the link.
 
 ## Limitations (structural, not just "todo")
 
-- **Public-repo-only, no-auth, single-user, local tool** — this is a
-  permanent design constraint per PRODUCT.md, not a gap to close.
+- **Public repositories only, no accounts** — a permanent design constraint
+  per PRODUCT.md, not a gap to close. (This used to say "single-user, local
+  tool"; it has been a public website since it was deployed. Visitors are
+  anonymous, each sees only their own scan via a cookie, and the scan forms
+  carry CSRF tokens.)
 - **The corpus decays, and some of it is unrecoverable.** Repositories are
   controlled by other people: between 2026-09-19 and 2026-10-07, four of the
   corpus were deleted or made private (HTTP 404) and one was renamed. The
@@ -1134,8 +1172,10 @@ button, not when a bot or a chat app merely looks at the link.
   metric over the corpus as it was when scanned, and the scan dates differ
   per repo. Report the dates alongside the numbers.
 
-- **No real concurrency.** Even with background execution, there's no job
-  queue — only one scan realistically runs at a time.
+- **One scan at a time, on purpose.** There is a job queue (`scan_jobs` and
+  one worker), but it never runs two scans together: Semgrep peaks near 2GB
+  and ClamAV near 1GB, and two scans do not fit the 4GB host. A visitor is
+  told how many scans are ahead. More throughput needs more RAM, not code.
 - **Weak-supervised ML is inherently bounded.** *Training* labels are still
   proxies (noise rules + repo-frequency), because hand-labeling 235K
   findings isn't feasible for one person — so the model can only ever be as
@@ -1152,9 +1192,12 @@ button, not when a bot or a chat app merely looks at the link.
   "should I install this?" pre-flight check that's arguable; for an audit
   tool it wouldn't be. Lowering the threshold trades precision back for
   recall and can be re-measured against the same holdout.
-- **No CI/CD or staging environment.** Changes are validated against the
-  live dev DB/app directly — reasonable for an FYP, not how a production
-  deployment would work.
+- **No CI/CD or staging environment.** Tests run by hand and deploys are
+  manual (`git pull && docker compose up -d --build` after a database
+  backup). Risky image changes were trial-built on the VPS under a separate
+  name first (the ClamAV 1.4.6 image, 2026-11-09), but there is no staging
+  copy of the site — reasonable for an FYP, not how a production deployment
+  would work.
 - **Detection breadth is capped by what's on PATH and the hand-authored
   rules** (`rules.yar`, `dep_checker`'s pattern lists). Genuinely novel or
   non-Python-centric attack patterns can slip through by design, not by

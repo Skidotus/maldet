@@ -59,7 +59,9 @@ looks like a clean scan — verify it runs rather than assuming.
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
-Tests cover IOC extraction and two YARA rules so far:
+153 tests (2026-11-09) cover IOC extraction, every `rules.yar` rule both ways
+and in UTF-16, the payload decoder, reference files, scoring, the
+"Nothing found" label, signature refresh, CSRF and the rescan route:
 `python3 -m unittest discover -s tests -t .` (stdlib, needs no database or network;
 `test_ioc_scoring.py` imports `scanner.py`, so `config.py` must exist, and
 `test_yara_rules.py` skips if `yara` is not installed). When changing a rule, test
