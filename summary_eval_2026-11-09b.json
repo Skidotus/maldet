@@ -1,0 +1,206 @@
+{
+  "model": "qwen3.5:2b",
+  "mode": "generate",
+  "scored": 20,
+  "clean": 15,
+  "failures_by_check": {
+    "claims_safety": 2,
+    "format_sentence_count": 3
+  },
+  "results": [
+    {
+      "repo": "byt3bl33d3r/CrackMapExec",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Medium",
+      "summary": "This repository has been flagged by automated security tools as having very high vulnerability risks and signs of potentially malicious code, with scores reaching 1873.0 and 28.0 respectively, indicating that the code contains dangerous patterns and known security flaws rather than just normal mistakes. The most serious issues involve using shell commands like subprocess.call which can leak system settings, and several critical vulnerabilities in specific libraries such as Pillow and urllib3 that could allow attackers to exploit side-channel attacks or heap overflows. While some findings are related to malware detection rules like YARA signatures for credential dumping or persistence mechanisms, these appear to be triggered by the code's execution rather than intentional malicious intent within the source itself. The scan also identified supply chain risks due to missing version pins for dependencies like impacket and oscrypto, which could introduce unexpected vulnerabilities if updated later.",
+      "failures": {},
+      "seconds": 45.9
+    },
+    {
+      "repo": "aws/eks-anywhere",
+      "risk": "High",
+      "vuln_level": "High",
+      "malware_level": "Low",
+      "summary": "This repository has a high vulnerability score of 291.0, which means there are several serious coding errors and weak practices that an attacker could easily exploit to break the system. The most critical issues involve missing code locks that could cause crashes, hardcoded AWS secrets that leak in plain text, and commands that run with root privileges instead of a specific user. While some findings like private keys or downloading scripts look suspicious, they are likely just ordinary mistakes rather than intentional malicious intent. Other medium-level risks include potential security flaws in how the pod shares network namespaces and missing protections for session cookies. Because these issues stem from common programming habits and misconfigurations, the codebase is not safe to use without significant refactoring by a security expert.",
+      "failures": {},
+      "seconds": 37.7
+    },
+    {
+      "repo": "adminlove520/Poc-Monitor_v1.0.1",
+      "risk": "Low",
+      "vuln_level": "Low",
+      "malware_level": "Safe",
+      "summary": "This repository has a low vulnerability score of 20.0, which means there are some insecure coding patterns in the code that could potentially be exploited by an attacker. However, the scan found nothing malicious, so there is no evidence of intentional bad behavior or hidden threats. The only finding reported is that Facebook OAuth was detected twice, but this is a common pattern used for logging user activity rather than a security risk. Because these issues are standard practices in modern software development, they do not make the code unsafe to use.",
+      "failures": {},
+      "seconds": 15.0
+    },
+    {
+      "repo": "Alexey-T/CudaText",
+      "risk": "Medium",
+      "vuln_level": "Medium",
+      "malware_level": "Low",
+      "summary": "The code in this repository has a medium vulnerability score of 67, which means there are several insecure coding patterns that an attacker could potentially exploit if the project is used. These issues are mostly related to how the code handles user input and system commands, such as starting processes with shell access or using weak hash functions like MD5 and SHA1. While some of these problems appear to be intentional obfuscation attempts rather than malicious attacks, they still represent significant security risks that should be addressed before the software is deployed. The scan also identified a few low-priority issues, including hardcoded passwords and missing timeouts for external requests, but these are not considered critical enough to change the overall risk level.",
+      "failures": {},
+      "seconds": 30.4
+    },
+    {
+      "repo": "aimeos/pagible",
+      "risk": "Safe",
+      "vuln_level": "Safe",
+      "malware_level": "Safe",
+      "summary": "The security scan found no dangerous vulnerabilities or malicious patterns in this codebase, which means there are currently no known exploits or signs of bad intent detected by its rules. The only issue reported is a loose version constraint for the Playwright library, which allows attackers to push malicious updates if they control the package registry. This specific finding does not indicate that the code is inherently unsafe; rather, it suggests that developers should be cautious about updating this dependency without verifying the new versions themselves. Because the scan found nothing of the kind that would cause harm, the repository can be considered safe to use for now, provided the developer manually checks the latest version of Playwright before installing it.",
+      "failures": {
+        "claims_safety": [
+          "safe to use"
+        ]
+      },
+      "seconds": 13.8
+    },
+    {
+      "repo": "mlflow/mlflow",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Critical",
+      "summary": "The repository has two critical risks: one indicates that code was executed using user-controlled input, which could allow an attacker to run dangerous commands like shell scripts or execute arbitrary code on the server. Another risk suggests the use of FTP for file transfers, which is insecure and should be replaced with encrypted methods like SSH or SFTP. While some findings point to potential malicious intent, most appear to be standard security issues related to outdated Python versions, unencrypted protocols, and missing version pins rather than intentional attacks. The scan found 33890 total findings, but only a small number of the highest priority ones were flagged as critical or high severity. Developers should address the command injection vulnerability by ensuring variables are properly validated before being passed to process builders, and switch FTP usage to secure alternatives immediately. Additionally, teams should update their codebase to use importlib_resources for Python 3.7+ compatibility and pin all dependencies to prevent supply chain risks.",
+      "failures": {
+        "format_sentence_count": 6
+      },
+      "seconds": 36.3
+    },
+    {
+      "repo": "Psiphon-Labs/psiphon-tunnel-core",
+      "risk": "High",
+      "vuln_level": "High",
+      "malware_level": "Medium",
+      "summary": "The code in this repository has a high vulnerability score of 258, which means there are serious security issues that could be exploited by attackers if the code is used. These problems are mostly caused by poor coding habits rather than intentional malicious intent, as many of them involve missing safety checks like mutex locks or using weak encryption algorithms such as DES. While some findings suggest the code might contain hidden malware or suspicious links, the majority of the issues stem from standard programming errors that could be fixed with simple updates to the source files. Because these are known insecure patterns rather than new malicious behaviors, the repository is not safe to use without applying specific security patches before deployment.",
+      "failures": {},
+      "seconds": 22.6
+    },
+    {
+      "repo": "pallets/flask",
+      "risk": "Low",
+      "vuln_level": "Low",
+      "malware_level": "Low",
+      "summary": "This repository has a low overall vulnerability score of 18.0, which means there are some insecure coding patterns that an attacker could exploit if they knew how to use them. The scan also found a very low malicious-pattern score of 2.0, indicating that the code does not appear to be intentionally harmful or designed to cause damage. Most of the issues identified are standard security mistakes rather than signs of malicious intent, such as using unescaped HTML tags or relying on weak hash algorithms like SHA1. While these problems could be dangerous if exploited by a skilled attacker, they represent ordinary insecure coding practices that should be fixed for better safety. The codebase also contains several packages with loose version constraints, which means attackers might push updates to those libraries to introduce new vulnerabilities. However, the scan did not find any evidence of malicious patterns or exploits in the actual code itself.",
+      "failures": {
+        "format_sentence_count": 6
+      },
+      "seconds": 20.5
+    },
+    {
+      "repo": "t3l3machus/Villain",
+      "risk": "Medium",
+      "vuln_level": "Medium",
+      "malware_level": "High",
+      "summary": "The repository shows two distinct levels of risk: a medium vulnerability score of 28.0 and a high malicious-pattern score of 51.0, which means the code contains several dangerous techniques that could be used to harm someone. The most serious issues are reverse shell commands and download-and-execute scripts, which allow attackers to take full control of a system or steal data immediately. While some findings like weak MD5 hashes and unpinned dependencies represent ordinary coding mistakes rather than intentional attacks, the presence of these specific tools strongly suggests the code is designed for malicious purposes. Because of this high malicious-pattern score, you should not trust this repository as safe to use without further investigation or blocking it entirely.",
+      "failures": {},
+      "seconds": 19.6
+    },
+    {
+      "repo": "anchore/scan-action",
+      "risk": "Safe",
+      "vuln_level": "Safe",
+      "malware_level": "Safe",
+      "summary": "The security scan found no dangerous vulnerabilities or signs of malicious intent in this repository, resulting in a vulnerability risk score of 0.0 and a malicious-pattern risk score of 0.0. The only issues identified are loose version constraints for various packages like eslint, prettier, and lodash, which could theoretically allow attackers to push malicious updates if the versions were updated later. These findings represent ordinary insecure coding practices rather than evidence of intentional harm or hidden malware within the code itself. Because the scan only reports what its specific rules detect, it is important to note that these loose constraints do not necessarily mean the repository is unsafe in practice. Developers should review the package.json file to see which versions are currently listed and consider updating them to more secure defaults if they can control the project's dependencies.",
+      "failures": {},
+      "seconds": 17.8
+    },
+    {
+      "repo": "hongbo-miao/hongbomiao.com",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "Medium",
+      "summary": "This repository has two major security issues: it contains code that could let attackers bypass file system protections by using paths from user input, and it uses unencrypted connections to external services like gRPC. Additionally, the code exposes secrets such as AWS keys, GitHub tokens, and generic API keys directly in files rather than keeping them hidden or passing them securely through workflows. While some of these issues are flagged as potentially malicious, most appear to be standard insecure coding practices that an attacker could exploit if they manage to get access to the source code itself. The scan did not find any evidence of sophisticated steganography used to hide malicious code, but it did identify several patterns related to downloading and executing scripts, which should be reviewed carefully. Because these findings are based on automated rules rather than human judgment, the developer should treat them as a strong warning that requires immediate attention before deploying the application in production.",
+      "failures": {},
+      "seconds": 34.4
+    },
+    {
+      "repo": "ConardLi/easy-dataset",
+      "risk": "High",
+      "vuln_level": "High",
+      "malware_level": "Low",
+      "summary": "This repository has a high vulnerability score of 275.0, which means there are several insecure coding patterns in the code that an attacker could exploit to cause problems. The scan also found some signs of malicious intent with a low score of 1.0, though these appear to be unintentional issues rather than deliberate attacks. Most of the critical findings relate to how developers handle file paths and network connections, such as allowing users to write outside intended directories or using unencrypted HTTP servers instead of HTTPS. Additionally, there are several loose version constraints in the package dependencies that could potentially allow attackers to push malicious updates if they control those packages. While some code issues look like standard mistakes rather than intentional sabotage, the combination of these vulnerabilities suggests the repository should not be used until they are fixed by the maintainers.",
+      "failures": {},
+      "seconds": 23.5
+    },
+    {
+      "repo": "hatchet-dev/hatchet",
+      "risk": "Low",
+      "vuln_level": "Safe",
+      "malware_level": "Medium",
+      "summary": "The developer should be cautious because the code contains two types of patterns that could potentially harm users, though they are not necessarily malicious. The most significant finding is a YARA rule that detected piping downloaded scripts directly into a shell command, which is common in legitimate software installation tools but still represents a security risk if used incorrectly. Additionally, another rule flagged the presence of shell startup files like .bashrc or .zshrc, which is also typical for installers but indicates an attempt to modify system behavior. While these patterns are widely used by developers and do not prove intent to harm, their presence means the repository cannot be considered safe without further review. The scan reported a malicious-pattern risk score of 19.0, which reflects the severity of these detected issues rather than confirming that the code is intentionally harmful.",
+      "failures": {},
+      "seconds": 16.3
+    },
+    {
+      "repo": "coderaiser/cloudcmd",
+      "risk": "Medium",
+      "vuln_level": "Medium",
+      "malware_level": "Low",
+      "summary": "The repository has a medium vulnerability score of 65, which means there are several insecure coding patterns in the code that an attacker could potentially exploit to cause problems or gain access. These issues are mostly caused by developers using regular expressions with arguments like prefix, char, ext, and wildcard without proper protection, which can slow down your application's performance or crash it under attack. Additionally, there is a low score of 12 indicating some code might be intentionally malicious, but the scan also found that a service named 'web' allows for privilege escalation via setuid or setgid binaries and runs with a writable root filesystem, which could let attackers modify files inside your container. The most concerning issues are related to Docker configuration where scripts are piped directly into a shell and the container has no user restriction, but these findings do not necessarily mean the code is malicious; they simply show that standard security rules were not applied correctly.",
+      "failures": {},
+      "seconds": 22.5
+    },
+    {
+      "repo": "dasfreak/Backstabbers-Knife-Collection",
+      "risk": "Safe",
+      "vuln_level": "Safe",
+      "malware_level": "Safe",
+      "summary": "The security scan found no vulnerabilities or malicious patterns in this repository, but it did identify one specific issue involving string concatenation. This means the code currently looks safe from known bugs and hidden threats, yet it contains a potential weakness that an attacker could exploit if they inject special characters into log messages. The scan reports a low confidence level of 33% for this finding, which suggests the risk is not certain but also not completely ruled out. While the overall assessment indicates no active dangers, developers should still review the code to ensure it follows best practices and avoids future injection vulnerabilities.",
+      "failures": {
+        "claims_safety": [
+          "safe from"
+        ]
+      },
+      "seconds": 10.7
+    },
+    {
+      "repo": "replicatedhq/kots",
+      "risk": "Critical",
+      "vuln_level": "Critical",
+      "malware_level": "High",
+      "summary": "This repository has two major security risks: it contains insecure coding patterns that could be exploited by attackers, and there are signs that the code might be intentionally malicious. The most serious issue involves using child_process to run commands from user-controlled inputs, which can lead to command injection attacks if an attacker provides a malicious path or command. Another critical risk is the use of untrusted data to build file paths, which could allow attackers to access files outside the intended directory (path traversal). Additionally, the code uses base64 encoding followed by execution and downloads remote files for processing, both of which are common techniques used by malware to hide malicious intent or execute arbitrary code. While some findings like reading environment variables are flagged as medium risk, they do not appear to be part of a coordinated attack strategy. The scan also identified several other low-priority issues related to obfuscation and heavy file access, but these are less concerning than the high-risk command injection vulnerabilities found earlier.",
+      "failures": {
+        "format_sentence_count": 6
+      },
+      "seconds": 23.1
+    },
+    {
+      "repo": "sipeed/picoclaw",
+      "risk": "High",
+      "vuln_level": "High",
+      "malware_level": "Medium",
+      "summary": "This repository has been flagged as having high vulnerability risk with a score of 244.0, which means there are several serious coding errors that an attacker could easily exploit to break your system. The most critical issues involve dangerous database queries that could let hackers inject malicious SQL commands and file paths that might lead to path traversal attacks where files are accessed from unexpected locations. There is also a specific risk of code injection through variable interpolation in workflow files, which allows attackers to potentially steal secrets or injected code during the build process. While some findings point to potential malicious intent, many of the high-severity issues appear to be ordinary insecure coding practices rather than intentional attacks. The medium-risk score of 17.0 suggests there are signs that the code might be intentionally harmful, but these do not outweigh the severe vulnerabilities found in the database and file handling sections.",
+      "failures": {},
+      "seconds": 23.6
+    },
+    {
+      "repo": "jumbojett/OpenID-Connect-PHP",
+      "risk": "Low",
+      "vuln_level": "Low",
+      "malware_level": "Safe",
+      "summary": "This repository has a low vulnerability score of 19.0, which means there are some insecure coding patterns that an attacker could exploit if they knew how to use them. However, the scan found nothing suspicious or malicious in the code itself, so the signs of intentional bad behavior do not exist here. The main issues are two types of ordinary mistakes: one setting SSL verification to false and another failing to set a cooldown period for new packages, both of which could be improved but are not proof of malicious intent. Additionally, there is a risk that GitHub Actions might accidentally change the code's branch or tag names without warning, which could lead to supply chain attacks if those changes happen frequently. Overall, while the code has some weak spots that need fixing, it does not appear to contain any hidden malware or deliberate security breaches.",
+      "failures": {},
+      "seconds": 15.5
+    },
+    {
+      "repo": "Homebrew/homebrew-cask",
+      "risk": "Medium",
+      "vuln_level": "Low",
+      "malware_level": "High",
+      "summary": "The repository shows two distinct types of issues: one set of findings looks like ordinary insecure coding patterns, while another set appears to be intentional malicious behavior. The most critical issue is that the code contains cryptocurrency mining activity, which is a serious security risk that attackers could exploit to steal your data or drain your resources. Additionally, there are several other high-risk items including suspicious URLs used for exfiltration and file sharing, as well as potential vulnerabilities related to variable interpolation and dynamic file reading. While some of these issues might be due to poor coding practices, the presence of mining scripts and outbound links to shady services suggests that the code may have been intentionally modified or deployed with malicious intent rather than just being a standard insecure implementation.",
+      "failures": {},
+      "seconds": 16.2
+    },
+    {
+      "repo": "ezSQL/ezsql",
+      "risk": "Safe",
+      "vuln_level": "Safe",
+      "malware_level": "Safe",
+      "summary": "The security scan found no dangerous vulnerabilities or malicious patterns in this repository, which means there are currently no known exploits or signs of intentional harm detected by its automated tools. However, the only finding reported is a low-confidence match for a YARA rule that flags the download of executable files like scripts or executables, but it does not prove the code itself is dangerous. This specific issue indicates that the repository might be downloading external software, but without further context on where these downloads come from or how they are used, it cannot be confirmed as a security risk. Because the scan only reports what its rules recognize and the confidence level for this match is relatively low, you should treat this as a potential concern rather than a definitive proof of danger before deciding whether to use the code.",
+      "failures": {},
+      "seconds": 12.5
+    }
+  ]
+}
