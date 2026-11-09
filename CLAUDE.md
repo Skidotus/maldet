@@ -128,6 +128,20 @@ by `worker.py` (not inside the web request):
    incomplete" finding, because a timed-out scan used to save zero YARA
    findings and look clean — it happened to WebKit and to a malware
    collection
+   Each `rules.yar` rule also carries `attack = "T1105,..."` (MITRE ATT&CK
+   technique IDs; every ID needs a name in `scanner.ATTACK_NAMES`, which a
+   test enforces). `scanner.attack_techniques(issue_text)` turns a finding
+   into labelled, linked techniques at render time (Jinja filter
+   `attack_techniques`, plus the findings CSV), so nothing is stored and old
+   findings get labels too. References and Forge matches get none.
+4b. `run_filename_check(path)` (`filename_tricks.py`) — disguised file
+   names: direction characters (high), `invoice.pdf.exe`-style double
+   extensions (high; `.js` excluded), Latin mixed with look-alike Cyrillic/
+   Greek in one word, and exact look-alikes of a short impersonated-name list
+   (`lnstaller`, `5etup`; medium). Tool `filename`, malicious-pattern axis,
+   and in `EXACT_TOOLS` with threat intel, so it skips the classifier (0 hits
+   over 171,791 ordinary names). Shows direction characters as `<U+202E>`
+   so the report never renders a disguised name itself
 4a. `run_decoded_payloads(path, findings)` — what the code *hides*.
    `payload_decoder.py` peels base64 (also reversed and URL-safe), hex,
    `\x41` escapes and character-code lists, then zlib/gzip/bz2/xz, up to

@@ -1055,6 +1055,34 @@ both ways (`tests/test_signatures_and_rescan.py`).
 now updated daily by themselves; and a scan now starts only when someone presses the
 button, not when a bot or a chat app merely looks at the link.
 
+## What's improved (2026-11-09 — ATT&CK labels and disguised file names)
+
+Two more FlatScan ideas (#4 and #6 of the list above), built while the live rescan ran
+and deployed after it, so the rescan's before/after numbers measure one scanner.
+
+**MITRE ATT&CK labels.** Every `rules.yar` rule names its techniques (`attack` in its
+meta: T1105 Ingress Tool Transfer for downloaders, T1055 Process Injection, T1496
+Resource Hijacking for miners, and so on, 17 techniques over 14 rules). The report shows
+them in each finding's details, linked to attack.mitre.org, and the findings CSV gains an
+`attack_techniques` column. The labels are looked up when a page is drawn, not stored,
+so every existing report gets them without a rescan (MalDet's own report shows 17
+technique links), and the classifier's input is unchanged.
+
+**Disguised file names** (`filename_tricks.py`). Invisible text-direction characters
+(`annexe<U+202E>cod.exe` shows as `annexe.exe.doc`), a document extension before a
+Windows program extension (`invoice.pdf.exe`, also with padding spaces), Latin letters
+mixed with identical-looking Cyrillic or Greek ones in one word, and exact look-alike
+spellings of a short list of impersonated names (`lnstaller`, `5etup`, `Micros0ft`).
+`.js` is not counted as a program extension, because bundlers emit names like
+`logo.png.js`. Measured over 171,791 ordinary file names (a Python environment,
+`/usr/lib`, `/usr/share`): **0 matches**, which is why these findings skip the noise
+classifier. Not yet measured on malicious repositories, so this shows the check is
+quiet, not that it catches much.
+
+*In plain words:* each finding now says which known attacker technique it matches, using
+the names security teams use; and MalDet now notices files whose names are dressed up to
+look harmless, like a program called `invoice.pdf.exe`.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
