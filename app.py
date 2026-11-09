@@ -385,8 +385,8 @@ def scan():
     if request.method == 'GET':
         # ?repo=owner/name prefills the field. The browser extension links
         # here rather than submitting for you: a GET that starts a scan is
-        # the same mistake /rescan/<id> already makes, and crawlers and chat
-        # link previews follow GET links. Prefilled, one click, no surprise
+        # the mistake /rescan/<id> used to make (fixed 2026-11-09), and
+        # crawlers and chat link previews follow GET links. Prefilled, one click, no surprise
         # scans queued by a link unfurler.
         return render_template('scan.html',
                                prefill_repo=parse_repo_slug(request.args.get('repo')) or '')
@@ -1051,8 +1051,17 @@ def history():
 
 #rescan repo
 
-@app.route('/rescan/<int:repo_id>')
+@app.route('/rescan/<int:repo_id>', methods=['GET', 'POST'])
 def rescan(repo_id):
+    # Only a POST starts a scan. A GET used to, so anything that merely
+    # fetched the URL queued one: search-engine crawlers, chat apps building
+    # a link preview, a browser prefetching. Each unwanted scan holds the one
+    # scan slot for minutes. A GET now just shows the report, which is also
+    # what an old bookmark to this URL should land on. The Rescan button on
+    # the report is a form that POSTs here, like the scan form does.
+    if request.method != 'POST':
+        return redirect(url_for('detail', repo_id=repo_id))
+
     db     = get_db()
     cursor = db.cursor()
 

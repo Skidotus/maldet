@@ -117,14 +117,17 @@
         <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Report
       </a>
       {# Offering Rescan on a repository that returns 404 just queues a scan
-         that is certain to fail. #}
-      <a href="{{ url_for('rescan', repo_id=repo.id) }}"
-         class="btn btn-ribbon btn-pill{% if repo.source_status == 'gone' %} disabled{% endif %}"
-         {% if repo.source_status == 'gone' %}aria-disabled="true" tabindex="-1"
-         title="This repository is no longer on GitHub, so it cannot be rescanned."{% endif %}
-         id="rescanBtn">
-        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Rescan
-      </a>
+         that is certain to fail. A form, not a link: only a POST starts a
+         scan, so crawlers and link previews cannot fire one. #}
+      <form method="post" action="{{ url_for('rescan', repo_id=repo.id) }}" id="rescanForm"
+            class="d-inline">
+        <button type="submit" id="rescanBtn"
+                class="btn btn-ribbon btn-pill"
+                {% if repo.source_status == 'gone' %}disabled
+                title="This repository is no longer on GitHub, so it cannot be rescanned."{% endif %}>
+          <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Rescan
+        </button>
+      </form>
     </div>
   </header>
 

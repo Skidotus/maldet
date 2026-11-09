@@ -1009,6 +1009,36 @@ Most of FlatScan's other features are for taking apart **one finished program** 
 - **CI (continuous integration):** the automatic checks that run every time a project's
   code changes.
 
+## What's improved (2026-11-09 — two quiet problems on the live site)
+
+**ClamAV signatures never updated.** `docker/entrypoint.sh` downloads signatures only
+when none exist, and the Docker volume keeps them, so the VPS scanned with whatever it
+fetched on its first start. Found on 2026-11-09: the daily set was from 1 November
+(version 28171) and nothing would ever have refreshed it. Antivirus signatures miss
+everything newer than they are, and nothing on the page says so. Now `worker.py` runs
+`freshclam` every `MALDET_CLAMAV_REFRESH_HOURS` (24, set for the worker in
+`docker-compose.yml`; off by default elsewhere), only while idle, since freshclam
+test-loads the ~1GB database and must not overlap a scan on the 4GB host. Not done at
+container start because the app and worker containers share the volume and both run the
+entrypoint. Run by hand the same day: daily 28171 → 28178 in about 4 seconds, as the
+worker's own user. Its "NotifyClamd … ERROR" line is harmless (MalDet runs `clamscan`,
+no clamd daemon to notify).
+
+Separately, freshclam reports the ClamAV *program* in the image is outdated (1.4.3,
+recommended 1.4.6). That is the Debian package the image installs; rebuilding the image
+with `--no-cache` picks up whatever Debian ships. Not done here.
+
+**A visited link could start a rescan.** `/rescan/<id>` queued a scan on GET, so
+search-engine crawlers, chat apps building link previews and browser prefetching could
+each tie up the single scan slot for minutes. Only a POST starts one now (the report's
+Rescan button is a form); a GET redirects to the report. Still open: like the scan form,
+the POST has no CSRF token, so another site could submit it on a visitor's behalf. That
+needs the same fix for `/scan` too, so it is left for one change covering both.
+
+*In plain words:* the live site's virus fingerprints were stuck on 1 November and are
+now updated daily by themselves; and a scan now starts only when someone presses the
+button, not when a bot or a chat app merely looks at the link.
+
 ## What needs improvement (near-term, actionable)
 
 - **Mostly done 2026-10-07: the rescan ran, and the severities are fully
