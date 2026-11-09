@@ -25,6 +25,34 @@ combined with machine learning (ML) risk classification.
 
 ---
 
+## How well it works: verification
+
+Every claim above was measured, not assumed. This table puts the numbers in one place,
+each with the size of the sample behind it, because a percentage means little without
+it. The full method and caveats for each row are in [NOTES.md](NOTES.md).
+
+| What was checked | Result | Sample | Date |
+|---|---|---|---|
+| Automated tests | 153 pass | the whole suite (`tests/`) | 2026-11-09 |
+| Noise classifier: are flagged findings real? | precision 0.52, recall 0.62, F1 0.56 (baseline 0.28 if every finding is assumed real) | 168 findings reviewed by hand¹ | 2026-09-19 |
+| AI summaries: nine automatic checks (made-up numbers, files, advisories or tools, contradicting the risk level, claiming "safe", format) | 15 of 20 fully clean; 2 still call a repo "safe" | 20 repos across all risk levels, qwen3.5:2b | 2026-11-09 |
+| Hidden-payload decoding | 0 false alarms; 49 new matches in 26 files, 17 of which no engine had flagged before | 23 popular clean repos + 20 offensive repos² | 2026-11-09 |
+| UTF-16 script reading | 1 new real match, 0 changes in clean repos | same 43 repos | 2026-11-09 |
+| Rule files and blocklists not counted as threats | 0 of 542 flagged files in real tools excused; a blocklist repo went Critical (180) to Medium (20) on the live site | same 43 repos, plus 2 repos it was built for | 2026-11-09 |
+| ClamAV on source repositories | 293 files flagged in 10 of 20 offensive repos, 0 in 23 clean | same 43 repos | 2026-11-07 |
+| Memory on the 4GB server | peak 1,958 MB of 3,915 MB during a full scan | one scan of a 2GB repository | 2026-11-09 |
+| Full rescan of the live site | *results to follow when the run finishes* | 196 repositories | 2026-11-09 |
+
+What these numbers are **not**:
+
+1. The 168 hand-reviewed labels were suggested by an AI and confirmed by the author,
+   not reviewed independently, so the classifier figures rest on that.
+2. The detection rows measure **agreement**, not proven accuracy: nobody verified every
+   flagged file, and "clean" means 23 popular, well-known projects, not a random sample
+   of GitHub.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
