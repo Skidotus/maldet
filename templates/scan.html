@@ -31,6 +31,7 @@
 
   <div class="ledger-book" style="max-width: 640px;">
     <form method="POST" action="{{ url_for('scan') }}" class="p-4" id="scanForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="mb-3">
         <label for="repo_url" class="form-label-ledger">Repository URL</label>
         {# value is set when the browser extension links here as

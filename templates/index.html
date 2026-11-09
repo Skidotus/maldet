@@ -284,6 +284,7 @@
           {% endif %}
 
           <form method="POST" action="{{ url_for('scan') }}" id="scanForm" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="repo_url" class="form-label-ledger form-label-ledger--on-dark">Repository URL</label>
             <div class="url-field">
               <i class="bi bi-github url-field__icon" aria-hidden="true"></i>

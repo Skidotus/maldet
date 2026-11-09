@@ -29,6 +29,13 @@ without it semgrep withholds matched code and stores the literal string
 `requires login` as the snippet), `yara`, `clamscan`, `7z`, plus a running MySQL
 instance matching `config.py`.
 
+The Docker image installs ClamAV from Cisco Talos's official `.deb`
+(`CLAMAV_VERSION` in the Dockerfile, pinned by SHA-256 per architecture), not
+Debian's package, which is stuck at 1.4.3 and misses parser security fixes. To
+upgrade, change the version and both sums; the build fails if `clamscan`
+reports anything else. The worker refreshes signatures daily
+(`MALDET_CLAMAV_REFRESH_HOURS`, see `worker.py`).
+
 Semgrep is capped by `MALDET_SEMGREP_MAX_MEMORY` (default 1500MB) because it is
 the pipeline's largest consumer.
 
@@ -445,6 +452,13 @@ link previews. **`/rescan/<id>`** had exactly that bug until 2026-11-09: now
 only a POST (the report page's Rescan form) queues a scan, and a GET just
 redirects to the report, so old links and bookmarks still land somewhere
 useful. Never make a route that starts work answer to GET.
+
+**CSRF.** `/scan` and `/rescan` POSTs need a matching "double-submit" token:
+`csrf_token()` (a template global) puts it in the form's hidden
+`csrf_token` field and an HttpOnly `maldet_csrf` cookie, and `csrf_ok()` is
+checked before anything is queued. Any new form that starts work must carry
+`<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">` and call
+`csrf_ok()`, or another website can submit it through a visitor's browser.
 
 Styling lives in `static/css/style.css`: a forest-green / off-white "paper"
 theme over Bootstrap, with tokens on `:root`. Below 768px, tables marked

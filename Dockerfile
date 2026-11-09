@@ -14,9 +14,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-# clamav provides clamscan; clamav-freshclam provides the freshclam binary
-# that fetches the signature database (the entrypoint runs it by hand — the
-# packaged daemon expects an init system that isn't here).
+# ClamAV is NOT installed from Debian: see the next RUN.
 # No MySQL client: the entrypoint waits for the database through pymysql,
 # which is already a dependency.
 #
@@ -34,8 +32,6 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         yara \
-        clamav \
-        clamav-freshclam \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libharfbuzz-subset0 \
@@ -44,6 +40,45 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         || (apt-get install -y --no-install-recommends 7zip \
             && ln -sf "$(command -v 7zz)" /usr/local/bin/7z)) \
     && rm -rf /var/lib/apt/lists/*
+
+# ClamAV from Cisco Talos's own release, not Debian. Debian 13 ships 1.4.3 in
+# trixie, trixie-updates and trixie-security alike (checked 2026-11-09), and
+# 1.4.4-1.4.6 fix memory-safety bugs in exactly the parsers MalDet feeds
+# untrusted files to: the 7z and PESpin unpackers (heap overflows), the PDF,
+# HTML and GPT parsers. A booby-trapped file in a scanned repo is the threat
+# model, so the scanner's own parsers are worth keeping current.
+#
+# The package is pinned by SHA-256: the digests GitHub publishes for the
+# Cisco-Talos/clamav release, re-computed from both downloads on 2026-11-09,
+# so a swapped download fails the build. The release's .sig files were NOT
+# checked: they name key 707F0DB480836771, and no authoritative copy of it
+# was found, only keyservers, which prove nothing on their own. It installs under /usr/local and looks
+# for signatures in /usr/local/share/clamav, which is linked to the
+# /var/lib/clamav volume the existing signatures live in. Its freshclam.conf
+# is written here; NotifyClamd is left out because there is no clamd.
+# To upgrade: change CLAMAV_VERSION and both sums.
+ARG CLAMAV_VERSION=1.4.6
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+        amd64) arch=x86_64;  sum=d3ee9e401974855a1edc1761b1425417d126de618d5f0c91cd51209f69f6fcc2 ;; \
+        arm64) arch=aarch64; sum=a29cc95aeb225f0dc1b99024b49f1cc109502cb17aaf168637d0901aa9674fe8 ;; \
+        *) echo "FATAL: no official ClamAV package for $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    url="https://github.com/Cisco-Talos/clamav/releases/download/clamav-${CLAMAV_VERSION}/clamav-${CLAMAV_VERSION}.linux.${arch}.deb"; \
+    python3 -c "import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], '/tmp/clamav.deb')" "$url"; \
+    echo "$sum  /tmp/clamav.deb" | sha256sum -c -; \
+    dpkg -i /tmp/clamav.deb; \
+    rm /tmp/clamav.deb; \
+    rm -rf /usr/local/share/clamav; \
+    ln -s /var/lib/clamav /usr/local/share/clamav; \
+    printf '%s\n' \
+        'DatabaseDirectory /var/lib/clamav' \
+        'DatabaseMirror database.clamav.net' \
+        'UpdateLogFile /var/log/clamav/freshclam.log' \
+        > /usr/local/etc/freshclam.conf; \
+    clamscan --version | grep -q "ClamAV ${CLAMAV_VERSION}/\|ClamAV ${CLAMAV_VERSION}$" \
+        || { echo "FATAL: clamscan is not ${CLAMAV_VERSION}: $(clamscan --version)"; exit 1; }; \
+    freshclam --version
 
 # Fail the build now if any shelled-out tool is missing, rather than letting
 # the app start and silently return no findings for that engine. scanner.py

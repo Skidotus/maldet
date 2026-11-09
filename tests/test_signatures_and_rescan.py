@@ -16,6 +16,11 @@ import worker
 UPDATED = ("ClamAV update process started at Mon Nov  9 20:00:00 2026\n"
            "daily.cld updated (version: 27451, sigs: 2069001, f-level: 90, builder: raynman)\n"
            "main.cvd database is up-to-date (version: 62, sigs: 6647427, f-level: 90, builder: sigmgr)\n")
+# What the VPS printed on 2026-11-09, exit code 0, nothing downloaded.
+CURRENT = ("daily.cld database is up-to-date (version: 28178, sigs: 355854, f-level: 90, builder: x)\n"
+           "main.cvd database is up-to-date (version: 63, sigs: 3287027, f-level: 90, builder: x)\n"
+           "bytecode.cvd database is up-to-date (version: 339, sigs: 80, f-level: 90, builder: x)\n"
+           "ERROR: NotifyClamd: Can't find or parse configuration file /etc/clamav/clamd.conf\n")
 
 
 def ran(code, out=""):
@@ -49,9 +54,19 @@ class SignatureRefreshTests(unittest.TestCase):
             self.assertEqual(worker.refresh_signatures_if_due(now=1000 + 24 * 3600), "updated")
         self.assertEqual(run.call_count, 2)
 
-    def test_up_to_date_is_exit_1_and_not_a_failure(self):
-        with mock.patch.object(worker.subprocess, "run", return_value=ran(1, UPDATED)):
-            self.assertEqual(worker.refresh_signatures_if_due(now=0), "current")
+    def test_up_to_date_is_reported_as_current_whatever_the_exit_code(self):
+        """freshclam 1.4 exits 0 when nothing changed, which the VPS logged as
+        'updated'. The per-database lines decide, not the exit code."""
+        for code in (0, 1):
+            worker._last_signature_check = None
+            with mock.patch.object(worker.subprocess, "run", return_value=ran(code, CURRENT)):
+                self.assertEqual(worker.refresh_signatures_if_due(now=0), "current", code)
+
+    def test_a_changed_database_is_reported_as_updated_whatever_the_exit_code(self):
+        for code in (0, 1):
+            worker._last_signature_check = None
+            with mock.patch.object(worker.subprocess, "run", return_value=ran(code, UPDATED)):
+                self.assertEqual(worker.refresh_signatures_if_due(now=0), "updated", code)
 
     def test_failure_waits_for_the_next_interval_instead_of_retrying_every_poll(self):
         with mock.patch.object(worker.subprocess, "run",
@@ -118,12 +133,72 @@ class RescanRouteTests(unittest.TestCase):
             self.client.head("/rescan/7")
         start.assert_not_called()
 
-    def test_post_queues_the_scan(self):
+    def test_post_with_this_browsers_token_queues_the_scan(self):
+        token = "t" * 43
+        self.client.set_cookie(app_module.CSRF_COOKIE, token)
         with mock.patch.object(app_module, "_start_scan_job", return_value="abc123") as start:
-            resp = self.client.post("/rescan/7")
+            resp = self.client.post("/rescan/7", data={app_module.CSRF_FIELD: token})
         start.assert_called_once_with("pallets/flask", "infected")
         self.assertEqual(resp.status_code, 302)
         self.assertIn("abc123", resp.headers["Location"])
+
+    def test_cross_site_post_without_a_matching_token_never_starts_a_scan(self):
+        """What another website can send: the visitor's cookies come along,
+        but it cannot read them to copy the token into the form."""
+        self.client.set_cookie(app_module.CSRF_COOKIE, "t" * 43)
+        for data in ({}, {app_module.CSRF_FIELD: ""}, {app_module.CSRF_FIELD: "x" * 43}):
+            with mock.patch.object(app_module, "_start_scan_job") as start:
+                resp = self.client.post("/rescan/7", data=data)
+            start.assert_not_called()
+            self.assertTrue(resp.headers["Location"].endswith("/detail/7"))
+
+    def test_no_cookie_means_no_scan_even_with_a_guessed_field(self):
+        with mock.patch.object(app_module, "_start_scan_job") as start:
+            self.client.post("/rescan/7", data={app_module.CSRF_FIELD: ""})
+        start.assert_not_called()
+
+
+class ScanFormCsrfTests(unittest.TestCase):
+    def setUp(self):
+        self.client = app_module.app.test_client()
+        patches = [mock.patch.object(app_module, "_visitor_job_id", return_value=None),
+                   mock.patch.object(app_module, "_repo_size_mb", return_value=None)]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_form_page_issues_a_token_in_cookie_and_field(self):
+        resp = self.client.get("/scan")
+        cookie = self.client.get_cookie(app_module.CSRF_COOKIE)
+        self.assertIsNotNone(cookie)
+        self.assertGreaterEqual(len(cookie.value), 32)
+        self.assertTrue(cookie.http_only)
+        self.assertIn(f'name="csrf_token" value="{cookie.value}"', resp.get_data(as_text=True))
+
+    def test_token_is_stable_across_pages(self):
+        self.client.get("/scan")
+        first = self.client.get_cookie(app_module.CSRF_COOKIE).value
+        resp = self.client.get("/scan?repo=pallets/flask")
+        self.assertEqual(self.client.get_cookie(app_module.CSRF_COOKIE).value, first)
+        self.assertIn(first, resp.get_data(as_text=True))
+
+    def test_forged_scan_is_refused_and_the_form_comes_back_filled_in(self):
+        self.client.set_cookie(app_module.CSRF_COOKIE, "t" * 43)
+        with mock.patch.object(app_module, "_start_scan_job") as start:
+            resp = self.client.post("/scan", data={"repo_url": "pallets/flask"})
+        start.assert_not_called()
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_data(as_text=True)
+        self.assertIn("security cookie", body)
+        self.assertIn('value="pallets/flask"', body)
+
+    def test_genuine_scan_goes_through(self):
+        resp = self.client.get("/scan")
+        token = self.client.get_cookie(app_module.CSRF_COOKIE).value
+        with mock.patch.object(app_module, "_start_scan_job", return_value="job1") as start:
+            resp = self.client.post("/scan", data={"repo_url": "pallets/flask", "csrf_token": token})
+        start.assert_called_once()
+        self.assertIn("job1", resp.headers["Location"])
 
     def test_report_page_offers_rescan_as_a_post_form(self):
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

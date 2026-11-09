@@ -190,9 +190,13 @@ def refresh_signatures_if_due(label="worker", now=None):
         print(f"[{label}] ClamAV signature refresh failed: {type(e).__name__}: {e}", flush=True)
         return "failed"
 
-    # freshclam: 0 = something was updated, 1 = already up to date.
+    # Success is exit 0 or 1, but the code does not say whether anything
+    # changed: freshclam 1.4 exits 0 when every database was already current,
+    # which logged "updated" on the VPS for a check that downloaded nothing.
+    # Its own per-database lines do say, so go by those.
     if result.returncode in (0, 1):
-        status = "updated" if result.returncode == 0 else "current"
+        changed = re.search(r"\.c[vl]d updated \(", result.stdout)
+        status = "updated" if changed else "current"
         # "daily.cld updated (version: 27451, ...)" and
         # "main.cvd database is up-to-date (version: 63, ...)" alike.
         versions = [f"{m.group(1)} {m.group(2)}" for m in

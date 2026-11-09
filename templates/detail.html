@@ -121,6 +121,7 @@
          scan, so crawlers and link previews cannot fire one. #}
       <form method="post" action="{{ url_for('rescan', repo_id=repo.id) }}" id="rescanForm"
             class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" id="rescanBtn"
                 class="btn btn-ribbon btn-pill"
                 {% if repo.source_status == 'gone' %}disabled
