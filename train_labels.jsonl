@@ -1,0 +1,515 @@
+{"id": 269096, "label": "noise", "reason": "An example /etc/passwd line inside a README, documentation not a leaked file", "labeller": "claude-fable-5-2"}
+{"id": 317397, "label": "noise", "reason": "Claim is false here: the dependency has a ~=1.6 constraint", "labeller": "claude-fable-5-2"}
+{"id": 39343, "label": "noise", "reason": "Python version compatibility advice, not a security problem", "labeller": "claude-fable-5-2"}
+{"id": 286990, "label": "noise", "reason": "Domain names inside yarn's bundled public-suffix list, not exfiltration", "labeller": "claude-fable-5-2"}
+{"id": 318864, "label": "real", "reason": "Cobalt Strike signature on a payload file in a malware sample folder", "labeller": "claude-fable-5-2"}
+{"id": 319043, "label": "noise", "reason": "Hostname recorded as metadata in a QA evidence script, no sign of exfiltration", "labeller": "claude-fable-5-2"}
+{"id": 289134, "label": "noise", "reason": "An empty string assigned to token_text, not a password", "labeller": "claude-fable-5-2"}
+{"id": 282131, "label": "noise", "reason": "RegExp built from an internal form variable, not attacker input", "labeller": "claude-fable-5-2"}
+{"id": 283700, "label": "noise", "reason": "A call to a function named system_resolver_configure, not a shell command", "labeller": "claude-fable-5-2"}
+{"id": 288469, "label": "real", "reason": "Workflow input interpolated straight into a run step, a genuine injection pattern", "labeller": "claude-fable-5-2"}
+{"id": 269146, "label": "real", "reason": "PHP web shell: system() on a request parameter", "labeller": "claude-fable-5-2"}
+{"id": 290758, "label": "noise", "reason": "Homebrew cask cleanup paths for a Monero wallet app, not mining code", "labeller": "claude-fable-5-2"}
+{"id": 269241, "label": "real", "reason": "TLS certificate checks really are disabled on this request", "labeller": "claude-fable-5-2"}
+{"id": 319140, "label": "noise", "reason": "Match inside a YARA rule file that describes the technique", "labeller": "claude-fable-5-2"}
+{"id": 6416, "label": "noise", "reason": "0o750 is not a permissive mode", "labeller": "claude-fable-5-2"}
+{"id": 318897, "label": "real", "reason": "Committed executable whose import hash matches known malware families", "labeller": "claude-fable-5-2"}
+{"id": 288970, "label": "real", "reason": "eval() on a string value instead of a safe parser", "labeller": "claude-fable-5-2"}
+{"id": 318876, "label": "real", "reason": "Mystic Stealer signature on a malware sample", "labeller": "claude-fable-5-2"}
+{"id": 317904, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318014, "label": "real", "reason": "JackPOS malware signature in a malware source collection", "labeller": "claude-fable-5-2"}
+{"id": 317972, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 317813, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 255272, "label": "real", "reason": "pickle.loads on data passed in through an API argument", "labeller": "claude-fable-5-2"}
+{"id": 255201, "label": "noise", "reason": "shell=True with a fixed git command, no outside input", "labeller": "claude-fable-5-2"}
+{"id": 317216, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 280875, "label": "noise", "reason": "A base64 PNG image embedded in the source, not obfuscated code", "labeller": "claude-fable-5-2"}
+{"id": 280605, "label": "noise", "reason": "urlopen in a CI helper script with a request it built itself", "labeller": "claude-fable-5-2"}
+{"id": 317541, "label": "noise", "reason": "Claim is false here: the git install is pinned to a full commit hash", "labeller": "claude-fable-5-2"}
+{"id": 269214, "label": "real", "reason": "Image carrying the CVE-2021-22204 exiftool exploit", "labeller": "claude-fable-5-2"}
+{"id": 317405, "label": "noise", "reason": "Claim is false here: the dependency has a ~=6.7 constraint", "labeller": "claude-fable-5-2"}
+{"id": 6305, "label": "noise", "reason": "Unpinned model download in an examples folder", "labeller": "claude-fable-5-2"}
+{"id": 315312, "label": "noise", "reason": "Output sent to DEVNULL for a status check, ordinary subprocess use", "labeller": "claude-fable-5-2"}
+{"id": 291188, "label": "noise", "reason": "Official actions/setup-node pinned by major tag, near-universal practice", "labeller": "claude-fable-5-2"}
+{"id": 268892, "label": "real", "reason": "Mach-O stager template shipped with the Empire attack framework", "labeller": "claude-fable-5-2"}
+{"id": 318306, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 270722, "label": "noise", "reason": "Extra index is the standard PyTorch CPU wheel index", "labeller": "claude-fable-5-2"}
+{"id": 315376, "label": "noise", "reason": "Name of an environment variable, not a secret value", "labeller": "claude-fable-5-2"}
+{"id": 318540, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 21964, "label": "noise", "reason": "Random numbers in a test file", "labeller": "claude-fable-5-2"}
+{"id": 268552, "label": "noise", "reason": "0755 on a file is a normal executable mode", "labeller": "claude-fable-5-2"}
+{"id": 23716, "label": "noise", "reason": "Missing timeout in a test file", "labeller": "claude-fable-5-2"}
+{"id": 288980, "label": "noise", "reason": "Opens a file with xdg-open, fixed command", "labeller": "claude-fable-5-2"}
+{"id": 284380, "label": "noise", "reason": "Placeholder example token in a form field", "labeller": "claude-fable-5-2"}
+{"id": 313117, "label": "noise", "reason": "A settings list of keyword strings, not enumeration code", "labeller": "claude-fable-5-2"}
+{"id": 318579, "label": "noise", "reason": "Minimum-version range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 314653, "label": "noise", "reason": "urlopen on a request it built itself, with a timeout", "labeller": "claude-fable-5-2"}
+{"id": 318165, "label": "real", "reason": "File of obfuscated script-execution attack payloads", "labeller": "claude-fable-5-2"}
+{"id": 316118, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 318751, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 318269, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 316535, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 292272, "label": "noise", "reason": "Import of a maintained fork flagged as deprecated pyCrypto", "labeller": "claude-fable-5-2"}
+{"id": 271687, "label": "noise", "reason": "Temp path includes a 32-character random suffix", "labeller": "claude-fable-5-2"}
+{"id": 316185, "label": "noise", "reason": "Claim is false here: the dependency has an upper bound", "labeller": "claude-fable-5-2"}
+{"id": 287127, "label": "noise", "reason": "Plain HTML escaping helper, style advice", "labeller": "claude-fable-5-2"}
+{"id": 312860, "label": "noise", "reason": "Library import in a CTF exercise", "labeller": "claude-fable-5-2"}
+{"id": 316326, "label": "noise", "reason": "Install instructions in a README", "labeller": "claude-fable-5-2"}
+{"id": 268886, "label": "real", "reason": "Antivirus signature on PowerUp, a privilege-escalation attack script", "labeller": "claude-fable-5-2"}
+{"id": 269655, "label": "noise", "reason": "MD5 is required by the Windows hash format being parsed", "labeller": "claude-fable-5-2"}
+{"id": 269147, "label": "real", "reason": "PHP web shell: system() on a request parameter", "labeller": "claude-fable-5-2"}
+{"id": 269502, "label": "noise", "reason": "Parses a local application config file", "labeller": "claude-fable-5-2"}
+{"id": 318675, "label": "real", "reason": "Attack-framework module that installs scheduled-task persistence", "labeller": "claude-fable-5-2"}
+{"id": 318139, "label": "real", "reason": "NotPetya signature on a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 315291, "label": "noise", "reason": "The project's own Telegram alert feature", "labeller": "claude-fable-5-2"}
+{"id": 291704, "label": "real", "reason": "Hardcoded client secret in source", "labeller": "claude-fable-5-2"}
+{"id": 9388, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 26594, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 316707, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 285779, "label": "noise", "reason": "A Chef provider class, not a Rails model", "labeller": "claude-fable-5-2"}
+{"id": 284448, "label": "noise", "reason": "Build tool running a toolchain binary it located itself", "labeller": "claude-fable-5-2"}
+{"id": 269930, "label": "noise", "reason": "Generic Kubernetes hardening advice on a manifest patch", "labeller": "claude-fable-5-2"}
+{"id": 284835, "label": "noise", "reason": "Translation strings, no DNS activity", "labeller": "claude-fable-5-2"}
+{"id": 287791, "label": "noise", "reason": "Official Telegram API address in a Telegram integration", "labeller": "claude-fable-5-2"}
+{"id": 316300, "label": "noise", "reason": "Download in an install script, low signal alone", "labeller": "claude-fable-5-2"}
+{"id": 269858, "label": "real", "reason": "Archive extracted without checking member paths", "labeller": "claude-fable-5-2"}
+{"id": 286607, "label": "noise", "reason": "Query is parameterised", "labeller": "claude-fable-5-2"}
+{"id": 315507, "label": "noise", "reason": "Log message mentions a token but logs only a user id", "labeller": "claude-fable-5-2"}
+{"id": 314004, "label": "noise", "reason": "Import of an escaping helper, no XML parsing", "labeller": "claude-fable-5-2"}
+{"id": 269634, "label": "noise", "reason": "Import of a maintained fork flagged as deprecated pyCrypto", "labeller": "claude-fable-5-2"}
+{"id": 316818, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 317026, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 316565, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 268485, "label": "real", "reason": "Antivirus signature on a PowerShell credential-injection script", "labeller": "claude-fable-5-2"}
+{"id": 269350, "label": "noise", "reason": "MD4 is what the NTLM protocol requires", "labeller": "claude-fable-5-2"}
+{"id": 317392, "label": "noise", "reason": "Claim is false here: the dependency has a ~=3.7 constraint", "labeller": "claude-fable-5-2"}
+{"id": 318293, "label": "real", "reason": "PupyRAT signature on the remote-access tool's own source", "labeller": "claude-fable-5-2"}
+{"id": 316368, "label": "real", "reason": "Unfamiliar package one character from a popular name, worth checking", "labeller": "claude-fable-5-2"}
+{"id": 39309, "label": "noise", "reason": "FTP support is the stated purpose of this module", "labeller": "claude-fable-5-2"}
+{"id": 318553, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 318745, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 250637, "label": "real", "reason": "Botnet source wiping system directories through system()", "labeller": "claude-fable-5-2"}
+{"id": 316416, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 292130, "label": "noise", "reason": "Install hook runs the package's own local script", "labeller": "claude-fable-5-2"}
+{"id": 284150, "label": "noise", "reason": "math/rand used outside any security context", "labeller": "claude-fable-5-2"}
+{"id": 268546, "label": "noise", "reason": "Placeholder string, not a credential", "labeller": "claude-fable-5-2"}
+{"id": 269729, "label": "real", "reason": "Error display switched on in application code", "labeller": "claude-fable-5-2"}
+{"id": 318952, "label": "real", "reason": "Image carrying the CVE-2021-22204 exploit", "labeller": "claude-fable-5-2"}
+{"id": 312815, "label": "real", "reason": "64-bit parsed value truncated to 32 bits before validation", "labeller": "claude-fable-5-2"}
+{"id": 318276, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 317319, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 291644, "label": "real", "reason": "v-html renders generated markup, an XSS path if the input is not escaped", "labeller": "claude-fable-5-2"}
+{"id": 317971, "label": "noise", "reason": "An npm alias for the real typescript package", "labeller": "claude-fable-5-2"}
+{"id": 268890, "label": "real", "reason": "Antivirus signature on a reflective PE injection script", "labeller": "claude-fable-5-2"}
+{"id": 290533, "label": "noise", "reason": "Test asserting that /etc/passwd access is refused", "labeller": "claude-fable-5-2"}
+{"id": 317061, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 272125, "label": "noise", "reason": "Install hook runs the project's own helper", "labeller": "claude-fable-5-2"}
+{"id": 250663, "label": "noise", "reason": "Compiler-optimisation advice on a buffer clear", "labeller": "claude-fable-5-2"}
+{"id": 290756, "label": "noise", "reason": "Download URL of a Homebrew cask", "labeller": "claude-fable-5-2"}
+{"id": 316246, "label": "noise", "reason": "Claim is false here: the dependency has a bounded range", "labeller": "claude-fable-5-2"}
+{"id": 267862, "label": "noise", "reason": "A module import, the FTP advice is trivial here", "labeller": "claude-fable-5-2"}
+{"id": 318714, "label": "real", "reason": "Command-and-control profile matching a Cobalt Strike loader signature", "labeller": "claude-fable-5-2"}
+{"id": 318297, "label": "real", "reason": "Reflective PE injection script", "labeller": "claude-fable-5-2"}
+{"id": 318122, "label": "real", "reason": "Shellcode-loader indicators in a trojan sample", "labeller": "claude-fable-5-2"}
+{"id": 316115, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 313104, "label": "noise", "reason": "Sample log line in a demo page", "labeller": "claude-fable-5-2"}
+{"id": 318989, "label": "noise", "reason": "Webshell rule matching a JSON config file", "labeller": "claude-fable-5-2"}
+{"id": 255008, "label": "noise", "reason": "An error message string, not a query", "labeller": "claude-fable-5-2"}
+{"id": 314204, "label": "noise", "reason": "Fixed pip command with list arguments", "labeller": "claude-fable-5-2"}
+{"id": 269593, "label": "noise", "reason": "Parses a local password-database file", "labeller": "claude-fable-5-2"}
+{"id": 319091, "label": "noise", "reason": "Fixed command with list arguments", "labeller": "claude-fable-5-2"}
+{"id": 291998, "label": "noise", "reason": "A localhost test URL, not a dependency", "labeller": "claude-fable-5-2"}
+{"id": 255010, "label": "noise", "reason": "mark_safe on a value the framework produced itself", "labeller": "claude-fable-5-2"}
+{"id": 315292, "label": "noise", "reason": "Official Telegram API address for the project's own alert feature", "labeller": "claude-fable-5-2"}
+{"id": 318934, "label": "real", "reason": "File of obfuscated script attack payloads", "labeller": "claude-fable-5-2"}
+{"id": 268238, "label": "noise", "reason": "Claim is false here: SHA-256 is not a weak hash", "labeller": "claude-fable-5-2"}
+{"id": 282705, "label": "noise", "reason": "Deliberately vulnerable sample in a benchmark corpus", "labeller": "claude-fable-5-2"}
+{"id": 270055, "label": "noise", "reason": "Generic Kubernetes hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 286328, "label": "noise", "reason": "math/rand used for sampling, not security", "labeller": "claude-fable-5-2"}
+{"id": 313594, "label": "noise", "reason": "Package-manager cooldown advice", "labeller": "claude-fable-5-2"}
+{"id": 291981, "label": "noise", "reason": "Pattern match inside an allocator's own free routine", "labeller": "claude-fable-5-2"}
+{"id": 39183, "label": "noise", "reason": "Documentation site component", "labeller": "claude-fable-5-2"}
+{"id": 270852, "label": "noise", "reason": "Download in an install script, low signal alone", "labeller": "claude-fable-5-2"}
+{"id": 269473, "label": "noise", "reason": "Import of a maintained fork flagged as deprecated pyCrypto", "labeller": "claude-fable-5-2"}
+{"id": 318845, "label": "real", "reason": "Firewall-tampering indicator in an AZORult sample", "labeller": "claude-fable-5-2"}
+{"id": 280870, "label": "noise", "reason": "Imports a module by configured name, nothing downloaded", "labeller": "claude-fable-5-2"}
+{"id": 282162, "label": "noise", "reason": "Renders a formatted date", "labeller": "claude-fable-5-2"}
+{"id": 269841, "label": "noise", "reason": "A type name in a schema map, not a secret", "labeller": "claude-fable-5-2"}
+{"id": 313287, "label": "noise", "reason": "Least-privilege advice on an internal reusable workflow", "labeller": "claude-fable-5-2"}
+{"id": 268492, "label": "noise", "reason": "Autoescape off on purpose for non-HTML templates", "labeller": "claude-fable-5-2"}
+{"id": 318052, "label": "real", "reason": "Packed executable in a worm sample folder", "labeller": "claude-fable-5-2"}
+{"id": 312787, "label": "noise", "reason": "Environment tuning value cast to a smaller integer", "labeller": "claude-fable-5-2"}
+{"id": 250595, "label": "noise", "reason": "Style advice about strtok", "labeller": "claude-fable-5-2"}
+{"id": 318632, "label": "real", "reason": "PowerShell remote shell that downloads and runs code", "labeller": "claude-fable-5-2"}
+{"id": 316712, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 292330, "label": "real", "reason": "Runs a dropped temp file through the shell in a remote-access tool", "labeller": "claude-fable-5-2"}
+{"id": 268888, "label": "real", "reason": "Antivirus signature on a PowerShell injection script", "labeller": "claude-fable-5-2"}
+{"id": 316400, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 317276, "label": "noise", "reason": "Install hook runs the package's own local script", "labeller": "claude-fable-5-2"}
+{"id": 317150, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 270924, "label": "noise", "reason": "SHA-1 used as an identifier in a vendored test fixture", "labeller": "claude-fable-5-2"}
+{"id": 318739, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 288234, "label": "noise", "reason": "Throwaway key inside a Homebrew formula's self-test", "labeller": "claude-fable-5-2"}
+{"id": 268968, "label": "real", "reason": "TeslaCrypt signature on a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 318726, "label": "real", "reason": "SharpHound network-mapping tool shipped in an attack framework", "labeller": "claude-fable-5-2"}
+{"id": 312841, "label": "noise", "reason": "Fixed sysctl command, no outside input", "labeller": "claude-fable-5-2"}
+{"id": 316292, "label": "noise", "reason": "Minimum-version range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 315316, "label": "noise", "reason": "Log-filtering code, nothing downloaded or executed", "labeller": "claude-fable-5-2"}
+{"id": 269308, "label": "noise", "reason": "MD4 is what the NTLM protocol requires", "labeller": "claude-fable-5-2"}
+{"id": 317673, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 317365, "label": "noise", "reason": "Custom install class, common in packages that build native code", "labeller": "claude-fable-5-2"}
+{"id": 318655, "label": "real", "reason": "Attack script that wraps commands in encoded PowerShell", "labeller": "claude-fable-5-2"}
+{"id": 312927, "label": "real", "reason": "Working process-injection code with shellcode", "labeller": "claude-fable-5-2"}
+{"id": 319056, "label": "noise", "reason": "Platform details recorded as QA metadata", "labeller": "claude-fable-5-2"}
+{"id": 289389, "label": "noise", "reason": "Benchmark script running a command it built itself", "labeller": "claude-fable-5-2"}
+{"id": 270126, "label": "noise", "reason": "Generic Kubernetes hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 317462, "label": "noise", "reason": "patch-package is a standard postinstall step", "labeller": "claude-fable-5-2"}
+{"id": 318586, "label": "real", "reason": "Dependency installed from a git branch that can change", "labeller": "claude-fable-5-2"}
+{"id": 283273, "label": "noise", "reason": "Cannot tell from the line that the path is user-controlled", "labeller": "claude-fable-5-2"}
+{"id": 318042, "label": "real", "reason": "Shellcode-loader indicators in a rootkit's binary", "labeller": "claude-fable-5-2"}
+{"id": 316433, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318717, "label": "real", "reason": "Encoded PowerShell in a PrintNightmare exploit script", "labeller": "claude-fable-5-2"}
+{"id": 316113, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 268199, "label": "real", "reason": "Coin-miner binary bundled with a botnet framework", "labeller": "claude-fable-5-2"}
+{"id": 269216, "label": "noise", "reason": "The harmless EICAR antivirus test file", "labeller": "claude-fable-5-2"}
+{"id": 317282, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 267929, "label": "noise", "reason": "Command built from the program's own values, not outside input", "labeller": "claude-fable-5-2"}
+{"id": 269854, "label": "noise", "reason": "A server binding to all interfaces by design", "labeller": "claude-fable-5-2"}
+{"id": 268959, "label": "real", "reason": "Malware signature on a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 268897, "label": "real", "reason": "Antivirus signature on a reflective-loader DLL", "labeller": "claude-fable-5-2"}
+{"id": 317790, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 318724, "label": "real", "reason": "PowerShell obfuscation tool", "labeller": "claude-fable-5-2"}
+{"id": 317277, "label": "noise", "reason": "Clipboard support in a terminal emulator library", "labeller": "claude-fable-5-2"}
+{"id": 318852, "label": "real", "reason": "Exploit document sample", "labeller": "claude-fable-5-2"}
+{"id": 284216, "label": "real", "reason": "File paths interpolated into a shell command string", "labeller": "claude-fable-5-2"}
+{"id": 32090, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 313348, "label": "noise", "reason": "Reads a data file named by the program's own configuration", "labeller": "claude-fable-5-2"}
+{"id": 317114, "label": "noise", "reason": "color is a well-known legitimate package", "labeller": "claude-fable-5-2"}
+{"id": 292342, "label": "noise", "reason": "Bandit's point here is informational only", "labeller": "claude-fable-5-2"}
+{"id": 282569, "label": "noise", "reason": "The unlock happens in the returned release function", "labeller": "claude-fable-5-2"}
+{"id": 318729, "label": "real", "reason": "Unmanaged PowerShell loader DLL in an attack framework", "labeller": "claude-fable-5-2"}
+{"id": 284395, "label": "noise", "reason": "Checks that a required setting is present", "labeller": "claude-fable-5-2"}
+{"id": 318932, "label": "real", "reason": "Reverse-shell commands in an attack payload reference", "labeller": "claude-fable-5-2"}
+{"id": 288365, "label": "noise", "reason": "Console shim in a vendored minified library", "labeller": "claude-fable-5-2"}
+{"id": 318813, "label": "real", "reason": "Encoded PowerShell in a malware sample", "labeller": "claude-fable-5-2"}
+{"id": 313282, "label": "noise", "reason": "Least-privilege advice on an internal reusable workflow", "labeller": "claude-fable-5-2"}
+{"id": 316268, "label": "noise", "reason": "Claim is false here: the dependency has an upper bound", "labeller": "claude-fable-5-2"}
+{"id": 315373, "label": "noise", "reason": "A None default, not a secret", "labeller": "claude-fable-5-2"}
+{"id": 315280, "label": "noise", "reason": "Descriptive text that mentions rm -rf", "labeller": "claude-fable-5-2"}
+{"id": 315334, "label": "noise", "reason": "An OAuth field name, not a secret", "labeller": "claude-fable-5-2"}
+{"id": 318046, "label": "real", "reason": "Packer runtime inside a stealer's source tree", "labeller": "claude-fable-5-2"}
+{"id": 268068, "label": "noise", "reason": "FTP advice is trivial here", "labeller": "claude-fable-5-2"}
+{"id": 318732, "label": "real", "reason": "Unmanaged PowerShell loader DLL in an attack framework", "labeller": "claude-fable-5-2"}
+{"id": 269065, "label": "real", "reason": "Shellcode signature on a committed executable", "labeller": "claude-fable-5-2"}
+{"id": 313834, "label": "noise", "reason": "Package-manager cooldown advice", "labeller": "claude-fable-5-2"}
+{"id": 318086, "label": "real", "reason": "Packed executable in an Android banking trojan folder", "labeller": "claude-fable-5-2"}
+{"id": 285795, "label": "noise", "reason": "A Chef resource class, not a Rails model", "labeller": "claude-fable-5-2"}
+{"id": 283134, "label": "noise", "reason": "A security tool's own description of an attack", "labeller": "claude-fable-5-2"}
+{"id": 292279, "label": "noise", "reason": "Flag constants, not passwords", "labeller": "claude-fable-5-2"}
+{"id": 316153, "label": "noise", "reason": "Claim is false here: the dependency has a bounded range", "labeller": "claude-fable-5-2"}
+{"id": 287004, "label": "noise", "reason": "Feature-detection helper inside yarn's bundled release", "labeller": "claude-fable-5-2"}
+{"id": 289181, "label": "noise", "reason": "Loads a model from a local path", "labeller": "claude-fable-5-2"}
+{"id": 288338, "label": "noise", "reason": "Cannot tell from the line that the command comes from outside", "labeller": "claude-fable-5-2"}
+{"id": 312920, "label": "noise", "reason": "Search query naming paste sites in an OSINT script", "labeller": "claude-fable-5-2"}
+{"id": 288538, "label": "noise", "reason": "Unencrypted gRPC to a local node socket", "labeller": "claude-fable-5-2"}
+{"id": 317332, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 318117, "label": "real", "reason": "Obfuscated helper tool used by the XCSSET macOS trojan", "labeller": "claude-fable-5-2"}
+{"id": 318896, "label": "real", "reason": "Committed executable whose import hash matches known malware families", "labeller": "claude-fable-5-2"}
+{"id": 315281, "label": "noise", "reason": "A detection tool's own list of patterns", "labeller": "claude-fable-5-2"}
+{"id": 268484, "label": "real", "reason": "Antivirus signature on PowerUp, a privilege-escalation attack script", "labeller": "claude-fable-5-2"}
+{"id": 281704, "label": "noise", "reason": "Cannot tell from the line that the file name is user-controlled", "labeller": "claude-fable-5-2"}
+{"id": 318747, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 286272, "label": "noise", "reason": "A firewall rule that blocks requests for /etc/passwd", "labeller": "claude-fable-5-2"}
+{"id": 269797, "label": "noise", "reason": "Cyrillic text in a date-locale file", "labeller": "claude-fable-5-2"}
+{"id": 314494, "label": "noise", "reason": "Error-handling style advice", "labeller": "claude-fable-5-2"}
+{"id": 292280, "label": "noise", "reason": "Flag constants, not passwords", "labeller": "claude-fable-5-2"}
+{"id": 283151, "label": "noise", "reason": "Install hooks run the project's own validation and patch-package", "labeller": "claude-fable-5-2"}
+{"id": 317019, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318653, "label": "real", "reason": "Shellcode injection attack script", "labeller": "claude-fable-5-2"}
+{"id": 318068, "label": "real", "reason": "PHP backdoor source", "labeller": "claude-fable-5-2"}
+{"id": 286330, "label": "noise", "reason": "Reflection inside a template library's own filter", "labeller": "claude-fable-5-2"}
+{"id": 292421, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 318101, "label": "real", "reason": "RevengeRAT signature on a sample", "labeller": "claude-fable-5-2"}
+{"id": 314896, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 275904, "label": "noise", "reason": "Rewrites a bind address to loopback for a client", "labeller": "claude-fable-5-2"}
+{"id": 292747, "label": "real", "reason": "One-line PowerShell reverse shell", "labeller": "claude-fable-5-2"}
+{"id": 287101, "label": "noise", "reason": "Setup script fetching the tool it installs", "labeller": "claude-fable-5-2"}
+{"id": 319030, "label": "real", "reason": "Obfuscator output in a source file named loader, worth reading", "labeller": "claude-fable-5-2"}
+{"id": 254969, "label": "noise", "reason": "Empty default setting", "labeller": "claude-fable-5-2"}
+{"id": 318949, "label": "real", "reason": "Image carrying the CVE-2021-22204 exploit", "labeller": "claude-fable-5-2"}
+{"id": 268237, "label": "noise", "reason": "Claim is false here: SHA-256 is not a weak hash", "labeller": "claude-fable-5-2"}
+{"id": 271044, "label": "noise", "reason": "Console polyfill for old browsers", "labeller": "claude-fable-5-2"}
+{"id": 268731, "label": "noise", "reason": "Resource-limit advice on an internal copy", "labeller": "claude-fable-5-2"}
+{"id": 318981, "label": "real", "reason": "Remote-code-execution proof-of-concept payloads", "labeller": "claude-fable-5-2"}
+{"id": 269351, "label": "real", "reason": "TLS certificate checks really are disabled on this request", "labeller": "claude-fable-5-2"}
+{"id": 319048, "label": "noise", "reason": "Test harness spawning a browser", "labeller": "claude-fable-5-2"}
+{"id": 316403, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 39224, "label": "real", "reason": "exec() on dynamic content in library code", "labeller": "claude-fable-5-2"}
+{"id": 268978, "label": "real", "reason": "Jigsaw signature on a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 316860, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 288094, "label": "noise", "reason": "Plain-HTTP debug endpoint", "labeller": "claude-fable-5-2"}
+{"id": 287611, "label": "real", "reason": "Branch name interpolated straight into a run step", "labeller": "claude-fable-5-2"}
+{"id": 290283, "label": "noise", "reason": "Keyword list inside a syntax-highlighting library", "labeller": "claude-fable-5-2"}
+{"id": 316844, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 269123, "label": "real", "reason": "PHP web shell: system() on a request parameter", "labeller": "claude-fable-5-2"}
+{"id": 271205, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 317388, "label": "noise", "reason": "Claim is false here: the dependency has a ~=1.34 constraint", "labeller": "claude-fable-5-2"}
+{"id": 287966, "label": "noise", "reason": "Embedded image bytes, not obfuscated code", "labeller": "claude-fable-5-2"}
+{"id": 269618, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 292745, "label": "real", "reason": "PowerShell script that fetches and runs code from DNS records", "labeller": "claude-fable-5-2"}
+{"id": 316915, "label": "noise", "reason": "Download in a CI pipeline file, low signal alone", "labeller": "claude-fable-5-2"}
+{"id": 276163, "label": "noise", "reason": "A chat-template marker, not a password", "labeller": "claude-fable-5-2"}
+{"id": 316280, "label": "noise", "reason": "Minimum-version range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 317342, "label": "noise", "reason": "Minimum-version range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 288657, "label": "noise", "reason": "Log formatting style advice", "labeller": "claude-fable-5-2"}
+{"id": 319135, "label": "noise", "reason": "Match inside a YARA rule file that describes the technique", "labeller": "claude-fable-5-2"}
+{"id": 313099, "label": "noise", "reason": "Writes a generated data file", "labeller": "claude-fable-5-2"}
+{"id": 319031, "label": "real", "reason": "Misspelling of requests with no version, a classic typosquat", "labeller": "claude-fable-5-2"}
+{"id": 291424, "label": "noise", "reason": "Cannot confirm a missing unlock from the line shown", "labeller": "claude-fable-5-2"}
+{"id": 269341, "label": "noise", "reason": "Fixed remote command, no outside input", "labeller": "claude-fable-5-2"}
+{"id": 313150, "label": "noise", "reason": "Saves a CSV in the browser, nothing executed", "labeller": "claude-fable-5-2"}
+{"id": 268984, "label": "real", "reason": "Heavily obfuscated ransomware dropper script calling eval", "labeller": "claude-fable-5-2"}
+{"id": 319134, "label": "noise", "reason": "Match inside a YARA rule file that describes the technique", "labeller": "claude-fable-5-2"}
+{"id": 316293, "label": "noise", "reason": "psycopg is a well-known legitimate package", "labeller": "claude-fable-5-2"}
+{"id": 287434, "label": "noise", "reason": "Virtual filesystem setup inside a compiled WebAssembly runtime", "labeller": "claude-fable-5-2"}
+{"id": 318034, "label": "real", "reason": "Conti signature on a ransomware binary", "labeller": "claude-fable-5-2"}
+{"id": 318840, "label": "real", "reason": "Reversed suspicious strings in an Emotet dropper document", "labeller": "claude-fable-5-2"}
+{"id": 287435, "label": "noise", "reason": "Known idiom in a bundled hashing library for loading Node modules", "labeller": "claude-fable-5-2"}
+{"id": 268331, "label": "real", "reason": "Certificate verification really is switched off", "labeller": "claude-fable-5-2"}
+{"id": 315528, "label": "noise", "reason": "Log message logs only a status code", "labeller": "claude-fable-5-2"}
+{"id": 271188, "label": "noise", "reason": "0755 on a file is a normal executable mode", "labeller": "claude-fable-5-2"}
+{"id": 286003, "label": "noise", "reason": "Pattern comes from the form's own validation config", "labeller": "claude-fable-5-2"}
+{"id": 269049, "label": "real", "reason": "Shellcode signature on a committed executable", "labeller": "claude-fable-5-2"}
+{"id": 312859, "label": "noise", "reason": "Library import in a CTF exercise", "labeller": "claude-fable-5-2"}
+{"id": 269720, "label": "real", "reason": "Credential-dumping tool listing every user's home directory", "labeller": "claude-fable-5-2"}
+{"id": 287129, "label": "noise", "reason": "Plain HTML escaping helper, style advice", "labeller": "claude-fable-5-2"}
+{"id": 317089, "label": "noise", "reason": "Source map of a bundled front-end build", "labeller": "claude-fable-5-2"}
+{"id": 270159, "label": "noise", "reason": "Generic Kubernetes hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 318392, "label": "real", "reason": "Reverse-shell payload template", "labeller": "claude-fable-5-2"}
+{"id": 281481, "label": "noise", "reason": "Cannot confirm a nil dereference from the lines shown", "labeller": "claude-fable-5-2"}
+{"id": 270733, "label": "noise", "reason": "Developer guide text", "labeller": "claude-fable-5-2"}
+{"id": 291860, "label": "real", "reason": "eval() on a string value instead of a safe parser", "labeller": "claude-fable-5-2"}
+{"id": 284705, "label": "noise", "reason": "FTP support is the stated purpose of this module", "labeller": "claude-fable-5-2"}
+{"id": 316200, "label": "noise", "reason": "pymssql is a well-known legitimate package", "labeller": "claude-fable-5-2"}
+{"id": 318805, "label": "real", "reason": "Thanos signature on a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 292422, "label": "real", "reason": "Value formatted into a shell command run with sudo", "labeller": "claude-fable-5-2"}
+{"id": 269221, "label": "real", "reason": "File of script-injection attack payloads", "labeller": "claude-fable-5-2"}
+{"id": 287959, "label": "real", "reason": "Dependency fetched from a URL instead of the registry", "labeller": "claude-fable-5-2"}
+{"id": 318721, "label": "real", "reason": "PowerCat network tool shipped in an attack framework", "labeller": "claude-fable-5-2"}
+{"id": 316114, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 252067, "label": "noise", "reason": "A language link in a saved HTML report", "labeller": "claude-fable-5-2"}
+{"id": 318937, "label": "real", "reason": "Reverse-shell commands in an attack payload reference", "labeller": "claude-fable-5-2"}
+{"id": 317239, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318862, "label": "real", "reason": "Meterpreter signature on a payload file", "labeller": "claude-fable-5-2"}
+{"id": 316556, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 313312, "label": "noise", "reason": "Unencrypted gRPC between internal services", "labeller": "claude-fable-5-2"}
+{"id": 318340, "label": "real", "reason": "Dependency installed from a git branch that can change", "labeller": "claude-fable-5-2"}
+{"id": 317228, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318012, "label": "real", "reason": "Post-exploitation payload inside a command-and-control server", "labeller": "claude-fable-5-2"}
+{"id": 272035, "label": "noise", "reason": "Cannot confirm a nil dereference from the lines shown", "labeller": "claude-fable-5-2"}
+{"id": 274798, "label": "noise", "reason": "A parameter value, not a password", "labeller": "claude-fable-5-2"}
+{"id": 270135, "label": "noise", "reason": "Generic Kubernetes hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 313100, "label": "noise", "reason": "Reads a CSV to generate test vectors", "labeller": "claude-fable-5-2"}
+{"id": 318743, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 287128, "label": "noise", "reason": "Plain HTML escaping helper, style advice", "labeller": "claude-fable-5-2"}
+{"id": 317024, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 292681, "label": "real", "reason": "Remote-access agent executing marshalled code it received", "labeller": "claude-fable-5-2"}
+{"id": 264952, "label": "real", "reason": "Script that rebuilds a string from character codes and runs it", "labeller": "claude-fable-5-2"}
+{"id": 271043, "label": "noise", "reason": "Template compiler inside a vendored editor library", "labeller": "claude-fable-5-2"}
+{"id": 287130, "label": "noise", "reason": "Plain HTML escaping helper, style advice", "labeller": "claude-fable-5-2"}
+{"id": 250678, "label": "noise", "reason": "Style advice about strtok", "labeller": "claude-fable-5-2"}
+{"id": 318441, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 270703, "label": "noise", "reason": "Container hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 269161, "label": "noise", "reason": "Example command in a README", "labeller": "claude-fable-5-2"}
+{"id": 269054, "label": "real", "reason": "Shellcode signature on a committed executable", "labeller": "claude-fable-5-2"}
+{"id": 318863, "label": "real", "reason": "Cobalt Strike Beacon strings in a payload file", "labeller": "claude-fable-5-2"}
+{"id": 284950, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 317823, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 268974, "label": "real", "reason": "Malicious downloader document in a ransomware sample set", "labeller": "claude-fable-5-2"}
+{"id": 317795, "label": "noise", "reason": "Claim is false here: the dependency has an upper bound", "labeller": "claude-fable-5-2"}
+{"id": 288171, "label": "noise", "reason": "Profiling endpoint in a monitoring service", "labeller": "claude-fable-5-2"}
+{"id": 317600, "label": "noise", "reason": "Mining-pool domains listed in an ad-blocking filter", "labeller": "claude-fable-5-2"}
+{"id": 284502, "label": "noise", "reason": "Verification is replaced by the tool's own protocol checks", "labeller": "claude-fable-5-2"}
+{"id": 292247, "label": "noise", "reason": "RC4 is required by the Windows cache format being parsed", "labeller": "claude-fable-5-2"}
+{"id": 316363, "label": "real", "reason": "Unfamiliar package one character from a popular name, worth checking", "labeller": "claude-fable-5-2"}
+{"id": 285890, "label": "noise", "reason": "Sample token in an example response", "labeller": "claude-fable-5-2"}
+{"id": 271668, "label": "noise", "reason": "Reads a tracing setting from config", "labeller": "claude-fable-5-2"}
+{"id": 316043, "label": "noise", "reason": "Mounts an adapter for a URL scheme", "labeller": "claude-fable-5-2"}
+{"id": 319122, "label": "noise", "reason": "Table and column names come from the script's own constants", "labeller": "claude-fable-5-2"}
+{"id": 254987, "label": "noise", "reason": "mark_safe on form output the framework escaped itself", "labeller": "claude-fable-5-2"}
+{"id": 292239, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 316157, "label": "noise", "reason": "Claim is false here: the dependency has a bounded range", "labeller": "claude-fable-5-2"}
+{"id": 318636, "label": "real", "reason": "PowerShell attack script that downloads and runs code", "labeller": "claude-fable-5-2"}
+{"id": 269339, "label": "real", "reason": "Host key checking really is disabled", "labeller": "claude-fable-5-2"}
+{"id": 269834, "label": "noise", "reason": "A field-name map, not a secret", "labeller": "claude-fable-5-2"}
+{"id": 318740, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 318847, "label": "real", "reason": "Encoded PowerShell in a malware sample", "labeller": "claude-fable-5-2"}
+{"id": 317354, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 315288, "label": "noise", "reason": "The project's own Telegram alert feature", "labeller": "claude-fable-5-2"}
+{"id": 269039, "label": "real", "reason": "Malicious macro document that downloads through PowerShell", "labeller": "claude-fable-5-2"}
+{"id": 250635, "label": "noise", "reason": "Compiler-optimisation advice on a buffer clear", "labeller": "claude-fable-5-2"}
+{"id": 283186, "label": "noise", "reason": "Deletes a cache file whose name the code builds itself", "labeller": "claude-fable-5-2"}
+{"id": 318351, "label": "noise", "reason": "Toolchain setup in a Dockerfile", "labeller": "claude-fable-5-2"}
+{"id": 318880, "label": "real", "reason": "Mystic Stealer signature on a malware sample", "labeller": "claude-fable-5-2"}
+{"id": 316930, "label": "noise", "reason": "Installer script of a monitoring agent registering its service", "labeller": "claude-fable-5-2"}
+{"id": 290281, "label": "noise", "reason": "Keyword list inside a syntax-highlighting library", "labeller": "claude-fable-5-2"}
+{"id": 317763, "label": "noise", "reason": "Platform marker only, matches how the evaluation set treats these", "labeller": "claude-fable-5-2"}
+{"id": 289411, "label": "noise", "reason": "Deployment script linking its own .env file", "labeller": "claude-fable-5-2"}
+{"id": 285022, "label": "noise", "reason": "Unpinned dataset download, hygiene advice", "labeller": "claude-fable-5-2"}
+{"id": 318141, "label": "real", "reason": "Malware family signature on an unidentified binary", "labeller": "claude-fable-5-2"}
+{"id": 267984, "label": "noise", "reason": "FTP advice is trivial here", "labeller": "claude-fable-5-2"}
+{"id": 269548, "label": "noise", "reason": "A Windows account identifier, not a password", "labeller": "claude-fable-5-2"}
+{"id": 270748, "label": "noise", "reason": "Dockerfile that downloads and installs its toolchain", "labeller": "claude-fable-5-2"}
+{"id": 318309, "label": "noise", "reason": "scapy is a well-known legitimate package", "labeller": "claude-fable-5-2"}
+{"id": 315348, "label": "noise", "reason": "Parses a reply from the server it is configured to talk to", "labeller": "claude-fable-5-2"}
+{"id": 317682, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 269416, "label": "noise", "reason": "FTP support is the stated purpose of this module", "labeller": "claude-fable-5-2"}
+{"id": 270825, "label": "noise", "reason": "Download in an install script, low signal alone", "labeller": "claude-fable-5-2"}
+{"id": 317393, "label": "noise", "reason": "Claim is false here: the dependency has a ~=0.19 constraint", "labeller": "claude-fable-5-2"}
+{"id": 316230, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 318853, "label": "real", "reason": "Exploit document sample", "labeller": "claude-fable-5-2"}
+{"id": 39214, "label": "noise", "reason": "Bundled documentation site script", "labeller": "claude-fable-5-2"}
+{"id": 268606, "label": "real", "reason": "Formatted command run through the shell in a stager", "labeller": "claude-fable-5-2"}
+{"id": 318303, "label": "real", "reason": "Dependency fetched from a branch archive URL that can change", "labeller": "claude-fable-5-2"}
+{"id": 316370, "label": "noise", "reason": "Bounded range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 280880, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 264970, "label": "real", "reason": "Script that rebuilds a string from character codes and runs it", "labeller": "claude-fable-5-2"}
+{"id": 291367, "label": "noise", "reason": "model.eval() is a machine-learning call, not code execution", "labeller": "claude-fable-5-2"}
+{"id": 255123, "label": "noise", "reason": "mark_safe on a translation string the template engine owns", "labeller": "claude-fable-5-2"}
+{"id": 318526, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 317885, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318376, "label": "real", "reason": "Coin-miner binary bundled with a botnet framework", "labeller": "claude-fable-5-2"}
+{"id": 286041, "label": "noise", "reason": "Preinstall hook that only checks yarn is being used", "labeller": "claude-fable-5-2"}
+{"id": 318088, "label": "real", "reason": "BPFDoor implant controller source", "labeller": "claude-fable-5-2"}
+{"id": 318338, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 316167, "label": "noise", "reason": "Claim is false here: the dependency has a bounded range", "labeller": "claude-fable-5-2"}
+{"id": 287752, "label": "noise", "reason": "Developer test-runner script", "labeller": "claude-fable-5-2"}
+{"id": 319136, "label": "noise", "reason": "Match inside a YARA rule file that describes the technique", "labeller": "claude-fable-5-2"}
+{"id": 270721, "label": "noise", "reason": "Extra index is the standard PyTorch CPU wheel index", "labeller": "claude-fable-5-2"}
+{"id": 316218, "label": "noise", "reason": "Claim is false here: the dependency has an upper bound", "labeller": "claude-fable-5-2"}
+{"id": 316307, "label": "noise", "reason": "Environment setup script adding to a shell profile", "labeller": "claude-fable-5-2"}
+{"id": 316290, "label": "noise", "reason": "Minimum-version range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 289653, "label": "noise", "reason": "Fixture file for a workflow tool's tests", "labeller": "claude-fable-5-2"}
+{"id": 9358, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 286396, "label": "noise", "reason": "A parameter that happens to be named shell", "labeller": "claude-fable-5-2"}
+{"id": 312861, "label": "noise", "reason": "Library import in a CTF exercise", "labeller": "claude-fable-5-2"}
+{"id": 290485, "label": "noise", "reason": "CI script reading its own credentials from the environment", "labeller": "claude-fable-5-2"}
+{"id": 319137, "label": "noise", "reason": "Match inside a YARA rule file that describes the technique", "labeller": "claude-fable-5-2"}
+{"id": 316048, "label": "noise", "reason": "Reads the app's own state file", "labeller": "claude-fable-5-2"}
+{"id": 279143, "label": "noise", "reason": "A tensor name, not a password", "labeller": "claude-fable-5-2"}
+{"id": 268958, "label": "real", "reason": "Coin-miner signature on a malware sample", "labeller": "claude-fable-5-2"}
+{"id": 318915, "label": "real", "reason": "Ransomware signature on a training sample", "labeller": "claude-fable-5-2"}
+{"id": 39344, "label": "noise", "reason": "Webhook delivery to a user-configured address", "labeller": "claude-fable-5-2"}
+{"id": 21899, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 272229, "label": "noise", "reason": "Unpinned dataset download in a benchmark script", "labeller": "claude-fable-5-2"}
+{"id": 318095, "label": "real", "reason": "Obfuscator naming pattern in a remote-access trojan sample", "labeller": "claude-fable-5-2"}
+{"id": 269098, "label": "noise", "reason": "Placeholder address in an example script", "labeller": "claude-fable-5-2"}
+{"id": 318792, "label": "real", "reason": "Debugger and sandbox checks in a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 318978, "label": "real", "reason": "File of command-injection attack payloads", "labeller": "claude-fable-5-2"}
+{"id": 318554, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 270737, "label": "noise", "reason": "Dockerfile that downloads and installs its toolchain", "labeller": "claude-fable-5-2"}
+{"id": 292118, "label": "noise", "reason": "Request logging, style advice", "labeller": "claude-fable-5-2"}
+{"id": 317608, "label": "noise", "reason": "Mining-pool domains listed in an ad-blocking filter", "labeller": "claude-fable-5-2"}
+{"id": 284769, "label": "noise", "reason": "A file-type signature database entry, not a key", "labeller": "claude-fable-5-2"}
+{"id": 287005, "label": "noise", "reason": "Platform check inside yarn's bundled release", "labeller": "claude-fable-5-2"}
+{"id": 286439, "label": "noise", "reason": "A parameter that happens to be named shell", "labeller": "claude-fable-5-2"}
+{"id": 275860, "label": "real", "reason": "Model loading with the safe-loading option explicitly turned off", "labeller": "claude-fable-5-2"}
+{"id": 312854, "label": "noise", "reason": "Placeholder token in an example", "labeller": "claude-fable-5-2"}
+{"id": 269222, "label": "real", "reason": "File of script-injection attack payloads", "labeller": "claude-fable-5-2"}
+{"id": 39212, "label": "noise", "reason": "Bundled documentation site script", "labeller": "claude-fable-5-2"}
+{"id": 291428, "label": "noise", "reason": "Terminal multiplexer re-executing its own binary", "labeller": "claude-fable-5-2"}
+{"id": 268454, "label": "real", "reason": "Exploit template for CVE-2018-8414", "labeller": "claude-fable-5-2"}
+{"id": 250691, "label": "real", "reason": "Botnet source killing other processes through system()", "labeller": "claude-fable-5-2"}
+{"id": 318780, "label": "noise", "reason": "Claim is false here: the git dependency is pinned to a commit", "labeller": "claude-fable-5-2"}
+{"id": 284345, "label": "noise", "reason": "Log formatting style advice", "labeller": "claude-fable-5-2"}
+{"id": 284067, "label": "real", "reason": "A private key committed to the repository", "labeller": "claude-fable-5-2"}
+{"id": 313934, "label": "noise", "reason": "Query fragment built by the code itself, values are parameters", "labeller": "claude-fable-5-2"}
+{"id": 317367, "label": "noise", "reason": "Custom develop class, common in packages that build native code", "labeller": "claude-fable-5-2"}
+{"id": 292487, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 280171, "label": "noise", "reason": "A tokenizer marker, not a password", "labeller": "claude-fable-5-2"}
+{"id": 284833, "label": "noise", "reason": "Translation strings, no DNS activity", "labeller": "claude-fable-5-2"}
+{"id": 10679, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 319138, "label": "noise", "reason": "Match inside a YARA rule file that describes the technique", "labeller": "claude-fable-5-2"}
+{"id": 283150, "label": "noise", "reason": "Preinstall hook runs the project's own validation script", "labeller": "claude-fable-5-2"}
+{"id": 271509, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 290796, "label": "noise", "reason": "Plain-text email template", "labeller": "claude-fable-5-2"}
+{"id": 280887, "label": "noise", "reason": "Telnet to a service on the same machine", "labeller": "claude-fable-5-2"}
+{"id": 315542, "label": "noise", "reason": "Renders fixed strings", "labeller": "claude-fable-5-2"}
+{"id": 275296, "label": "noise", "reason": "Unpinned model download, hygiene advice", "labeller": "claude-fable-5-2"}
+{"id": 287077, "label": "noise", "reason": "Claim is false here: this builds a message, not a query", "labeller": "claude-fable-5-2"}
+{"id": 38198, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 318920, "label": "real", "reason": "Encoded PowerShell inside a trojanised copy of PuTTY", "labeller": "claude-fable-5-2"}
+{"id": 269215, "label": "real", "reason": "Image carrying the CVE-2021-22204 exploit", "labeller": "claude-fable-5-2"}
+{"id": 318647, "label": "real", "reason": "One-line PowerShell reverse shell", "labeller": "claude-fable-5-2"}
+{"id": 39216, "label": "noise", "reason": "Bundled documentation site script", "labeller": "claude-fable-5-2"}
+{"id": 280405, "label": "noise", "reason": "A tokenizer marker, not a password", "labeller": "claude-fable-5-2"}
+{"id": 292119, "label": "noise", "reason": "Request logging, style advice", "labeller": "claude-fable-5-2"}
+{"id": 318019, "label": "real", "reason": "Hidden-VNC banking malware component", "labeller": "claude-fable-5-2"}
+{"id": 291229, "label": "noise", "reason": "Unpinned model download, hygiene advice", "labeller": "claude-fable-5-2"}
+{"id": 313635, "label": "noise", "reason": "Generic Kubernetes hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 270912, "label": "noise", "reason": "Name of an environment variable in vendored code", "labeller": "claude-fable-5-2"}
+{"id": 29167, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 317492, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318145, "label": "noise", "reason": "Minimum-version range, hygiene advice only", "labeller": "claude-fable-5-2"}
+{"id": 290750, "label": "noise", "reason": "Homepage address of a Homebrew cask", "labeller": "claude-fable-5-2"}
+{"id": 272149, "label": "noise", "reason": "A character-width data table in an editor library", "labeller": "claude-fable-5-2"}
+{"id": 283136, "label": "noise", "reason": "Ordinary object lookups in a benchmark command", "labeller": "claude-fable-5-2"}
+{"id": 319035, "label": "real", "reason": "Install script that decodes base64 and executes it", "labeller": "claude-fable-5-2"}
+{"id": 283413, "label": "noise", "reason": "MD5 used to compare two files", "labeller": "claude-fable-5-2"}
+{"id": 318119, "label": "real", "reason": "Packed executable in a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 271678, "label": "noise", "reason": "The micro sign in a comment", "labeller": "claude-fable-5-2"}
+{"id": 318096, "label": "real", "reason": "Firewall-tampering indicator in a remote-access trojan sample", "labeller": "claude-fable-5-2"}
+{"id": 271488, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 269796, "label": "noise", "reason": "Keyword list in a syntax-highlighting mode", "labeller": "claude-fable-5-2"}
+{"id": 318461, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 317042, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 269793, "label": "noise", "reason": "Keyword list in a syntax-highlighting mode", "labeller": "claude-fable-5-2"}
+{"id": 316223, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 269067, "label": "real", "reason": "Shellcode signature on a trojanised copy of PuTTY", "labeller": "claude-fable-5-2"}
+{"id": 269499, "label": "noise", "reason": "Error-handling style advice", "labeller": "claude-fable-5-2"}
+{"id": 288755, "label": "noise", "reason": "Example values in SDK documentation data", "labeller": "claude-fable-5-2"}
+{"id": 316427, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 268511, "label": "noise", "reason": "Templates produce Go source, not HTML", "labeller": "claude-fable-5-2"}
+{"id": 268951, "label": "real", "reason": "Petya signature on a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 292746, "label": "real", "reason": "Antivirus signature on a script that builds a malicious scriptlet", "labeller": "claude-fable-5-2"}
+{"id": 280298, "label": "noise", "reason": "Parses a chat template, no HTML output", "labeller": "claude-fable-5-2"}
+{"id": 318314, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 316563, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 316117, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 271527, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 316110, "label": "noise", "reason": "Indicator strings inside a network sensor's generated settings", "labeller": "claude-fable-5-2"}
+{"id": 313664, "label": "noise", "reason": "An encrypted sealed-secret value, not the key itself", "labeller": "claude-fable-5-2"}
+{"id": 318308, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 292655, "label": "real", "reason": "Antivirus signature on a remote-access tool's PowerShell module", "labeller": "claude-fable-5-2"}
+{"id": 276266, "label": "noise", "reason": "A tokenizer marker, not a password", "labeller": "claude-fable-5-2"}
+{"id": 317523, "label": "noise", "reason": "Install instructions in a README", "labeller": "claude-fable-5-2"}
+{"id": 317781, "label": "noise", "reason": "Platform marker only, matches how the evaluation set treats these", "labeller": "claude-fable-5-2"}
+{"id": 275312, "label": "noise", "reason": "SHA-1 used to name a cache file", "labeller": "claude-fable-5-2"}
+{"id": 269559, "label": "noise", "reason": "An import line only", "labeller": "claude-fable-5-2"}
+{"id": 317045, "label": "noise", "reason": "vuex is a well-known legitimate package", "labeller": "claude-fable-5-2"}
+{"id": 268885, "label": "real", "reason": "EternalBlue exploit signature on a lateral-movement script", "labeller": "claude-fable-5-2"}
+{"id": 318394, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 286630, "label": "noise", "reason": "Writes a parser table, does not load untrusted data", "labeller": "claude-fable-5-2"}
+{"id": 286891, "label": "real", "reason": "Renders a description field as raw HTML", "labeller": "claude-fable-5-2"}
+{"id": 268744, "label": "noise", "reason": "Runs commands from the script's own fixed list", "labeller": "claude-fable-5-2"}
+{"id": 290820, "label": "noise", "reason": "Plain-text email template", "labeller": "claude-fable-5-2"}
+{"id": 23680, "label": "noise", "reason": "Test file", "labeller": "claude-fable-5-2"}
+{"id": 269069, "label": "real", "reason": "Shellcode signature on a training malware sample", "labeller": "claude-fable-5-2"}
+{"id": 316198, "label": "noise", "reason": "psycopg is a well-known legitimate package", "labeller": "claude-fable-5-2"}
+{"id": 318271, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 282950, "label": "noise", "reason": "Joins a fixed folder name to the repository path", "labeller": "claude-fable-5-2"}
+{"id": 318889, "label": "real", "reason": "Process injection in a training malware sample", "labeller": "claude-fable-5-2"}
+{"id": 317339, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 270707, "label": "noise", "reason": "Container hardening advice", "labeller": "claude-fable-5-2"}
+{"id": 317064, "label": "noise", "reason": "Caret range in package.json, normal practice with a lockfile", "labeller": "claude-fable-5-2"}
+{"id": 318121, "label": "real", "reason": "Obfuscator naming pattern in a ransomware sample", "labeller": "claude-fable-5-2"}
+{"id": 39188, "label": "noise", "reason": "Example script", "labeller": "claude-fable-5-2"}
+{"id": 271998, "label": "noise", "reason": "Debug dump to standard output", "labeller": "claude-fable-5-2"}
+{"id": 318604, "label": "real", "reason": "Dependency installed from a git repository with no fixed revision", "labeller": "claude-fable-5-2"}
+{"id": 288364, "label": "noise", "reason": "File-export helper in a vendored charting library", "labeller": "claude-fable-5-2"}
+{"id": 316112, "label": "real", "reason": "Known advisory against the exact pinned version", "labeller": "claude-fable-5-2"}
+{"id": 317757, "label": "real", "reason": "No version constraint at all on this dependency", "labeller": "claude-fable-5-2"}
+{"id": 313112, "label": "noise", "reason": "Sample log line in a demo page", "labeller": "claude-fable-5-2"}
+{"id": 318963, "label": "real", "reason": "PHP web shell", "labeller": "claude-fable-5-2"}
+{"id": 269121, "label": "real", "reason": "PHP web shell: system() on a request parameter", "labeller": "claude-fable-5-2"}
+{"id": 271455, "label": "noise", "reason": "eval limited to an empty-builtins namespace on the tool's own expressions", "labeller": "claude-fable-5-2"}
