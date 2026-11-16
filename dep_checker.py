@@ -57,17 +57,28 @@ def is_typosquat(package_name, ecosystem="python", threshold=0.85):
 
 def _parse_pep508_name_version(raw):
     """Parses a PEP 508 requirement string ('requests>=2.0', 'flask[async]',
-    'sqlalchemy<3,>=1.4') into (name, version), using the same simplified
-    3-way classification (==, >=, else "unpinned") that requirements.txt
-    parsing already uses — other operators (~=, <=, <, >, !=) fall into
-    "unpinned" too, same simplification, not a new one.
+    'sqlalchemy<3,>=1.4', 'pkg @ git+https://...') into (name, version).
+
+    version is the exact release for '==', "unpinned" when there is no
+    constraint at all, and otherwise the constraint as written ('>=2.0',
+    '~=6.7', '<3,>=1.4', '@ git+https://...'). It used to be "unpinned" for
+    every operator except '==' and '>=', so 'whitenoise~=6.7' and
+    'uvicorn<1' were reported as having no version lock. _pin_kind() is what
+    sorts these into exact / range / none / mutable.
 
     The name is always taken as everything before the FIRST operator
-    character, rather than splitting on a specific operator like ">=" —
+    character, rather than splitting on a specific operator like ">=" --
     splitting on ">=" directly used to mis-parse a compound constraint like
     "sqlalchemy<3,>=1.4" into name="sqlalchemy<3," (everything before the
     ">="), which then falsely tripped the typosquat checker on its own
     mangled name."""
+    raw = raw.strip()
+    if " @ " in raw or re.match(r"^[A-Za-z0-9._\-\[\],]+@", raw):
+        # A direct reference: the URL may itself contain ';' or brackets.
+        name, _, url = raw.partition("@")
+        name = re.sub(r"\[[^\]]*\]", "", name).strip()
+        return (name, "@ " + url.split(" ;")[0].strip()) if name else (None, None)
+
     raw = re.sub(r"\[[^\]]*\]", "", raw).split(";")[0].strip()
     match = re.search(r"[<>=!~\s]", raw)
     if not match:
@@ -75,18 +86,29 @@ def _parse_pep508_name_version(raw):
 
     name = raw[:match.start()].strip()
     spec = raw[match.start():].strip()
-    if spec.startswith("=="):
-        return name, spec[2:].strip()
-    elif spec.startswith(">="):
-        return name, spec
-    else:
+    if not spec:
         return name, "unpinned"
+    if spec.startswith("==") and "," not in spec:
+        return name, spec.lstrip("=").strip()
+    return name, spec
 
 
 def _table_style_version(value):
     """Poetry/Pipfile dependency tables both write versions as either a
     bare string ('^2.28', '*', '2.0.1') or {version = '...', extras = [...]}
-    — normalizes either into the same version-string shape used elsewhere."""
+    -- normalizes either into the same version-string shape used elsewhere.
+
+    A table can also name a source instead of a version. Those come back as
+    a direct reference ('@ <url>', with '@<rev>' appended for a commit or
+    tag) so _pin_kind() can tell a fixed commit from a branch, or as "local"
+    for a path on disk."""
+    if isinstance(value, dict):
+        if value.get("path"):
+            return "local"
+        source = value.get("git") or value.get("url")
+        if source:
+            fixed = value.get("rev") or value.get("ref") or value.get("tag")
+            return f"@ {source}" + (f"@{fixed}" if fixed else "")
     version = value.get("version", "*") if isinstance(value, dict) else value
     if not isinstance(version, str):
         return "unpinned"
@@ -95,10 +117,67 @@ def _table_style_version(value):
         return "unpinned"
     if version.startswith("==" ):
         return version[2:].strip()
-    return version  # "^2.28"/">=2.28" pass through as-is (already "loose"
-                     # per the startswith check below); a bare pinned
-                     # version like "2.28.1" passes through as effectively
-                     # pinned, same treatment as requirements.txt's "=="
+    return version  # "^2.28"/">=2.28" pass through as written; a bare
+                     # version like "2.28.1" passes through as an exact pin
+
+
+# How firmly a manifest entry fixes what gets installed.
+#   exact    one release ('2.28.1')
+#   range    any constraint that admits more than one release
+#   none     no constraint at all (bare name, '*', 'latest')
+#   mutable  a git branch or a URL, whose content can change under the name
+#   fixed    a git commit or tag
+#   local    a path, workspace or link: nothing is fetched
+_EXACT_PIN_RE = re.compile(r"^v?[0-9][0-9A-Za-z.\-+!_]*$")
+_WILDCARD_RE  = re.compile(r"(^|\.)[xX*]($|\.)")
+_COMMIT_RE    = re.compile(r"[@#]([0-9a-f]{7,40})$")
+_TAG_RE       = re.compile(r"[@#](?:semver:)?v?\d+(\.\d+)+[0-9A-Za-z.\-+]*$")
+_NPM_LOCAL    = ("file:", "link:", "workspace:", "portal:", "catalog:", "patch:")
+_NPM_REMOTE   = ("git+", "git:", "github:", "gitlab:", "bitbucket:", "gist:",
+                 "http://", "https://", "ssh://")
+
+
+def _source_kind(ref):
+    return "fixed" if _COMMIT_RE.search(ref) or _TAG_RE.search(ref) else "mutable"
+
+
+def _pin_kind(version, ecosystem="python"):
+    version = (version or "").strip()
+    if version == "local":
+        return "local"
+    if version in ("", "unpinned", "unknown", "*", "x", "latest"):
+        return "none"
+    if version.startswith("@"):
+        return _source_kind(version[1:].strip())
+    if ecosystem == "npm":
+        if version.startswith(_NPM_LOCAL):
+            return "local"
+        if version.startswith("npm:"):                 # an alias: npm:real@^1.2
+            return _pin_kind(version.rpartition("@")[2] if "@" in version[4:] else "", "npm")
+        if version.startswith(_NPM_REMOTE) or re.match(r"^[\w.\-]+/[\w.\-]+(#.+)?$", version):
+            return _source_kind(version)
+        if re.match(r"^[A-Za-z][\w.\-]*$", version):   # a dist-tag: next, beta
+            return "none"
+    if _EXACT_PIN_RE.match(version) and not _WILDCARD_RE.search(version):
+        return "exact"
+    return "range"
+
+
+# A lockfile beside the manifest records the exact release (and a checksum)
+# of everything installed, so a range in the manifest only governs the next
+# deliberate upgrade. requirements.txt has no lockfile: it is the install
+# input itself.
+LOCKFILES = {
+    "package.json":   ("package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
+                       "pnpm-lock.yaml", "bun.lock", "bun.lockb"),
+    "pyproject.toml": ("poetry.lock", "uv.lock", "pdm.lock"),
+    "Pipfile":        ("Pipfile.lock",),
+}
+
+
+def has_lockfile(repo_path, manifest):
+    return any(os.path.exists(os.path.join(repo_path, name))
+               for name in LOCKFILES.get(manifest, ()))
 
 
 def parse_dependencies(repo_path):
@@ -117,6 +196,18 @@ def parse_dependencies(repo_path):
                 # Skip comments and empty lines
                 if not line or line.startswith("#"):
                     continue
+                # Options are not packages: "-r base.txt", "--index-url ...".
+                # An editable install of a URL is still a URL install.
+                if line.startswith(("-e ", "--editable ")):
+                    line = line.split(None, 1)[1].strip()
+                    if not line.startswith(("http://", "https://", "git+")):
+                        continue
+                elif line.startswith("-"):
+                    continue
+                # Drop a trailing comment and per-package options (--hash=...).
+                line = re.split(r"\s+(?:#|--)", line)[0].strip()
+                if not line:
+                    continue
                 # Skip direct URL installs
                 if line.startswith(("http://", "https://", "git+")):
                     dependencies.append({
@@ -128,18 +219,12 @@ def parse_dependencies(repo_path):
                         "url_install": True
                     })
                     continue
-                # Parse name and version
-                if "==" in line:
-                    parts   = line.split("==")
-                    name    = parts[0].strip()
-                    version = parts[1].strip()
-                elif ">=" in line:
-                    parts   = line.split(">=")
-                    name    = parts[0].strip()
-                    version = f">={parts[1].strip()}"
-                else:
-                    name    = line.strip()
-                    version = "unpinned"
+                # The same parser pyproject.toml uses. This used to split on
+                # "==" and ">=" only, so "pkg~=1.0" became a package named
+                # "pkg~=1.0" with no version.
+                name, version = _parse_pep508_name_version(line)
+                if not name:
+                    continue
 
                 dependencies.append({
                     "name":        name,
@@ -408,6 +493,8 @@ def check_suspicious_patterns(repo_path):
         print("    No dependency files found")
         return findings
 
+    ranges = {}  # manifest filename -> raw entries that are version ranges
+
     for dep in deps:
         name     = dep["name"]
         version  = dep["version"]
@@ -445,8 +532,10 @@ def check_suspicious_patterns(repo_path):
         if dep.get("locked"):
             continue
 
-        # Check 3: Unpinned version
-        if version == "unpinned":
+        kind = _pin_kind(version, ecosystem)
+
+        # Check 3: nothing fixes what gets installed
+        if kind == "none":
             findings.append({
                 "tool":         "dep_checker",
                 "severity":     "medium",
@@ -455,17 +544,43 @@ def check_suspicious_patterns(repo_path):
                 "line_number":  line,
                 "code_snippet": raw
             })
-
-        # Check 4: Loose version (>=)
-        elif version.startswith(">=") or version.startswith("^"):
+        elif kind == "mutable":
             findings.append({
                 "tool":         "dep_checker",
-                "severity":     "low",
-                "issue_text":   f"Loose version constraint: '{name}{version}' — attacker could push malicious update",
+                "severity":     "medium",
+                "issue_text":   f"Unpinned dependency: '{name}' is installed from a branch or URL "
+                                f"whose content can change — supply chain risk",
                 "filename":     filename,
                 "line_number":  line,
                 "code_snippet": raw
             })
+
+        # Check 4: a range. Counted per manifest, reported once below.
+        elif kind == "range":
+            ranges.setdefault(filename, []).append(raw)
+
+    # A range matters when nothing else fixes the release: with a lockfile
+    # committed, installs take the recorded version and the range only
+    # governs the next deliberate upgrade. Reporting each one separately
+    # (the npm default is "^x.y.z") put dozens of identical low findings on
+    # every JavaScript project. Now: nothing with a lockfile, one finding
+    # per manifest without.
+    for filename, raws in ranges.items():
+        if has_lockfile(repo_path, filename):
+            continue
+        n = len(raws)
+        shown = raws[:15] + ([f"... and {n - 15} more"] if n > 15 else [])
+        findings.append({
+            "tool":         "dep_checker",
+            "severity":     "low",
+            "issue_text":   f"Loose version constraint: {n} "
+                            f"{'dependency' if n == 1 else 'dependencies'} in {filename} "
+                            f"{'allows' if n == 1 else 'allow'} a range of versions and no lockfile "
+                            f"is committed — a newly published release is installed automatically",
+            "filename":     filename,
+            "line_number":  0,
+            "code_snippet": "\n".join(shown)
+        })
 
     print(f"    Found {len(findings)} suspicious patterns")
     return findings

@@ -59,7 +59,8 @@ incomplete" marker (see `engine_incomplete_finding()` below).
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
-Tests cover IOC extraction, two YARA rules, symlink removal, the engines'
+Tests cover IOC extraction, two YARA rules, the dependency checker's pin rules,
+symlink removal, the engines'
 "scan incomplete" markers and the rule-based summary's wording:
 `python3 -m unittest discover -s tests -t .` (stdlib, needs no database or network;
 `test_ioc_scoring.py` imports `scanner.py`, so `config.py` must exist, and
@@ -214,10 +215,21 @@ above but returns findings in the same shape, merged into the same list:
   arbitrary code execution. Findings are deduped on (advisory id, package,
   version), since OSV returns one advisory from several sources with
   differently worded descriptions.
-- `check_suspicious_patterns()` — parses `requirements.txt` and `package.json`,
-  flags direct URL/`git+` installs, typosquatted package names (`SequenceMatcher`
-  ratio ≥ 0.85 against a hardcoded `KNOWN_PACKAGES` list), unpinned versions, and
-  loose (`>=`/`^`) version constraints
+- `check_suspicious_patterns()` — parses `requirements.txt`, `package.json`,
+  `pyproject.toml` and `Pipfile`, flags direct URL/`git+` installs and
+  typosquatted package names (`SequenceMatcher` ratio ≥ 0.85 against a
+  hardcoded `KNOWN_PACKAGES` list, which also hits real packages such as
+  `psycopg` and `vuex`: a known limitation). `_pin_kind()` sorts every entry
+  into exact / range / none / mutable / fixed / local. **Unpinned** (medium)
+  is `none` (bare name, `*`, `latest`) or `mutable` (a git branch, or a URL
+  without a commit or tag), reported whatever else is in the repo. A
+  **range** (`^`, `~=`, `>=`, `<`…) is not reported when a lockfile sits
+  beside the manifest (`LOCKFILES`), and otherwise is one low finding per
+  manifest giving the count, not one per dependency: the per-dependency
+  version put dozens of identical findings on every npm project, and
+  `whitenoise~=6.7` used to be called unpinned. Both keep their
+  `Unpinned dependency:` / `Loose version constraint:` prefix, which is the
+  classifier's key (`scanner.DEP_CHECKER_CATEGORIES`)
 
 **LLM summary** (`llm_summary.py`): after scoring, `scan_repo()` asks a local
 Ollama model for a plain-English paragraph about the top ~15 finding groups
