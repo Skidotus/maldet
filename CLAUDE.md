@@ -256,7 +256,9 @@ reach a log: print exception types there, not messages. Lookups go to three
 abuse.ch services: MalwareBazaar (sha256), URLhaus (url) and ThreatFox
 (domain, ipv4; a JSON body, unlike the other two). Tokens, webhooks and
 wallets are never sent. A ThreatFox entry only counts if it is exactly the
-indicator (`_threatfox_entry_is()`; an IP also matches its own `ip:port`),
+indicator (`_threatfox_entry_is()`; an IP also matches its own `ip:port`, and is
+searched with `exact_match` false because ThreatFox answers `no_result` to
+an exact search for a bare IP),
 because a loose match is a false accusation. ThreatFox matches score like
 URLhaus ones. Every row that got an answer stores its `ti_source`, match or
 not, which is how the page tells "asked, not listed" from "never asked".

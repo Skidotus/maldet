@@ -675,9 +675,16 @@ def _threatfox_entry_is(entry_ioc, value, ioc_type):
 
 
 def _threatfox_lookup(value, key, deadline, ioc_type="domain"):
-    """(answered, match) for a domain or an IP address."""
+    """(answered, match) for a domain or an IP address.
+
+    A domain is searched exactly. An IP cannot be: ThreatFox stores IPs as
+    ip:port, and an exact search for the bare address answers "no_result"
+    even when it is listed (checked against the live service on
+    2026-11-16). So an IP is searched loosely, and _threatfox_entry_is()
+    then keeps only entries that are this address, with or without a port."""
     body = _ti_post(THREATFOX_API,
-                    {"query": "search_ioc", "search_term": value, "exact_match": True},
+                    {"query": "search_ioc", "search_term": value,
+                     "exact_match": ioc_type != "ipv4"},
                     key, deadline, as_json=True)
     if body is None:
         return False, None

@@ -525,8 +525,12 @@ class ThreatIntelTests(unittest.TestCase):
         body = {"query_status": "ok", "data": [{"ioc": "203.0.113.7:443", "ioc_type": "ip:port",
                                                 "threat_type": "botnet_cc",
                                                 "malware_printable": "Cobalt Strike"}]}
-        with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(body)):
+        with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(body)) as post:
             self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done")
+        # Not an exact search: the live service answers "no_result" to an
+        # exact search for a bare IP it lists as ip:port.
+        self.assertEqual(post.call_args.kwargs["json"],
+                         {"query": "search_ioc", "search_term": "203.0.113.7", "exact_match": False})
         self.assertEqual((rows[0]["ti_match"], rows[0]["ti_source"]),
                          ("Cobalt Strike (botnet_cc)", "ThreatFox"))
 
