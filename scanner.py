@@ -106,7 +106,10 @@ def clone_repo(repo):
     try:
         result = subprocess.run(
             ["git", "clone", "--depth=1",
-            f"https://github.com/{repo}.git", path],
+             # Check symlinks out as small text files holding the target
+             # path, never as links. See remove_symlinks().
+             "-c", "core.symlinks=false",
+             f"https://github.com/{repo}.git", path],
             capture_output=True, timeout=CLONE_TIMEOUT
         )
     except subprocess.TimeoutExpired:
@@ -119,7 +122,37 @@ def clone_repo(repo):
         )
     if result.returncode != 0:
         raise RuntimeError(f"Clone failed: {result.stderr.decode()}")
+    remove_symlinks(path)
     return path
+
+
+def remove_symlinks(root):
+    """Delete every symlink under `root` and return how many there were.
+
+    Git stores symlinks, and their target can be any path on this machine. A
+    repository containing `x.py -> /app/config.py` made Bandit read this
+    server's own config.py, flag DB_PASSWORD as a hardcoded password and save
+    those lines as the finding's code snippet, which the report page then
+    published. YARA follows links the same way. So no detector is ever shown
+    one: the clone asks git not to create them (core.symlinks=false), and
+    this sweep removes any that exist anyway, including ones an extracted
+    archive brings with it. Only the link is removed, never its target."""
+    removed = 0
+    for current, dirs, files in os.walk(root, followlinks=False):
+        for name in dirs + files:
+            full = os.path.join(current, name)
+            if os.path.islink(full):
+                try:
+                    os.unlink(full)
+                    removed += 1
+                except OSError as e:
+                    # A link that cannot be removed must not be scanned.
+                    raise RuntimeError(f"Could not remove symlink in clone: {e}")
+        # Do not walk into a directory that was a link (already removed).
+        dirs[:] = [d for d in dirs if os.path.isdir(os.path.join(current, d))]
+    if removed:
+        print(f"    Removed {removed} symlink(s) from the scan directory")
+    return removed
 
 
 #Extract archives
@@ -151,17 +184,60 @@ def extract_archives(repo_path, password="infected"):
                         print(f"    Skipped: {file}")
                 except Exception as e:
                     print(f"    Archive error ({file}): {e}")
+                finally:
+                    # Archives can carry symlinks too, and a failed or
+                    # timed-out extraction may have written some already.
+                    if os.path.isdir(extract_dir) and not os.path.islink(extract_dir):
+                        remove_symlinks(extract_dir)
     print(f"    Extracted {count} archive(s)")
 
+def engine_incomplete_finding(tool, name, why, detail=""):
+    """A visible marker for an engine that did not run, or did not finish.
+
+    Every engine used to print its failure to the worker's log and return an
+    empty list, which the report cannot tell apart from "ran and found
+    nothing". YARA got yara_incomplete_finding() after a timeout made WebKit
+    look clean; this is the same idea for the other engines.
+
+    `why` is a fixed phrase per cause, so issue_text is stable (it is the
+    classifier's rule-frequency key). Anything that varies between scans,
+    such as the engine's own error message, goes in `detail`, shown as the
+    snippet. Medium, like the YARA marker: enough that the affected verdict
+    cannot read "Nothing found" while a whole engine is missing from it."""
+    return {
+        "tool":         tool,
+        "severity":     "medium",
+        "issue_text":   (f"{name} scan incomplete: {name} {why}, so its checks are "
+                         f"missing or partial in this report. Having no {name} "
+                         f"findings here does not mean there is nothing to find."),
+        "filename":     "",
+        "line_number":  0,
+        "code_snippet": (detail or "").strip()[:500],
+    }
+
+
+WHY_NOT_INSTALLED = "is not installed on this server"
+WHY_NO_OUTPUT     = "produced no readable output"
+WHY_FAILED        = "could not be run"
+
+
+def why_timed_out(seconds):
+    return f"stopped at its {seconds}s time limit"
+
+
 # Bandit functionality
+
+BANDIT_TIMEOUT = int(os.environ.get("MALDET_BANDIT_TIMEOUT", "120"))
+
 
 def run_bandit(path):
     print("  Running Bandit...")
     findings = []
+    result = None
     try:
         result = subprocess.run(
             ["bandit", "-r", path, "-f", "json", "-q"],
-            capture_output=True, text=True, timeout=120
+            capture_output=True, text=True, timeout=BANDIT_TIMEOUT
         )
         data = json.loads(result.stdout)
         for issue in data.get("results", []):
@@ -176,10 +252,23 @@ def run_bandit(path):
                 # problem rather than a pattern coincidence.
                 "tool_confidence": normalize_tool_confidence(issue.get("issue_confidence")),
             })
+    except FileNotFoundError:
+        print("    Bandit SKIPPED: bandit is not installed")
+        findings.append(engine_incomplete_finding("bandit", "Bandit", WHY_NOT_INSTALLED))
+    except subprocess.TimeoutExpired:
+        print(f"    Bandit DID NOT FINISH: timed out after {BANDIT_TIMEOUT}s")
+        findings.append(engine_incomplete_finding("bandit", "Bandit",
+                                                  why_timed_out(BANDIT_TIMEOUT)))
     except json.JSONDecodeError:
-        print("    Bandit: no Python files found")
+        # Not "no Python files": Bandit prints valid JSON with an empty
+        # result list for those. Unreadable output means it broke.
+        print("    Bandit DID NOT RUN: no readable output")
+        findings.append(engine_incomplete_finding(
+            "bandit", "Bandit", WHY_NO_OUTPUT, result.stderr if result else ""))
     except Exception as e:
         print(f"    Bandit error: {e}")
+        findings.append(engine_incomplete_finding("bandit", "Bandit", WHY_FAILED,
+                                                  type(e).__name__))
     print(f"    Bandit found {len(findings)} issues")
     return findings
 
@@ -399,9 +488,13 @@ def filter_noise(findings):
 SEMGREP_MAX_MEMORY_MB = int(os.environ.get("MALDET_SEMGREP_MAX_MEMORY", "1500"))
 
 
+SEMGREP_TIMEOUT = int(os.environ.get("MALDET_SEMGREP_TIMEOUT", "300"))
+
+
 def run_semgrep(path):
     print("  Running Semgrep (this may take a few minutes)...")
     findings = []
+    result = None
     try:
         result = subprocess.run(
             ["semgrep", "--config=auto", path, "--json", "--quiet",
@@ -411,9 +504,9 @@ def run_semgrep(path):
              # than failing, so the cost of the cap is a few unscanned large
              # files instead of the OOM killer taking out MySQL mid-scan.
              "--max-memory", str(SEMGREP_MAX_MEMORY_MB)],
-            capture_output=True, text=True, timeout=300
+            capture_output=True, text=True, timeout=SEMGREP_TIMEOUT
         )
-        
+
         # Show stderr so we can see what Semgrep is doing
         if result.stderr:
             print(f"    Semgrep status: {result.stderr[:200]}")
@@ -432,12 +525,31 @@ def run_semgrep(path):
                 "tool_confidence": normalize_tool_confidence(
                     issue.get("extra", {}).get("metadata", {}).get("confidence")),
             })
+        # 0 is a normal run and 1 is "findings" under --error. Anything
+        # higher is semgrep's own failure (2 fatal, 7 no rules fetched, ...):
+        # it still prints JSON, usually with no results, which read as clean.
+        if result.returncode >= 2:
+            errors = data.get("errors") or []
+            detail = (errors[0].get("message") if errors and isinstance(errors[0], dict)
+                      else "") or result.stderr
+            print(f"    Semgrep DID NOT FINISH: exit code {result.returncode}")
+            findings.append(engine_incomplete_finding(
+                "semgrep", "Semgrep", "stopped with an error", detail))
+    except FileNotFoundError:
+        print("    Semgrep SKIPPED: semgrep is not installed")
+        findings.append(engine_incomplete_finding("semgrep", "Semgrep", WHY_NOT_INSTALLED))
     except json.JSONDecodeError:
-        print("    Semgrep: no output")
+        print("    Semgrep DID NOT RUN: no readable output")
+        findings.append(engine_incomplete_finding(
+            "semgrep", "Semgrep", WHY_NO_OUTPUT, result.stderr if result else ""))
     except subprocess.TimeoutExpired:
-        print("    Semgrep: timed out — repo may be too large")
+        print(f"    Semgrep DID NOT FINISH: timed out after {SEMGREP_TIMEOUT}s")
+        findings.append(engine_incomplete_finding("semgrep", "Semgrep",
+                                                  why_timed_out(SEMGREP_TIMEOUT)))
     except Exception as e:
         print(f"    Semgrep error: {e}")
+        findings.append(engine_incomplete_finding("semgrep", "Semgrep", WHY_FAILED,
+                                                  type(e).__name__))
     print(f"    Semgrep found {len(findings)} issues")
     return findings
 
@@ -642,14 +754,16 @@ def run_clamav(path):
         )
     except FileNotFoundError:
         print("    ClamAV SKIPPED: clamscan is not installed")
-        return findings
+        return [engine_incomplete_finding("clamav", "ClamAV", WHY_NOT_INSTALLED)]
     except subprocess.TimeoutExpired:
         print(f"    ClamAV DID NOT FINISH: timed out after {CLAMAV_TIMEOUT}s "
               "(raise MALDET_CLAMAV_TIMEOUT)")
-        return findings
+        return [engine_incomplete_finding("clamav", "ClamAV",
+                                          why_timed_out(CLAMAV_TIMEOUT))]
     except Exception as e:
         print(f"    ClamAV error: {e}")
-        return findings
+        return [engine_incomplete_finding("clamav", "ClamAV", WHY_FAILED,
+                                          type(e).__name__)]
 
     for line in result.stdout.strip().split("\n"):
         if line.endswith(" FOUND"):
@@ -671,7 +785,8 @@ def run_clamav(path):
         if "database" in reason.lower():
             reason += " -- signatures missing; run freshclam (or SKIP_FRESHCLAM=0)"
         print(f"    ClamAV DID NOT RUN: {reason}")
-        return findings
+        return [engine_incomplete_finding("clamav", "ClamAV",
+                                          "stopped with an error", reason)]
     if result.returncode == 2:
         # Some files could not be read, but the scan itself ran.
         print("    ClamAV finished with errors on some files")
@@ -716,8 +831,8 @@ def run_guarddog(path):
     findings = []
     binary = _guarddog_bin()
     if binary is None:
-        print("    GuardDog not installed, skipping")
-        return findings
+        print("    GuardDog SKIPPED: guarddog is not installed")
+        return [engine_incomplete_finding("guarddog", "GuardDog", WHY_NOT_INSTALLED)]
 
     # The ecosystem argument only changes which *metadata* rules apply, and
     # metadata rules need a registry lookup we don't do for a cloned repo.
@@ -736,14 +851,17 @@ def run_guarddog(path):
                                     text=True, timeout=GUARDDOG_TIMEOUT)
         data = json.loads(result.stdout)
     except json.JSONDecodeError:
-        print("    GuardDog: no parsable output, skipping")
-        return findings
+        print("    GuardDog DID NOT RUN: no readable output")
+        return [engine_incomplete_finding("guarddog", "GuardDog", WHY_NO_OUTPUT,
+                                          result.stderr)]
     except subprocess.TimeoutExpired:
-        print(f"    GuardDog timed out after {GUARDDOG_TIMEOUT}s, skipping")
-        return findings
+        print(f"    GuardDog DID NOT FINISH: timed out after {GUARDDOG_TIMEOUT}s")
+        return [engine_incomplete_finding("guarddog", "GuardDog",
+                                          why_timed_out(GUARDDOG_TIMEOUT))]
     except Exception as e:
         print(f"    GuardDog error: {e}")
-        return findings
+        return [engine_incomplete_finding("guarddog", "GuardDog", WHY_FAILED,
+                                          type(e).__name__)]
 
     # (rule, location) -> severity, for the correlated risks
     risk_map = {
@@ -918,6 +1036,9 @@ SEVERITY_WEIGHT = {"high": 10, "medium": 3, "low": 1}
 #   URLhaus: a URL here is known to have served malware, which is strong but
 #   does not prove this repository is the attacker: a security tool or a blocklist
 #   can legitimately contain one. 36 = High, capped at 72 so it stays there.
+#   ThreatFox (a domain or IP listed as malware infrastructure) is the same
+#   kind of evidence and is weighted the same: everything that is not a
+#   MalwareBazaar hash shares the URL points and the one cap.
 # Worked out from the stored tool and source, not attached to the finding, so
 # recompute_scores.py reaches the same number from scan_results alone.
 TI_HASH_POINTS = 101
@@ -1416,7 +1537,10 @@ def run_decoded_payloads(path, findings):
         for f in run_yara(out_dir) + run_clamav(out_dir):
             info = payloads.get(os.path.basename(f["filename"]))
             if info is None:
-                if not f["filename"]:   # YARA's "scan incomplete" marker
+                # A "scan incomplete" marker. Skipped when the main pass
+                # already raised the same one (ClamAV not installed is not
+                # news twice).
+                if not f["filename"] and (f["issue_text"], "") not in seen:
                     f["issue_text"] = HIDDEN_PREFIX + f["issue_text"]
                     results.append(f)
                 continue

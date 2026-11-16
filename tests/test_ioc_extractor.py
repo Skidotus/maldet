@@ -491,11 +491,97 @@ class ThreatIntelTests(unittest.TestCase):
             self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done")
         self.assertIsNone(rows[0]["ti_match"])
 
-    def test_only_hashes_and_urls_are_sent(self):
-        rows = [row("domain", FAKE_DOMAIN), row("ipv4", "8.8.8.8"), row("telegram_bot_token", FAKE_TELEGRAM)]
+    def test_tokens_webhooks_and_wallets_are_never_sent(self):
+        """They are credentials or payment details, and have no database to
+        be looked up in. Nothing about them may leave the machine."""
+        rows = [row("telegram_bot_token", FAKE_TELEGRAM), row("discord_webhook", FAKE_WEBHOOK),
+                row("eth_wallet", FAKE_ETH)]
         with mock.patch.object(ioc.requests, "post") as post:
             self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done")
         post.assert_not_called()
+        self.assertTrue(all(r["ti_source"] is None for r in rows))
+
+    # --- ThreatFox: domains and IP addresses --------------------------------
+
+    TF_HIT = {"query_status": "ok", "data": [{
+        "ioc": FAKE_DOMAIN, "ioc_type": "domain", "threat_type": "botnet_cc",
+        "malware": "win.fake", "malware_printable": "FakeBot", "confidence_level": 75}]}
+
+    def test_threatfox_domain_match(self):
+        rows = [row("domain", FAKE_DOMAIN)]
+        with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(self.TF_HIT)) as post:
+            self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done")
+        self.assertEqual(post.call_args.args[0], ioc.THREATFOX_API)
+        # A JSON body, not form fields, and an exact search.
+        self.assertEqual(post.call_args.kwargs["json"],
+                         {"query": "search_ioc", "search_term": FAKE_DOMAIN, "exact_match": True})
+        self.assertNotIn("data", post.call_args.kwargs)
+        self.assertEqual(post.call_args.kwargs["headers"], {"Auth-Key": self.KEY})
+        self.assertEqual((rows[0]["ti_match"], rows[0]["ti_source"]),
+                         ("FakeBot (botnet_cc)", "ThreatFox"))
+
+    def test_threatfox_ip_matches_its_ip_port_entry(self):
+        rows = [row("ipv4", "203.0.113.7")]
+        body = {"query_status": "ok", "data": [{"ioc": "203.0.113.7:443", "ioc_type": "ip:port",
+                                                "threat_type": "botnet_cc",
+                                                "malware_printable": "Cobalt Strike"}]}
+        with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(body)):
+            self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done")
+        self.assertEqual((rows[0]["ti_match"], rows[0]["ti_source"]),
+                         ("Cobalt Strike (botnet_cc)", "ThreatFox"))
+
+    def test_threatfox_near_miss_is_not_a_match(self):
+        """The other direction: an entry that only contains or resembles the
+        indicator must not accuse it."""
+        cases = [("domain", FAKE_DOMAIN, "not-" + FAKE_DOMAIN),
+                 ("domain", FAKE_DOMAIN, f"http://{FAKE_DOMAIN}/x.bin"),
+                 ("domain", FAKE_DOMAIN, "sub." + FAKE_DOMAIN),
+                 ("ipv4", "203.0.113.7", "203.0.113.70:443"),
+                 ("ipv4", "203.0.113.7", "1203.0.113.7:443")]
+        for ioc_type, value, listed in cases:
+            rows = [row(ioc_type, value)]
+            body = {"query_status": "ok", "data": [{"ioc": listed, "malware_printable": "X"}]}
+            with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(body)):
+                self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done", listed)
+            self.assertIsNone(rows[0]["ti_match"], listed)
+            self.assertEqual(rows[0]["ti_source"], "ThreatFox", listed)
+
+    def test_threatfox_no_result_is_asked_and_not_listed(self):
+        rows = [row("domain", FAKE_DOMAIN)]
+        response = FakeResponse({"query_status": "no_result", "data": "Your search did not yield any results"})
+        with mock.patch.object(ioc.requests, "post", return_value=response):
+            self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "done")
+        self.assertEqual((rows[0]["ti_match"], rows[0]["ti_source"]), (None, "ThreatFox"))
+
+    def test_threatfox_unknown_status_is_not_called_clear(self):
+        rows = [row("domain", FAKE_DOMAIN)]
+        with mock.patch.object(ioc.requests, "post",
+                               return_value=FakeResponse({"query_status": "something_new"})):
+            self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "failed")
+        self.assertEqual((rows[0]["ti_match"], rows[0]["ti_source"]), (None, None))
+
+    def test_a_row_records_whether_it_was_asked(self):
+        """Source without a match = asked, not listed. Neither = never asked.
+        The page relies on this to avoid claiming "No match" for a row whose
+        lookup failed."""
+        rows = [row("url", FAKE_URL), row("url", FAKE_URL + "2")]
+        side = [FakeResponse({"query_status": "no_results"}), FakeResponse(status=500)]
+        with mock.patch.object(ioc.requests, "post", side_effect=side):
+            self.assertEqual(ioc.enrich_with_threat_intel(rows, key=self.KEY), "partial")
+        self.assertEqual([r["ti_source"] for r in rows], ["URLhaus", None])
+
+    def test_threatfox_match_becomes_a_finding_weighted_like_a_url(self):
+        import scanner
+        rows = [row("domain", FAKE_DOMAIN)]
+        with mock.patch.object(ioc.requests, "post", return_value=FakeResponse(self.TF_HIT)):
+            ioc.enrich_with_threat_intel(rows, key=self.KEY)
+        findings = ioc.threat_intel_findings(rows)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(findings[0]["issue_text"].startswith("ThreatFox: a domain in this file"))
+        self.assertEqual(scanner._threat_intel_points(findings), scanner.TI_URL_POINTS)
+        # No finding for a row that was asked about and not listed.
+        self.assertEqual(ioc.threat_intel_findings([dict(row("domain", "x.example"),
+                                                         ti_source="ThreatFox")]), [])
 
     def test_network_failure_does_not_raise_and_says_failed(self):
         rows = [row("url", FAKE_URL)]

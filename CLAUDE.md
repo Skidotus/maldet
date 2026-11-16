@@ -53,13 +53,14 @@ python3 -m venv .venv-guarddog && .venv-guarddog/bin/pip install guarddog
 
 `run_guarddog()` looks for `guarddog` on PATH first (Docker installs it to
 /opt and symlinks it there), then falls back to `.venv-guarddog/bin/guarddog`.
-Like every other detector it skips silently when absent, so a missing binary
-looks like a clean scan — verify it runs rather than assuming.
+When it is absent the scan carries on and the report gets a "GuardDog scan
+incomplete" marker (see `engine_incomplete_finding()` below).
 
 Credentials live in `config.py` (gitignored, copy from `config.example.py`):
 `GITHUB_TOKEN`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
 
-Tests cover IOC extraction and two YARA rules so far:
+Tests cover IOC extraction, two YARA rules, symlink removal, the engines'
+"scan incomplete" markers and the rule-based summary's wording:
 `python3 -m unittest discover -s tests -t .` (stdlib, needs no database or network;
 `test_ioc_scoring.py` imports `scanner.py`, so `config.py` must exist, and
 `test_yara_rules.py` skips if `yara` is not installed). When changing a rule, test
@@ -98,7 +99,12 @@ running.
 **`scanner.py:scan_repo(repo, archive_password)`** is the pipeline entry point, run
 by `worker.py` (not inside the web request):
 1. `get_repo_info()` — GitHub API metadata (uses `GITHUB_TOKEN`)
-2. `clone_repo()` — shallow clone into `/tmp/maldet_scan_temp/<owner>_<repo>`
+2. `clone_repo()` — shallow clone into `/tmp/maldet_scan_temp/<owner>_<repo>`,
+   with `core.symlinks=false`, then `remove_symlinks()`, which
+   `extract_archives()` repeats on everything it unpacks. No detector may ever
+   see a symlink: a repo containing `x.py -> /app/config.py` made Bandit
+   publish this server's DB password as a finding's snippet (YARA follows
+   links too). Anything new that writes files into the clone must sweep again
 3. `extract_archives()` — extracts `.zip`/`.7z`/`.rar` with 7z, trying a password
    (default `"infected"`, the malware-analysis convention) since malicious archives
    are often password-protected to dodge automated scanning
@@ -106,6 +112,12 @@ by `worker.py` (not inside the web request):
    shape `{tool, severity, issue_text, filename, line_number, code_snippet}`:
    `run_bandit`, `run_semgrep`, `run_yara`, `run_clamav`,
    `run_guarddog`, `check_dependencies` (from `dep_checker.py`).
+   An engine that is missing, times out or prints nothing readable returns
+   one `engine_incomplete_finding()` (medium, no filename) instead of an
+   empty list, which the report could not tell from "found nothing". The
+   cause is a fixed phrase in `issue_text` (the classifier's key) and the
+   engine's own error goes in the snippet. A new detector must do the same.
+   pip-audit in `dep_checker.py` does not yet: it still only logs.
    `run_yara` runs two rule sets, both reported as tool `yara`: MalDet's own
    **behaviour** rules in `rules.yar` (decode-then-exec, download-then-exec,
    persistence — what catches new code) and then `run_yara_forge()`, the
@@ -240,7 +252,14 @@ saves the scan. Threat-intel points are derived from the stored tool and the sou
 at the start of `issue_text`, in `_threat_intel_points()`, because
 `recompute_scores.py` only has `scan_results` to work from. Do not change the
 wording of that prefix without changing the weighting. `ABUSECH_AUTH_KEY` must never
-reach a log: print exception types there, not messages.
+reach a log: print exception types there, not messages. Lookups go to three
+abuse.ch services: MalwareBazaar (sha256), URLhaus (url) and ThreatFox
+(domain, ipv4; a JSON body, unlike the other two). Tokens, webhooks and
+wallets are never sent. A ThreatFox entry only counts if it is exactly the
+indicator (`_threatfox_entry_is()`; an IP also matches its own `ip:port`),
+because a loose match is a false accusation. ThreatFox matches score like
+URLhaus ones. Every row that got an answer stores its `ti_source`, match or
+not, which is how the page tells "asked, not listed" from "never asked".
 
 **Adding a new detector**: write a `run_x(path)` function in `scanner.py` returning
 findings in the standard dict shape, call it inside `scan_repo()` and append its
@@ -368,7 +387,8 @@ reload. The track's `data-stage` values must match `scanner.py`'s
 `report()` strings exactly.
 
 **`detail.html`** — `repo`, `risk`, `findings`, `tools`, `tool_totals`,
-`findings_summary` (the rule-based text), `finding_counts` (`total` /
+`findings_summary` (the rule-based text, which like the LLM summary must
+never say "clean" or "safe"; a test enforces it), `finding_counts` (`total` /
 `likely_real` / `likely_noise` over *all* findings, not the capped list),
 `history_dates`/`history_scores` (JSON for the chart), plus the two below.
 Laid out as a security console: verdict panels, summary / engine / trend
@@ -415,7 +435,12 @@ Code snippets stay dark in both themes on purpose.
   presents unverifiable months-old findings as current.
 
 - `iocs` — from `app.py:_load_iocs()`: `state`, `rows` (capped at
-  `IOC_DISPLAY_LIMIT`), `total`, `ti_status`, `note`. **Do not merge the states**:
+  `IOC_DISPLAY_LIMIT`), `total`, `ti_status`, `note`. Each row also has `ti_state`
+  (`hit` / `clear` / `na` / `unchecked`) and the dict has `ti_unchecked`.
+  "No match" is only for `clear`, a row that was really looked up; scans
+  saved before ThreatFox have unchecked domains and IPs. With `ti_status`
+  `off` the template drops the threat-intel column and says so once, instead
+  of "Not checked" on every row. **Do not merge the states**:
   `none` (extraction never ran, or no tables), `failed`, `partial` and `done`. Only
   `done` with no rows may say "No indicators of compromise found"; the others would
   be a false clean. Values stay plain escaped text, never links. `GET

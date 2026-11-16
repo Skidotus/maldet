@@ -176,8 +176,12 @@ CREATE TABLE IF NOT EXISTS iocs (
     file_count  INT NOT NULL DEFAULT 1,
     -- When this repository first contained it; carried forward across rescans.
     first_seen  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- abuse.ch verdict, NULL when there was no match. Whether NULL means "no
-    -- match" or "never asked" is in ioc_runs.ti_status.
+    -- abuse.ch verdict, NULL when there was no match. ti_source is set on
+    -- every row that got an answer, so a source with no match means "asked,
+    -- not listed" and neither means "never asked". Rows saved before
+    -- ThreatFox was added only set ti_source on a match; for those,
+    -- ioc_runs.ti_status says whether hashes and URLs were asked about
+    -- (their domains and IPs never were). See app.py _load_iocs().
     ti_match    VARCHAR(255) NULL,
     ti_source   VARCHAR(32)  NULL,
     INDEX idx_iocs_scan (scan_id, ioc_type),

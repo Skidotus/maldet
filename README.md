@@ -387,9 +387,13 @@ are skipped.
 strings, and project metadata such as homepage links, authors and maintainers.
 
 **Threat intel:** with `ABUSECH_AUTH_KEY` set, file hashes are checked against
-MalwareBazaar and URLs against URLhaus. Hashes and URLs from the scanned repository
-are sent to abuse.ch. Up to 50 of each are checked per scan, within 30 seconds, and
-lookups stop for that scan if abuse.ch answers with a rate limit. abuse.ch can limit
+MalwareBazaar, URLs against URLhaus, and domains and IP addresses against
+ThreatFox. Those four kinds of indicator from the scanned repository are sent to
+abuse.ch; webhooks, bot tokens and wallets never leave the machine. Up to 50 of
+each are checked per scan, within 60 seconds, and lookups stop for that scan if
+abuse.ch answers with a rate limit. A match is added to the findings and raises
+the malicious-pattern verdict. Without the key the report says once that the list
+was not compared with known-malware lists, and drops the threat-intel column. abuse.ch can limit
 heavy accounts for up to 72 hours under its Fair Use Policy, so leave the key unset
 for bulk runs such as `batch_scan.py`.
 

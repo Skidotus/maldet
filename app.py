@@ -9,7 +9,7 @@ import pymysql
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from db_connect import DB_PORT
 from scanner import scan_repo, trust_score, VULN_TRUST_FLOOR, finding_category, level_label
-from ioc_extractor import IOC_TYPES
+from ioc_extractor import IOC_TYPES, TI_CHECKED_TYPES
 import job_queue
 
 app = Flask(__name__)
@@ -80,10 +80,16 @@ def build_findings_summary(total, likely_real, likely_noise, top_finding):
     finding) — same shape of output an LLM-generated summary would
     eventually replace, without needing that dependency to be useful today."""
     if total == 0:
-        return "No findings — this scan came back clean."
+        # Never "clean" or "safe": a static scan can fail to find a problem,
+        # it cannot show there is none. Same rule the LLM summary is held to
+        # (evaluate_summaries.py's claims_safety check).
+        return ("No findings: none of the detection engines matched anything in this "
+                "repository. That is not a guarantee, because a static scan only "
+                "finds what its rules know to look for.")
     if likely_real == 0:
         return (f"All {total} finding{'s' if total != 1 else ''} look like noise "
-                 "(low confidence) — nothing here likely needs attention.")
+                "(low confidence), so none stands out as a likely real problem. "
+                "A static scan cannot rule one out.")
 
     parts = [f"{likely_real} finding{'s' if likely_real != 1 else ''} likely need attention"]
     if likely_noise:
@@ -513,7 +519,7 @@ TOOL_PURPOSE = {
     "guarddog":    "Malicious package and install-time behaviour",
     "dep_checker": "Vulnerable, unpinned or typosquatted dependencies",
     "virustotal":  "Known malware signatures (legacy scans)",
-    "threat_intel": "Files and URLs already listed by abuse.ch as malicious",
+    "threat_intel": "Files, URLs, domains and IPs already listed by abuse.ch as malicious",
 }
 
 
@@ -806,7 +812,8 @@ def _load_iocs(cursor, repo_id, limit=None):
       partial    it stopped early; the rows are real but may not be all of them
       done       it finished, and an empty list really does mean nothing found
     """
-    empty = {"state": "none", "rows": [], "total": 0, "ti_status": "off", "note": None}
+    empty = {"state": "none", "rows": [], "total": 0, "ti_status": "off", "note": None,
+             "ti_unchecked": 0}
     try:
         cursor.execute("""
             SELECT r.* FROM ioc_runs r
@@ -831,8 +838,26 @@ def _load_iocs(cursor, repo_id, limit=None):
         # 1146: the tables are not there yet. Never let this cost the whole report.
         print(f"IOC lookup failed for repo {repo_id}: {e}")
         return empty
+    # What each row's threat-intel cell may say. "clear" (asked, not listed)
+    # is only claimed for a row that was really looked up: one that recorded
+    # its source, or a hash/URL of a finished run from before rows recorded
+    # one. Domains and IPs of those older scans were never looked up, so they
+    # are "unchecked", not "clear".
+    unchecked = 0
+    for r in rows:
+        if r["ti_match"]:
+            r["ti_state"] = "hit"
+        elif r["ioc_type"] not in TI_CHECKED_TYPES:
+            r["ti_state"] = "na"
+        elif r["ti_source"] or (run["ti_status"] == "done"
+                                and r["ioc_type"] in ("sha256", "url")):
+            r["ti_state"] = "clear"
+        else:
+            r["ti_state"] = "unchecked"
+            unchecked += 1
     return {"state": run["status"], "rows": rows, "total": total,
-            "ti_status": run["ti_status"], "note": run["note"]}
+            "ti_status": run["ti_status"], "note": run["note"],
+            "ti_unchecked": unchecked}
 
 
 def _iocs_for_export(repo_id):

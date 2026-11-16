@@ -476,8 +476,8 @@ class IocCollector:
 
 
 def flagged_paths(findings):
-    """Distinct files ClamAV or YARA flagged. YARA's "scan incomplete" marker
-    has no filename, so it never reaches here. Reference files (rule files,
+    """Distinct files ClamAV or YARA flagged. The "scan incomplete"
+    markers have no filename, so they never reach here. Reference files (rule files,
     signature databases, blocklists; see reference_files.py) are left out:
     a blocklist names thousands of bad domains, and none of them is an
     indicator of this repository."""
@@ -582,11 +582,18 @@ def extract_iocs(repo_path, findings, is_ignored=None, time_limit=None):
 
 MALWAREBAZAAR_API = "https://mb-api.abuse.ch/api/v1/"
 URLHAUS_API = "https://urlhaus-api.abuse.ch/v1/url/"
+THREATFOX_API = "https://threatfox-api.abuse.ch/api/v1/"
 TI_REQUEST_TIMEOUT = 5
-TI_TIME_BUDGET = 30
+# Raised from 30 when ThreatFox doubled the number of types looked up.
+TI_TIME_BUDGET = 60
 TI_MAX_LOOKUPS = 50       # per IOC type; the budget is the real ceiling
 SOURCE_MALWAREBAZAAR = "MalwareBazaar"
 SOURCE_URLHAUS = "URLhaus"
+SOURCE_THREATFOX = "ThreatFox"
+# The IOC types that have somewhere to be looked up. Wallets, webhooks and
+# bot tokens have no abuse.ch database, so the page calls them "not
+# applicable" rather than "not checked".
+TI_CHECKED_TYPES = ("sha256", "url", "domain", "ipv4")
 THREAT_INTEL_TOOL = "threat_intel"
 
 
@@ -600,15 +607,17 @@ class _TiRateLimited(Exception):
     the rest of this scan's lookups is exactly the wrong response."""
 
 
-def _ti_post(url, data, key, deadline):
+def _ti_post(url, data, key, deadline, as_json=False):
     """Parsed JSON, or None if this one lookup failed. Never logs the exception
-    text or the request: the key is in the headers and stays out of the output."""
+    text or the request: the key is in the headers and stays out of the output.
+    MalwareBazaar and URLhaus take form fields; ThreatFox takes a JSON body."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         return None
     try:
-        response = requests.post(url, data=data, headers={"Auth-Key": key},
-                                 timeout=min(TI_REQUEST_TIMEOUT, remaining))
+        body_arg = {"json": data} if as_json else {"data": data}
+        response = requests.post(url, headers={"Auth-Key": key},
+                                 timeout=min(TI_REQUEST_TIMEOUT, remaining), **body_arg)
     except requests.RequestException:
         return None
     if response.status_code in (401, 403):
@@ -651,10 +660,54 @@ def _urlhaus_lookup(url, key, deadline):
     return status in ("no_results", "invalid_url"), None
 
 
+def _threatfox_entry_is(entry_ioc, value, ioc_type):
+    """Whether a ThreatFox entry is about exactly this indicator.
+
+    Checked here as well as asking for exact_match, because a loose match is
+    a false accusation: a search for "evil.com" must not be answered by
+    "not-evil.com" or by a URL that merely contains it. ThreatFox lists
+    servers as ip:port, so an IP matches its own entry on any port."""
+    entry_ioc = str(entry_ioc or "").strip().lower()
+    value = value.strip().lower()
+    if ioc_type == "ipv4":
+        return entry_ioc == value or entry_ioc.startswith(value + ":")
+    return entry_ioc == value
+
+
+def _threatfox_lookup(value, key, deadline, ioc_type="domain"):
+    """(answered, match) for a domain or an IP address."""
+    body = _ti_post(THREATFOX_API,
+                    {"query": "search_ioc", "search_term": value, "exact_match": True},
+                    key, deadline, as_json=True)
+    if body is None:
+        return False, None
+    status = body.get("query_status")
+    if status == "ok":
+        entries = body.get("data")
+        for entry in entries if isinstance(entries, list) else []:
+            if isinstance(entry, dict) and _threatfox_entry_is(entry.get("ioc"), value, ioc_type):
+                malware = entry.get("malware_printable") or entry.get("malware") or "malware"
+                threat = entry.get("threat_type")
+                return True, str(f"{malware} ({threat})" if threat else malware)[:255]
+        return True, None
+    return status in ("no_result", "no_results", "illegal_search_term"), None
+
+
+def _threatfox_ip_lookup(value, key, deadline):
+    return _threatfox_lookup(value, key, deadline, ioc_type="ipv4")
+
+
 def enrich_with_threat_intel(iocs, key=None, time_budget=TI_TIME_BUDGET):
     """Fills ti_match/ti_source in place. Returns 'off' without a key, 'done'
     if everything got an answer, 'partial' if some did not, 'failed' if none
-    could be checked. Only hashes and already-public URLs leave the machine."""
+    could be checked. Only hashes and already-public URLs, domains and IP
+    addresses leave the machine.
+
+    ti_source is set on every indicator that got an answer, match or not, so
+    each row records for itself whether it was looked up: source with no
+    match means "asked, not listed"; neither means "never asked". The run's
+    ti_status alone cannot say that for one row of a partial run, or for a
+    scan saved before domains and IPs were looked up at all."""
     key = key if key is not None else os.environ.get("ABUSECH_AUTH_KEY", "")
     key = (key or "").strip()
     if not key:
@@ -663,8 +716,12 @@ def enrich_with_threat_intel(iocs, key=None, time_budget=TI_TIME_BUDGET):
     plan = ([(i, SOURCE_MALWAREBAZAAR, _bazaar_lookup)
              for i in iocs if i["ioc_type"] == "sha256"][:TI_MAX_LOOKUPS]
             + [(i, SOURCE_URLHAUS, _urlhaus_lookup)
-               for i in iocs if i["ioc_type"] == "url"][:TI_MAX_LOOKUPS])
-    wanted = sum(i["ioc_type"] in ("sha256", "url") for i in iocs)
+               for i in iocs if i["ioc_type"] == "url"][:TI_MAX_LOOKUPS]
+            + [(i, SOURCE_THREATFOX, _threatfox_lookup)
+               for i in iocs if i["ioc_type"] == "domain"][:TI_MAX_LOOKUPS]
+            + [(i, SOURCE_THREATFOX, _threatfox_ip_lookup)
+               for i in iocs if i["ioc_type"] == "ipv4"][:TI_MAX_LOOKUPS])
+    wanted = sum(i["ioc_type"] in TI_CHECKED_TYPES for i in iocs)
     if not wanted:
         return "done"
 
@@ -674,8 +731,10 @@ def enrich_with_threat_intel(iocs, key=None, time_budget=TI_TIME_BUDGET):
         for ioc, source, lookup in plan:
             ok, match = lookup(ioc["value"], key, deadline)
             answered += ok
+            if ok:
+                ioc["ti_source"] = source
             if match:
-                ioc["ti_match"], ioc["ti_source"] = match, source
+                ioc["ti_match"] = match
     except _TiRejected:
         print("    Threat intel: abuse.ch rejected ABUSECH_AUTH_KEY, skipping lookups")
     except _TiRateLimited:
@@ -694,7 +753,9 @@ def threat_intel_findings(iocs):
     for ioc in iocs:
         if not ioc.get("ti_match"):
             continue
-        what = "this file's SHA-256" if ioc["ioc_type"] == "sha256" else "a URL in this file"
+        what = {"sha256": "this file's SHA-256", "url": "a URL in this file",
+                "domain": "a domain in this file",
+                "ipv4": "an IP address in this file"}.get(ioc["ioc_type"], "an indicator in this file")
         findings.append({
             "tool":         THREAT_INTEL_TOOL,
             "severity":     "high",
