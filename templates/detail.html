@@ -23,7 +23,7 @@
   "guarddog":    ("GuardDog",           "Malicious pattern", "Supply-chain attack heuristics"),
   "virustotal":  ("VirusTotal",         "Malicious pattern", "Multi-engine file reputation"),
   "dep_checker": ("Dependency checker", "Supply chain",      "CVEs, typosquats and risky installs"),
-  "threat_intel": ("Threat intelligence", "Malicious pattern", "Files and URLs already listed by abuse.ch"),
+  "threat_intel": ("Threat intelligence", "Malicious pattern", "Files, URLs, domains and IPs already listed by abuse.ch"),
 } %}
 {% macro engine_name(tool) -%}{{ engines[tool][0] if tool in engines else tool }}{%- endmacro %}
 
@@ -345,11 +345,33 @@
         <span>Showing {{ "{:,}".format(iocs.rows|length) }} of {{ "{:,}".format(iocs.total) }}. The downloads include all of them.</span></p>
     {% endif %}
 
+    {# One notice for the whole list instead of "Not checked" on every row.
+       With lookups off the column is dropped altogether: a column that can
+       only ever say "not checked" reads as a broken feature. #}
+    {% set ti_on = iocs.ti_status != 'off' %}
+    {% if iocs.rows and not ti_on %}
+      <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>Not compared with known-malware lists. Threat-intelligence lookups (abuse.ch) were switched off on the server for this scan, so this list shows what the repository contains, not whether any of it is already known to be malicious.</span></p>
+    {% elif iocs.rows and iocs.ti_unchecked %}
+      <p class="events-cap"><i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>{{ iocs.ti_unchecked }} of these {{ 'was' if iocs.ti_unchecked == 1 else 'were' }} not compared with abuse.ch's known-malware lists, because the lookups stopped early or this scan is older than the domain and IP check. Rescan to check {{ 'it' if iocs.ti_unchecked == 1 else 'them' }}.</span></p>
+    {% endif %}
+
     {% if iocs.rows %}
+      <details class="ioc-help">
+        <summary>What to do with these</summary>
+        <ul>
+          <li><strong>Block them.</strong> Add the URLs, domains and IP addresses to your firewall or DNS filter so nothing on your network can reach them.</li>
+          <li><strong>Search for them.</strong> Look for the same addresses and file hashes in your own logs and on your machines. A match means this code, or something related to it, has already run there.</li>
+          <li><strong>Report them.</strong> A Discord webhook or Telegram bot token is how stolen data gets sent out. Reporting it to Discord or Telegram gets it shut down.</li>
+          <li><strong>Reuse them.</strong> The CSV and JSON downloads hold the full list, ready to load into a blocklist or security tool.</li>
+        </ul>
+        <p>An indicator is something the suspicious files refer to. It is evidence to follow up, not proof of an attack: only a threat-intelligence match says an indicator is already known to be malicious.</p>
+      </details>
       <div class="table-responsive">
         <table class="table table-ledger table-stack align-middle mb-0 ioc-table">
           <thead>
-            <tr><th scope="col">Type</th><th scope="col">Value</th><th scope="col">File</th><th scope="col">Threat intel</th></tr>
+            <tr><th scope="col">Type</th><th scope="col">Value</th><th scope="col">File</th>{% if ti_on %}<th scope="col">Threat intel</th>{% endif %}</tr>
           </thead>
           <tbody>
             {% for i in iocs.rows %}
@@ -358,15 +380,17 @@
                 <td data-label="Value" class="td-full"><span class="ioc-value">{{ i.value }}</span></td>
                 <td data-label="File" class="td-full"><span class="ioc-file">{{ i.file_path }}</span>
                   {%- if i.file_count > 1 %} <span class="ioc-more">+{{ i.file_count - 1 }} more</span>{% endif %}</td>
+                {% if ti_on %}
                 <td data-label="Threat intel">
-                  {%- if i.ti_match %}
+                  {%- if i.ti_state == 'hit' %}
                     <span class="ioc-hit"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
                       {{ i.ti_source }}: {{ i.ti_match }}</span>
-                  {%- elif i.ioc_type not in ('sha256', 'url') %}<span class="ioc-muted">Not applicable</span>
-                  {%- elif iocs.ti_status == 'done' %}<span class="ioc-muted">No match</span>
+                  {%- elif i.ti_state == 'na' %}<span class="ioc-muted">Not applicable</span>
+                  {%- elif i.ti_state == 'clear' %}<span class="ioc-muted">No match</span>
                   {%- else %}<span class="ioc-muted">Not checked</span>
                   {%- endif %}
                 </td>
+                {% endif %}
               </tr>
             {% endfor %}
           </tbody>
@@ -526,7 +550,7 @@
       <div class="empty-state">
         <i class="bi bi-shield-check empty-state__icon" aria-hidden="true"></i>
         <h3 class="h5">No findings</h3>
-        <p class="mb-0">Every detection engine came back clean on this scan.</p>
+        <p class="mb-0">No detection engine matched anything on this scan. That is not proof the repository is safe.</p>
       </div>
     {% endif %}
   </section>
